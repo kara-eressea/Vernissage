@@ -15,6 +15,7 @@ import { commands } from "./discord/commands/index.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { routeInteraction } from "./discord/router.js";
+import { startScheduler } from "./scheduler/runner.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -40,8 +41,16 @@ async function main(): Promise<void> {
     void routeInteraction(interaction, commands);
   });
 
+  // Drive raffle state transitions on an interval, reconciling on startup.
+  const scheduler = startScheduler(db, {
+    onTransition: (t) => {
+      console.log(`Raffle ${t.raffleId}: ${t.from} -> ${t.to} (${t.guildId}).`);
+    },
+  });
+
   const shutdown = (signal: string): void => {
     console.log(`Received ${signal}; shutting down.`);
+    scheduler.stop();
     counting.stop();
     client.destroy();
     db.close();

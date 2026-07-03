@@ -102,3 +102,24 @@ export function listByStatus(
     )
     .all(guildId, ...statuses) as RaffleRow[];
 }
+
+/**
+ * Raffles in the given statuses across all guilds, ordered by id. Used by the
+ * scheduler, which sweeps every guild's due transitions on each tick.
+ */
+export function listByStatusAllGuilds(
+  db: Database,
+  statuses: RaffleStatus[],
+): RaffleRow[] {
+  if (statuses.length === 0) {
+    return [];
+  }
+  const placeholders = statuses.map(() => "?").join(", ");
+  return db
+    .prepare(
+      `SELECT * FROM raffles
+       WHERE status IN (${placeholders})
+       ORDER BY raffle_id ASC`,
+    )
+    .all(...statuses) as RaffleRow[];
+}
