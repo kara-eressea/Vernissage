@@ -138,6 +138,23 @@ describe("activity requirement boundaries", () => {
   });
 });
 
+describe("activity requirement - malformed/absent requirement degrades safely", () => {
+  it("treats a zero message floor as no requirement (met)", () => {
+    const input = baseInput({ reqMessages: 0, dailyCounts: [] });
+    expect(meetsActivityRequirement(input)).toBe(true);
+  });
+
+  it("does not throw on a non-positive window; treats it as no requirement", () => {
+    // activityWindow would throw on reqDays < 1; a bad/edited raffle row reaching
+    // entry time must degrade to "met", not crash the entry handler.
+    const input = baseInput({ reqDays: 0, dailyCounts: [] });
+    expect(() => meetsActivityRequirement(input)).not.toThrow();
+    expect(meetsActivityRequirement(input)).toBe(true);
+    expect(() => checkEligibility(input)).not.toThrow();
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+});
+
 describe("new-member exemption", () => {
   it("bypasses the activity check for a recent joiner", () => {
     const input = baseInput({

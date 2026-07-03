@@ -94,3 +94,33 @@ describe("nextSeed", () => {
     expect(nextSeed(s)).not.toBe(s);
   });
 });
+
+// Golden vectors: pin the exact output for a fixed seed. The other tests check
+// the draw against itself and would stay green if seedIndex or the seed
+// derivation regressed (modulo bias, endianness, wrong base, changed
+// concatenation). These lock the concrete bytes an independent verifier would
+// reproduce from public data. Regenerate deliberately only if the scheme
+// changes — and update design.md in the same commit.
+describe("draw golden vectors", () => {
+  it("deriveSeed / nextSeed produce known hex", () => {
+    const s = deriveSeed("abc", "rand");
+    expect(s).toBe(
+      "9fc29f2a41a012d35610d401c97bbc09db61812d43c887ceaecbb6c026c2b95b",
+    );
+    expect(nextSeed(s)).toBe(
+      "8d378a82adef77121596b9668fb57680e4284e27ae1ea3e5f69c6db113ad027f",
+    );
+  });
+
+  it("selectWinners maps a fixed seed to known winners in order", () => {
+    const entrants = ["a", "b", "c", "d", "e"];
+    const seed = deriveSeed(hashEntrants(entrants), "round-42");
+    expect(seed).toBe(
+      "8ec0c9b155c345b67f0653861504d5ea51ec4e5a75c53a8bb5c1b824e6fa8b4c",
+    );
+    expect(selectWinners(entrants, seed, 1)).toEqual(["a"]);
+    expect(selectWinners(entrants, seed, 3)).toEqual(["a", "b", "d"]);
+    // Draining all five exercises the collision-skip path and pins its order.
+    expect(selectWinners(entrants, seed, 5)).toEqual(["a", "b", "d", "c", "e"]);
+  });
+});

@@ -73,6 +73,22 @@ describe("setGuildConfig", () => {
     expect(getHourlyCap(db, "g1")).toBe(20);
   });
 
+  it("ignores keys that are not on the column allowlist", () => {
+    // The TS type forbids this, but the runtime allowlist is the real guard
+    // against a stray/injected key reaching the interpolated column list.
+    setGuildConfig(db, "g1", { hourly_cap: 20 }, "2026-07-01T00:00:00.000Z");
+    expect(() =>
+      setGuildConfig(
+        db,
+        "g1",
+        { "hourly_cap = 0; DROP TABLE guilds; --": 1 } as never,
+        "2026-07-02T00:00:00.000Z",
+      ),
+    ).not.toThrow();
+    // The malicious key was dropped, real data is intact and unchanged.
+    expect(getGuild(db, "g1")?.hourly_cap).toBe(20);
+  });
+
   it("can write and later clear every scalar field", () => {
     setGuildConfig(
       db,

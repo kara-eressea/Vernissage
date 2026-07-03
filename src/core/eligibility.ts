@@ -45,6 +45,12 @@ export function meetsActivityRequirement(input: EligibilityInput): boolean {
   if (isNewMemberExempt(input)) {
     return true;
   }
+  // A malformed or requirement-free raffle (no message floor, or a non-positive
+  // window) imposes no activity gate. Degrading to "met" keeps a bad row from
+  // throwing at entry time; creation-time validation is the real guard.
+  if (input.reqMessages < 1 || input.reqDays < 1) {
+    return true;
+  }
   const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
   const window = activityWindow(anchor, input.reqDays);
   return messagesInWindow(input.dailyCounts, window) >= input.reqMessages;
@@ -67,7 +73,9 @@ export interface ActivityProgress {
  */
 export function activityProgress(input: EligibilityInput): ActivityProgress {
   const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
-  const window = activityWindow(anchor, input.reqDays);
+  // Mirror meetsActivityRequirement's tolerance: clamp a non-positive window to
+  // a single day so `/raffle status` never throws on a malformed raffle row.
+  const window = activityWindow(anchor, input.reqDays >= 1 ? input.reqDays : 1);
   return {
     exempt: isNewMemberExempt(input),
     have: messagesInWindow(input.dailyCounts, window),

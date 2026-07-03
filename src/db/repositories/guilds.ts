@@ -44,6 +44,22 @@ export type GuildConfigPatch = Partial<
 >;
 
 /**
+ * Runtime allowlist of columns `setGuildConfig` may write. The TS type above is
+ * erased at runtime, so this Set is the actual guard against a stray key being
+ * interpolated into the UPDATE's column list (mirrors updateRaffleFields).
+ */
+const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
+  "audit_channel",
+  "announce_channel",
+  "mod_role",
+  "hourly_cap",
+  "default_cooldown_days",
+  "default_cooldown_count",
+  "default_min_account_age_days",
+  "blacklist_generic_message",
+]);
+
+/**
  * Apply a config patch to a guild, creating the row on first write.
  *
  * Unlike `upsertGuild`, this distinguishes "leave as-is" from "clear": a key
@@ -65,11 +81,12 @@ export function setGuildConfig(
      ON CONFLICT (guild_id) DO NOTHING`,
   ).run(guildId, now);
 
-  // Only keys explicitly present (value !== undefined) are written; a null
-  // value clears the column. Keys come from GuildConfigPatch, so the column
-  // names interpolated here are code-controlled, never user input.
+  // Only keys explicitly present (value !== undefined) and on the column
+  // allowlist are written; a null value clears the column. The allowlist means
+  // the column names interpolated below can never be attacker-controlled even
+  // if a caller builds a patch from untrusted keys.
   const keys = (Object.keys(patch) as (keyof GuildConfigPatch)[]).filter(
-    (key) => patch[key] !== undefined,
+    (key) => patch[key] !== undefined && SETTABLE_COLUMNS.has(key),
   );
   if (keys.length === 0) {
     return;

@@ -7,7 +7,14 @@
  */
 
 import type { Database } from "better-sqlite3";
-import { SCHEMA_SQL, SCHEMA_VERSION, V3_COLUMNS, V4_COLUMNS, WIZARD_STATE_SQL } from "./schema.js";
+import {
+  SCHEMA_SQL,
+  SCHEMA_VERSION,
+  V3_COLUMNS,
+  V4_COLUMNS,
+  V5_INDEXES_SQL,
+  WIZARD_STATE_SQL,
+} from "./schema.js";
 
 /** Add a column only if it does not already exist (idempotent, unlike ALTER). */
 function addColumnIfMissing(
@@ -52,6 +59,12 @@ export function migrate(db: Database): void {
     for (const { table, column, decl } of V4_COLUMNS) {
       addColumnIfMissing(db, table, column, decl);
     }
+  }
+
+  // v5: index hygiene (drop the redundant activity index, add the audit-by-raffle
+  // index). Both statements are idempotent, so this is safe on any prior version.
+  if (current < 5) {
+    db.exec(V5_INDEXES_SQL);
   }
 
   if (current !== SCHEMA_VERSION) {

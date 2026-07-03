@@ -56,10 +56,18 @@ export function createInteractionRouter(): InteractionRouter {
           content: "Something went wrong handling that.",
           flags: MessageFlags.Ephemeral,
         };
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(message);
-        } else {
-          await interaction.reply(message);
+        // The fallback reply can itself fail: the handler may have already
+        // acknowledged via showModal (which leaves replied/deferred false), or
+        // the interaction token may have expired (>3s). Never let the error
+        // path throw — that would escape as an unhandled rejection.
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(message);
+          } else {
+            await interaction.reply(message);
+          }
+        } catch (replyErr) {
+          console.error(`Could not report interaction error to the user:`, replyErr);
         }
       }
       return true;

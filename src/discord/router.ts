@@ -44,11 +44,17 @@ export async function routeInteraction(
       content: "Something went wrong handling that command.",
       flags: MessageFlags.Ephemeral,
     } as const;
-    // The handler may have already replied or deferred.
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(message);
-    } else {
-      await interaction.reply(message);
+    // The handler may have already replied or deferred. The fallback reply can
+    // itself fail (an expired interaction token, or a handler that showed a
+    // modal); contain that so the error path can never throw.
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(message);
+      } else {
+        await interaction.reply(message);
+      }
+    } catch (replyErr) {
+      console.error(`Could not report command error to the user:`, replyErr);
     }
   }
 }

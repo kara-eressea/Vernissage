@@ -7,7 +7,20 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
+
+/**
+ * v5: index hygiene. Drop `idx_activity_guild_user_day`, which exactly
+ * duplicates the `activity` primary key (guild_id, user_id, day) and only added
+ * write cost on the hottest table. Add `idx_audit_raffle` so `getAuditForRaffle`
+ * (which filters on raffle_id alone) can seek instead of scanning the
+ * ever-growing audit_log; the existing (guild_id, raffle_id) index cannot serve
+ * a raffle_id-only predicate. Both statements are idempotent.
+ */
+export const V5_INDEXES_SQL = `
+DROP INDEX IF EXISTS idx_activity_guild_user_day;
+CREATE INDEX IF NOT EXISTS idx_audit_raffle ON audit_log (raffle_id);
+`;
 
 /**
  * v4: a per-guild toggle for whether blacklist rejections show a generic entry
@@ -76,9 +89,8 @@ CREATE TABLE IF NOT EXISTS activity (
   PRIMARY KEY (guild_id, user_id, day)
 );
 
-CREATE INDEX IF NOT EXISTS idx_activity_guild_user_day
-  ON activity (guild_id, user_id, day);
-
+-- Note: no separate index on (guild_id, user_id, day) — the activity PRIMARY
+-- KEY already covers that lookup. Only the pruning-by-day index is added.
 CREATE INDEX IF NOT EXISTS idx_activity_day
   ON activity (day);
 
@@ -157,4 +169,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_guild_raffle
   ON audit_log (guild_id, raffle_id);
+
+CREATE INDEX IF NOT EXISTS idx_audit_raffle
+  ON audit_log (raffle_id);
 ${WIZARD_STATE_SQL}`;

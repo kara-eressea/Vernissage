@@ -64,17 +64,24 @@ async function main(): Promise<void> {
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counter = new MessageCounter();
-  const counting = attachMessageCounter(client, db, counter);
+  const counting = attachMessageCounter(client, db, counter, config.homeGuildId);
 
   client.once(Events.ClientReady, (ready) => {
     console.log(`Logged in as ${ready.user.tag}; serving guild ${config.homeGuildId}.`);
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
+    // routeInteraction / route contain their own try/catch, but their returned
+    // promise can still reject (e.g. the error-path reply itself fails). Swallow
+    // that here so a single bad interaction never becomes an unhandled rejection.
     if (interaction.isChatInputCommand()) {
-      void routeInteraction(interaction, commands);
+      void routeInteraction(interaction, commands).catch((err) =>
+        console.error("Unhandled interaction error:", err),
+      );
     } else if (isRoutableComponent(interaction)) {
-      void interactionRouter.route(interaction as unknown as CustomIdInteraction);
+      void interactionRouter
+        .route(interaction as unknown as CustomIdInteraction)
+        .catch((err) => console.error("Unhandled interaction error:", err));
     }
   });
 
@@ -91,9 +98,12 @@ async function main(): Promise<void> {
         actorId: "scheduler",
         createdAt: new Date().toISOString(),
       });
-      // On open, post the public entry message with the Enter button.
+      // On open, post the public entry message with the Enter button. Guarded
+      // so a transient DB/Discord error here never crashes the scheduler tick.
       if (t.to === "open") {
-        void announceOpenRaffle(db, notifier, t.raffleId);
+        void announceOpenRaffle(db, notifier, t.raffleId).catch((err) =>
+          console.error(`Failed to announce raffle ${t.raffleId}:`, err),
+        );
       }
     },
   });
@@ -111,6 +121,13 @@ async function main(): Promise<void> {
 
   await client.login(config.token);
 }
+
+// Last-resort net: this bot must run 24/7, so a stray rejection from a
+// fire-and-forget async path should be logged, not fatal. Node otherwise
+// terminates the process on an unhandled rejection.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
 
 main().catch((err) => {
   console.error("Fatal startup error:", err);
