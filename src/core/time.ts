@@ -30,6 +30,16 @@ export function utcDay(when: string | Date): string {
 }
 
 /**
+ * The UTC calendar hour for a timestamp, as "YYYY-MM-DDTHH". Used to key the
+ * in-memory per-hour tally that enforces the anti-spam message cap.
+ */
+export function utcHour(when: string | Date): string {
+  const iso = new Date(toEpochMs(when)).toISOString();
+  // "2026-07-03T12:34:56.000Z" -> "2026-07-03T12"
+  return iso.slice(0, 13);
+}
+
+/**
  * Shift a UTC ISO date string by a whole number of days. Positive moves
  * forward, negative moves back. Returns another "YYYY-MM-DD" string.
  */
