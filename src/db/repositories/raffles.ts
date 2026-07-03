@@ -27,6 +27,7 @@ export interface RaffleRow {
   cooldown_days: number | null;
   cooldown_count: number | null;
   draw_mode: string | null;
+  channel_id: string | null;
   message_id: string | null;
   entrants_hash: string | null;
   drand_round: number | null;
@@ -76,6 +77,7 @@ export type RaffleFieldPatch = Partial<
     | "cooldown_days"
     | "cooldown_count"
     | "draw_mode"
+    | "channel_id"
     | "message_id"
   >
 >;
@@ -97,6 +99,7 @@ const PATCHABLE_COLUMNS = new Set<keyof RaffleFieldPatch>([
   "cooldown_days",
   "cooldown_count",
   "draw_mode",
+  "channel_id",
   "message_id",
 ]);
 

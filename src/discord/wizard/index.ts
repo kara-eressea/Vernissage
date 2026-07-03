@@ -11,6 +11,7 @@
 import {
   MessageFlags,
   type ButtonInteraction,
+  type ChannelSelectMenuInteraction,
   type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
@@ -57,6 +58,7 @@ import {
 export type WizardInteraction =
   | ButtonInteraction
   | StringSelectMenuInteraction
+  | ChannelSelectMenuInteraction
   | ModalSubmitInteraction;
 
 export interface WizardDeps {
@@ -374,6 +376,12 @@ export function createWizard(deps: WizardDeps): Wizard {
     action: string,
   ): Promise<void> {
     const id = raffle.raffle_id;
+    if (action === "channel" && interaction.isChannelSelectMenu()) {
+      // Empty selection clears the per-raffle override (falls back to the guild
+      // default announce channel at post time).
+      updateRaffleFields(db, id, { channel_id: interaction.values[0] ?? null });
+      return rerender(interaction, id, "summary");
+    }
     if (action === "back" && interaction.isButton()) {
       await goToStep(interaction, id, "basics");
       return;

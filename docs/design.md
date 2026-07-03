@@ -201,6 +201,7 @@ Details:
 guilds (
   guild_id        TEXT PRIMARY KEY,
   audit_channel   TEXT,
+  announce_channel TEXT,             -- default channel raffles announce in
   mod_role        TEXT,
   hourly_cap      INTEGER,          -- null = uncapped
   default_cooldown_days   INTEGER,
@@ -244,6 +245,7 @@ raffles (
   cooldown_days   INTEGER,          -- null = guild default
   cooldown_count  INTEGER,
   draw_mode       TEXT,             -- auto or manual
+  channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the announcement/entry message
   entrants_hash   TEXT,             -- set at close
   drand_round     INTEGER,          -- committed at close

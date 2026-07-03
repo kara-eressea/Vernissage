@@ -10,6 +10,7 @@ import type { Database } from "better-sqlite3";
 export interface GuildRow {
   guild_id: string;
   audit_channel: string | null;
+  announce_channel: string | null;
   mod_role: string | null;
   hourly_cap: number | null;
   default_cooldown_days: number | null;

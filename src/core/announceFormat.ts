@@ -28,6 +28,18 @@ export interface EntryMessageContent {
   body: string;
 }
 
+/**
+ * Where a raffle's entry message is posted: the raffle's own channel override if
+ * set, otherwise the guild's default announce channel. Null when neither is
+ * configured (nothing to post to). Pure — the caller does the posting.
+ */
+export function resolveAnnounceChannelId(
+  raffleChannelId: string | null,
+  guildAnnounceChannel: string | null,
+): string | null {
+  return raffleChannelId ?? guildAnnounceChannel;
+}
+
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }

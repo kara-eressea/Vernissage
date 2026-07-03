@@ -7,7 +7,18 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+/**
+ * v3 columns that store where a raffle announces: a guild-level default channel
+ * and a per-raffle override. Declared as (table, column, decl) so the migration
+ * can add them idempotently to an existing database (an ALTER, unlike a CREATE
+ * IF NOT EXISTS, is not itself idempotent).
+ */
+export const V3_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
+  { table: "guilds", column: "announce_channel", decl: "TEXT" },
+  { table: "raffles", column: "channel_id", decl: "TEXT" },
+];
 
 /**
  * v2: the wizard resumption pointer. Only the step is tracked here; the raffle's
@@ -31,6 +42,7 @@ export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS guilds (
   guild_id        TEXT PRIMARY KEY,
   audit_channel   TEXT,
+  announce_channel TEXT,
   mod_role        TEXT,
   hourly_cap      INTEGER,
   default_cooldown_days        INTEGER,
@@ -79,6 +91,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   cooldown_days   INTEGER,
   cooldown_count  INTEGER,
   draw_mode       TEXT,
+  channel_id      TEXT,
   message_id      TEXT,
   entrants_hash   TEXT,
   drand_round     INTEGER,

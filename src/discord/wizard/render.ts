@@ -11,6 +11,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelSelectMenuBuilder,
+  ChannelType,
   ModalBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
@@ -166,6 +168,19 @@ function exemptSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuild
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
 
+function announceChannelSelect(raffle: RaffleRow): ActionRowBuilder<ChannelSelectMenuBuilder> {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId(buildWizardId("summary", "channel", raffle.raffle_id))
+    .setPlaceholder("Announce in… (defaults to the server's announce channel)")
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (raffle.channel_id) {
+    menu.setDefaultChannels(raffle.channel_id);
+  }
+  return new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(menu);
+}
+
 function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildWizardId("draw", "mode", raffle.raffle_id))
@@ -179,7 +194,8 @@ function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBui
 
 type MessageRow =
   | ActionRowBuilder<ButtonBuilder>
-  | ActionRowBuilder<StringSelectMenuBuilder>;
+  | ActionRowBuilder<StringSelectMenuBuilder>
+  | ActionRowBuilder<ChannelSelectMenuBuilder>;
 
 function rows(...builders: MessageRow[]): Row[] {
   return builders.map((b) => b.toJSON() as Row);
@@ -243,6 +259,7 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
       return {
         content: `**Step 5 of 5 — Summary**\n${(summaryLines ?? []).join("\n")}`,
         components: rows(
+          announceChannelSelect(raffle),
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("summary", "confirm", id, "Confirm & schedule", ButtonStyle.Success),
             button("summary", "back", id, "Edit a step"),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatEntryMessage,
+  resolveAnnounceChannelId,
   type EntryMessageInput,
 } from "../../src/core/announceFormat.js";
 import { discordTimestamp } from "../../src/core/time.js";
@@ -59,5 +60,19 @@ describe("formatEntryMessage", () => {
       minAccountAgeDays: null,
     });
     expect(body).toMatch(/open to everyone/i);
+  });
+});
+
+describe("resolveAnnounceChannelId", () => {
+  it("prefers the per-raffle override", () => {
+    expect(resolveAnnounceChannelId("raffle-chan", "guild-chan")).toBe("raffle-chan");
+  });
+
+  it("falls back to the guild default", () => {
+    expect(resolveAnnounceChannelId(null, "guild-chan")).toBe("guild-chan");
+  });
+
+  it("is null when neither is set", () => {
+    expect(resolveAnnounceChannelId(null, null)).toBeNull();
   });
 });

@@ -146,6 +146,24 @@ describe("handleConfig — writes", () => {
     expect(rows[0]).toEqual({ event_type: "config_set", actor_id: "mod-7" });
   });
 
+  it("sets and clears the announce channel", async () => {
+    const setInteraction = fakeInteraction({
+      subcommand: "set",
+      manageGuild: true,
+      values: { "announce-channel": { id: "chan-77" } },
+    });
+    await handleConfig(setInteraction, ctx);
+    expect(getGuild(db, "g1")?.announce_channel).toBe("chan-77");
+
+    const clearInteraction = fakeInteraction({
+      subcommand: "set",
+      manageGuild: true,
+      values: { clear: "announce_channel" },
+    });
+    await handleConfig(clearInteraction, ctx);
+    expect(getGuild(db, "g1")?.announce_channel).toBeNull();
+  });
+
   it("rejects a set with no fields and writes nothing", async () => {
     const interaction = fakeInteraction({
       subcommand: "set",

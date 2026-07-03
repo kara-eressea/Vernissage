@@ -106,6 +106,37 @@ describe("wizard basics step", () => {
   });
 });
 
+function fakeChannelSelect(
+  customId: string,
+  values: string[],
+): WizardInteraction & { update: ReturnType<typeof vi.fn> } {
+  return {
+    customId,
+    user: { id: "mod1" },
+    values,
+    isChatInputCommand: () => false,
+    isModalSubmit: () => false,
+    isButton: () => false,
+    isStringSelectMenu: () => false,
+    isChannelSelectMenu: () => true,
+    update: vi.fn().mockResolvedValue(undefined),
+    reply: vi.fn().mockResolvedValue(undefined),
+  } as unknown as WizardInteraction & { update: ReturnType<typeof vi.fn> };
+}
+
+describe("wizard announce channel override", () => {
+  it("stores the selected channel on the raffle, and clears it on empty", async () => {
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "summary", "2026-07-01T00:00:00.000Z");
+
+    await wizard().handle(fakeChannelSelect(`wiz:summary:channel:${id}`, ["chan-9"]));
+    expect(getRaffle(db, id)?.channel_id).toBe("chan-9");
+
+    await wizard().handle(fakeChannelSelect(`wiz:summary:channel:${id}`, []));
+    expect(getRaffle(db, id)?.channel_id).toBeNull();
+  });
+});
+
 describe("wizard confirm", () => {
   it("schedules a fully valid draft, audits it, and clears wizard state", async () => {
     const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");

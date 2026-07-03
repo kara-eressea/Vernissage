@@ -7,7 +7,20 @@
  */
 
 import type { Database } from "better-sqlite3";
-import { SCHEMA_SQL, SCHEMA_VERSION, WIZARD_STATE_SQL } from "./schema.js";
+import { SCHEMA_SQL, SCHEMA_VERSION, V3_COLUMNS, WIZARD_STATE_SQL } from "./schema.js";
+
+/** Add a column only if it does not already exist (idempotent, unlike ALTER). */
+function addColumnIfMissing(
+  db: Database,
+  table: string,
+  column: string,
+  decl: string,
+): void {
+  const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
+}
 
 /**
  * Bring `db` up to the current schema version. Safe to call on every startup;
@@ -24,6 +37,14 @@ export function migrate(db: Database): void {
   // already got it from SCHEMA_SQL above; the CREATE is IF NOT EXISTS anyway.)
   if (current < 2) {
     db.exec(WIZARD_STATE_SQL);
+  }
+
+  // v3: announce-channel columns. Fresh databases already have them from
+  // SCHEMA_SQL; addColumnIfMissing makes the ALTER safe to run either way.
+  if (current < 3) {
+    for (const { table, column, decl } of V3_COLUMNS) {
+      addColumnIfMissing(db, table, column, decl);
+    }
   }
 
   if (current !== SCHEMA_VERSION) {

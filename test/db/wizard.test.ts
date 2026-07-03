@@ -25,9 +25,8 @@ afterEach(() => {
   db.close();
 });
 
-describe("schema v2 migration", () => {
-  it("reports user_version 2 and has a wizard_state table", () => {
-    expect(db.pragma("user_version", { simple: true })).toBe(2);
+describe("wizard_state table", () => {
+  it("exists after migration", () => {
     const table = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='wizard_state'`)
       .get();

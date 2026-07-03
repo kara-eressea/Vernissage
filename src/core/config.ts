@@ -14,6 +14,7 @@
 /** The set of guild-config fields that can be individually cleared to null. */
 export const CLEARABLE_FIELDS = [
   "audit_channel",
+  "announce_channel",
   "mod_role",
   "hourly_cap",
   "default_cooldown_days",

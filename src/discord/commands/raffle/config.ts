@@ -57,6 +57,11 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
         .addChannelOption((o) =>
           o.setName("audit-channel").setDescription("Channel that receives audit posts."),
         )
+        .addChannelOption((o) =>
+          o
+            .setName("announce-channel")
+            .setDescription("Default channel where raffles are announced."),
+        )
         .addRoleOption((o) =>
           o.setName("mod-role").setDescription("Role allowed to manage raffles."),
         )
@@ -90,6 +95,7 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
             .setDescription("Unset a single setting back to its default.")
             .addChoices(
               { name: "audit channel", value: "audit_channel" },
+              { name: "announce channel", value: "announce_channel" },
               { name: "mod role", value: "mod_role" },
               { name: "hourly cap", value: "hourly_cap" },
               { name: "cooldown days", value: "default_cooldown_days" },
@@ -178,6 +184,7 @@ async function handleConfigShow(
   const lines = [
     "**Server raffle configuration**",
     `- Audit channel: ${fmtChannel(guild?.audit_channel)}`,
+    `- Announce channel: ${fmtChannel(guild?.announce_channel)}`,
     `- Mod role: ${fmtRole(guild?.mod_role)}`,
     `- Hourly message cap: ${fmtNum(guild?.hourly_cap)}`,
     `- Default cooldown: ${fmtNum(guild?.default_cooldown_days, " day(s)")} / ${fmtNum(guild?.default_cooldown_count, " raffle(s)")}`,
@@ -200,6 +207,10 @@ async function handleConfigSet(
   const auditChannel = interaction.options.getChannel("audit-channel");
   if (auditChannel) {
     patch.audit_channel = auditChannel.id;
+  }
+  const announceChannel = interaction.options.getChannel("announce-channel");
+  if (announceChannel) {
+    patch.announce_channel = announceChannel.id;
   }
   const modRole = interaction.options.getRole("mod-role");
   if (modRole) {
