@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cappedIncrement, messagesInWindow } from "../../src/core/activity.js";
+import { cappedIncrement, messagesInWindow, pruneCutoffDay } from "../../src/core/activity.js";
 import type { DailyCount } from "../../src/core/types.js";
 
 describe("messagesInWindow", () => {
@@ -50,5 +50,21 @@ describe("cappedIncrement", () => {
   it("ignores non-positive new message counts", () => {
     expect(cappedIncrement(0, 0, 10)).toBe(0);
     expect(cappedIncrement(0, -4, null)).toBe(0);
+  });
+});
+
+describe("pruneCutoffDay", () => {
+  const NOW = "2026-07-15T12:00:00.000Z";
+
+  it("keeps the lookback plus a safety margin before the cutoff", () => {
+    // 14-day lookback + 1 safety day: rows before 2026-06-30 may be deleted, so
+    // the oldest still-needed day (2026-07-01, the start of the 14-day window)
+    // is safely retained.
+    expect(pruneCutoffDay(NOW, 14, 1)).toBe("2026-06-30");
+    expect(pruneCutoffDay(NOW, 1, 1)).toBe("2026-07-13");
+  });
+
+  it("respects a zero safety margin", () => {
+    expect(pruneCutoffDay(NOW, 14, 0)).toBe("2026-07-01");
   });
 });

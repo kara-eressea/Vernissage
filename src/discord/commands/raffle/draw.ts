@@ -18,6 +18,7 @@ import { userMention } from "../../../core/format.js";
 import { getRaffle } from "../../../db/repositories/raffles.js";
 import { listWinsForRaffle } from "../../../db/repositories/wins.js";
 import { executeDraw, rerollWinner } from "../../../draw/service.js";
+import { makePresenceResolver } from "../../memberPresence.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
@@ -69,7 +70,14 @@ export async function handleDraw(
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const outcome = await executeDraw(ctx.db, ctx.notifier, raffleId, new Date().toISOString());
+  const outcome = await executeDraw(
+    ctx.db,
+    ctx.notifier,
+    raffleId,
+    new Date().toISOString(),
+    undefined,
+    makePresenceResolver(interaction.client),
+  );
 
   if (!outcome.ok) {
     const message =

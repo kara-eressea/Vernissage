@@ -148,6 +148,22 @@ export function countRafflesSince(db: Database, guildId: string, sinceIso: strin
   return row.n;
 }
 
+/**
+ * The longest activity lookback (`req_days`) among raffles that could still be
+ * entered — `scheduled` or `open`. Null when none apply or all are null. Drives
+ * how far back activity rows must be kept before pruning (design.md activity
+ * "prune rows older than the longest lookback window in use").
+ */
+export function maxReqDaysInUse(db: Database): number | null {
+  const row = db
+    .prepare(
+      `SELECT MAX(req_days) AS n FROM raffles
+       WHERE status IN ('scheduled', 'open') AND req_days IS NOT NULL`,
+    )
+    .get() as { n: number | null };
+  return row.n;
+}
+
 /** All draft raffles for a guild, newest first — used by /raffle edit. */
 export function listDrafts(db: Database, guildId: string): RaffleRow[] {
   return db

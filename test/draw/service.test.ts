@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
 import { commitSecret, verifyCommitment } from "../../src/core/commitReveal.js";
+import { addBan } from "../../src/db/repositories/blacklist.js";
 import { addEntry } from "../../src/db/repositories/entries.js";
 import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import {
@@ -180,6 +181,52 @@ describe("executeDraw", () => {
       ok: false,
       reason: "already_drawn",
     });
+  });
+});
+
+describe("executeDraw winner failsafe", () => {
+  function removedReason(raffleId: number, userId: string): string | null {
+    const row = db
+      .prepare(`SELECT removed_reason FROM entries WHERE raffle_id = ? AND user_id = ?`)
+      .get(raffleId, userId) as { removed_reason: string | null } | undefined;
+    return row?.removed_reason ?? null;
+  }
+
+  it("skips a winner who left the guild, removes their entry, and re-draws", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    // "d" is the natural winner; report everyone present except "d".
+    const resolveMembers = async (_g: string, ids: string[]) =>
+      new Set(ids.filter((id) => id !== "d"));
+
+    const outcome = await executeDraw(db, announcer, raffleId, NOW, gen, resolveMembers);
+
+    // "d" excluded -> replacement "c" (same base seed).
+    expect(outcome).toEqual({ ok: true, winners: ["c"] });
+    expect(activeWinnerIds(db, raffleId)).toEqual(["c"]);
+    expect(removedReason(raffleId, "d")).toBe("left_guild");
+    // The removal is audited and the excluded id is published for verification.
+    expect(auditTypes(raffleId)).toEqual(["draw_committed", "entry_removed", "raffle_drawn"]);
+    expect(announcer.auditPosts.at(-1)).toContain("<@d>"); // result post lists excluded
+  });
+
+  it("skips a winner blacklisted before the draw, even with no member resolver", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    addBan(db, {
+      guildId: GUILD,
+      userId: "d",
+      bannedBy: "mod",
+      reason: "sockpuppet",
+      bannedAt: NOW,
+      expiresAt: null,
+    });
+
+    const outcome = await executeDraw(db, announcer, raffleId, NOW, gen);
+
+    expect(outcome).toEqual({ ok: true, winners: ["c"] });
+    expect(removedReason(raffleId, "d")).toBe("blacklisted");
+    expect(auditTypes(raffleId)).toEqual(["draw_committed", "entry_removed", "raffle_drawn"]);
   });
 });
 

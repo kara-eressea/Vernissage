@@ -346,8 +346,14 @@ wizard_state (
 ## Edge cases and decisions to confirm
 - Bot downtime: messages sent while offline are not counted. Acceptable for
   v1; note it in the audit channel if downtime exceeds some threshold.
-- User leaves the server after entering: entry stands or is removed? Suggest
-  removed at draw time, logged.
+- User leaves the server after entering: handled as a failsafe on the pulled
+  winners, not the whole entrant list. At draw, each selected winner is checked
+  against current guild membership and the blacklist; a winner who has left the
+  server or been blacklisted since entering has their entry removed (logged) and
+  is excluded, and the draw re-runs from the same base seed with them excluded
+  (verifiable exactly like a reroll — the excluded ids are published). Only
+  winners are checked, so this stays cheap regardless of entrant count. A
+  non-winning entrant who left is harmless and left untouched.
 - Ties between blacklist expiry and open raffles: expiry lifts the ban but
   does not restore removed entries.
 - Editing activity requirements after entries exist: disallow; only end-time

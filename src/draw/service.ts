@@ -22,6 +22,7 @@ import { randomBytes } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import { resolveAnnounceChannelId } from "../core/announceFormat.js";
 import { AUDIT_EVENTS } from "../core/auditEvents.js";
+import { formatAuditLine } from "../core/auditFormat.js";
 import { commitSecret } from "../core/commitReveal.js";
 import { deriveSeed, hashEntrants, selectWinners } from "../core/draw.js";
 import {
@@ -32,7 +33,8 @@ import {
 } from "../core/drawFormat.js";
 import type { DrawMode } from "../core/types.js";
 import { writeAudit } from "../db/repositories/audit.js";
-import { listEntrants } from "../db/repositories/entries.js";
+import { isBlacklisted } from "../db/repositories/blacklist.js";
+import { listEntrants, removeEntry } from "../db/repositories/entries.js";
 import { getGuild } from "../db/repositories/guilds.js";
 import {
   getRaffle,
@@ -58,6 +60,17 @@ export interface DrawAnnouncer {
 
 /** Produces a fresh draw secret. Injectable so tests are deterministic. */
 export type SecretGenerator = () => string;
+
+/**
+ * Resolves which of `candidateIds` are still present in the guild. Returns the
+ * present set, or null when membership can't be reliably determined (in which
+ * case no one is treated as departed). Injected so the service stays free of
+ * discord.js; the Discord layer supplies a REST-backed implementation.
+ */
+export type PresenceResolver = (
+  guildId: string,
+  candidateIds: string[],
+) => Promise<ReadonlySet<string> | null>;
 
 /** Default secret: 32 random bytes as hex. Non-deterministic (hence not in core). */
 export const generateSecret: SecretGenerator = () => randomBytes(32).toString("hex");
@@ -149,6 +162,7 @@ export async function executeDraw(
   raffleId: number,
   now: string,
   generate: SecretGenerator = generateSecret,
+  resolveMembers?: PresenceResolver,
 ): Promise<DrawOutcome> {
   const pre = getRaffle(db, raffleId);
   if (!pre) {
@@ -174,9 +188,39 @@ export async function executeDraw(
   const secret = raffle.draw_secret;
   const commitment = raffle.draw_commitment ?? commitSecret(secret);
 
+  // The frozen entrant list is the one the published hash was computed over.
   const entrants = listEntrants(db, raffleId);
   const seed = deriveSeed(entrantsHash, secret);
-  const winners = entrants.length === 0 ? [] : selectWinners(entrants, seed, raffle.winner_count);
+
+  // Failsafe on the pulled winners only (cheap: 1–2 members, not all N): a
+  // winner who has since left the guild or been blacklisted is excluded and the
+  // draw re-runs from the same base seed with them excluded — verifiable exactly
+  // like a reroll (indices stay seed mod entrant_count over the committed list).
+  // The loop is bounded: `excluded` strictly grows each pass, so it terminates
+  // when the winner set is all valid or the eligible pool is exhausted.
+  const excluded = new Set<string>();
+  const removals: Array<{ id: string; reason: "left_guild" | "blacklisted" }> = [];
+  let winners =
+    entrants.length === 0 ? [] : selectWinners(entrants, seed, raffle.winner_count, excluded);
+  while (winners.length > 0) {
+    const present = resolveMembers ? await resolveMembers(raffle.guild_id, winners) : null;
+    const invalid: Array<{ id: string; reason: "left_guild" | "blacklisted" }> = [];
+    for (const w of winners) {
+      if (present && !present.has(w)) {
+        invalid.push({ id: w, reason: "left_guild" });
+      } else if (isBlacklisted(db, raffle.guild_id, w, now)) {
+        invalid.push({ id: w, reason: "blacklisted" });
+      }
+    }
+    if (invalid.length === 0) {
+      break;
+    }
+    for (const bad of invalid) {
+      excluded.add(bad.id);
+      removals.push(bad);
+    }
+    winners = selectWinners(entrants, seed, raffle.winner_count, excluded);
+  }
 
   // Re-check status inside the transaction so a concurrent close/reconcile path
   // cannot draw the same raffle twice (which would duplicate the wins rows).
@@ -186,6 +230,17 @@ export async function executeDraw(
     const fresh = getRaffle(db, raffleId);
     if (!fresh || fresh.status !== "closed") {
       return;
+    }
+    for (const bad of removals) {
+      removeEntry(db, raffleId, bad.id, now, bad.reason);
+      writeAudit(db, {
+        guildId: raffle.guild_id,
+        raffleId,
+        eventType: AUDIT_EVENTS.entryRemoved,
+        actorId: "system",
+        payload: { userId: bad.id },
+        createdAt: now,
+      });
     }
     for (const winner of winners) {
       addWin(db, raffleId, winner, now);
@@ -197,14 +252,27 @@ export async function executeDraw(
       eventType: AUDIT_EVENTS.raffleDrawn,
       actorId: "system",
       payload: winners.length === 0
-        ? { winners, reason: "no_entrants" }
-        : { winners, seed, secret, entrantsHash, commitment },
+        ? { winners, reason: "no_entrants", excluded: [...excluded] }
+        : { winners, seed, secret, entrantsHash, commitment, excluded: [...excluded] },
       createdAt: now,
     });
     drew = true;
   })();
   if (!drew) {
     return { ok: false, reason: "already_drawn" };
+  }
+
+  for (const bad of removals) {
+    await announcer.postAudit(
+      raffle.guild_id,
+      formatAuditLine({
+        eventType: AUDIT_EVENTS.entryRemoved,
+        raffleId,
+        actorId: "system",
+        payload: { userId: bad.id },
+        createdAt: now,
+      }),
+    );
   }
 
   await announcer.postAudit(
@@ -217,6 +285,7 @@ export async function executeDraw(
       commitment,
       secret,
       seed,
+      excluded: [...excluded],
       now,
     }),
   );
@@ -329,10 +398,11 @@ export async function onRaffleClosed(
   drawMode: DrawMode | null,
   now: string,
   generate: SecretGenerator = generateSecret,
+  resolveMembers?: PresenceResolver,
 ): Promise<void> {
   await commitOnClose(db, announcer, raffleId, now, generate);
   if (drawMode === "auto") {
-    await executeDraw(db, announcer, raffleId, now, generate);
+    await executeDraw(db, announcer, raffleId, now, generate, resolveMembers);
   }
 }
 
@@ -347,6 +417,7 @@ export async function reconcilePendingDraws(
   announcer: DrawAnnouncer,
   now: string,
   generate: SecretGenerator = generateSecret,
+  resolveMembers?: PresenceResolver,
 ): Promise<void> {
   const closed = listByStatusAllGuilds(db, ["closed"]);
   for (const raffle of closed) {
@@ -358,6 +429,7 @@ export async function reconcilePendingDraws(
         raffle.draw_mode as DrawMode | null,
         now,
         generate,
+        resolveMembers,
       );
     } catch (err) {
       console.error(`Failed to reconcile draw for raffle ${raffle.raffle_id}:`, err);

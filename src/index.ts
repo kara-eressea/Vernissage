@@ -17,7 +17,9 @@ import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEn
 import { handleEnterButton } from "./discord/commands/raffle/entry.js";
 import { ENTER_PREFIX } from "./discord/components/enterButton.js";
 import { announceOpenRaffle } from "./discord/entryFlow.js";
+import { makePresenceResolver } from "./discord/memberPresence.js";
 import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
+import { startActivityPruning } from "./scheduler/pruning.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import {
   createInteractionRouter,
@@ -67,6 +69,13 @@ async function main(): Promise<void> {
   const counter = new MessageCounter();
   const counting = attachMessageCounter(client, db, counter, config.homeGuildId);
 
+  // The draw's left-guild / blacklist failsafe checks pulled winners against
+  // current membership via REST (only winners, so a handful of lookups).
+  const resolveMembers = makePresenceResolver(client);
+
+  // Prune activity rows older than the longest lookback in use, daily.
+  const pruning = startActivityPruning(db);
+
   client.once(Events.ClientReady, (ready) => {
     console.log(`Logged in as ${ready.user.tag}; serving guild ${config.homeGuildId}.`);
   });
@@ -109,9 +118,15 @@ async function main(): Promise<void> {
       // On close, freeze entries and publish the commitment; auto-draw if the
       // raffle draws automatically. Manual raffles wait for `/raffle draw`.
       if (t.to === "closed") {
-        void onRaffleClosed(db, notifier, t.raffleId, t.drawMode, new Date().toISOString()).catch(
-          (err) => console.error(`Failed to close/draw raffle ${t.raffleId}:`, err),
-        );
+        void onRaffleClosed(
+          db,
+          notifier,
+          t.raffleId,
+          t.drawMode,
+          new Date().toISOString(),
+          undefined,
+          resolveMembers,
+        ).catch((err) => console.error(`Failed to close/draw raffle ${t.raffleId}:`, err));
       }
     },
   });
@@ -119,14 +134,19 @@ async function main(): Promise<void> {
   // The scheduler's startup sweep only emits transitions for raffles still
   // scheduled/open; a raffle already `closed` in the DB (closed just before a
   // shutdown, commit/draw missed) emits none. Reconcile those once at startup.
-  void reconcilePendingDraws(db, notifier, new Date().toISOString()).catch((err) =>
-    console.error("Failed to reconcile pending draws on startup:", err),
-  );
+  void reconcilePendingDraws(
+    db,
+    notifier,
+    new Date().toISOString(),
+    undefined,
+    resolveMembers,
+  ).catch((err) => console.error("Failed to reconcile pending draws on startup:", err));
 
   const shutdown = (signal: string): void => {
     console.log(`Received ${signal}; shutting down.`);
     scheduler.stop();
     counting.stop();
+    pruning.stop();
     client.destroy();
     db.close();
     process.exit(0);

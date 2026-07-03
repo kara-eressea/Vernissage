@@ -19,6 +19,7 @@ import {
 } from "discord.js";
 import type { CommandContext } from "../index.js";
 import type { Command } from "../types.js";
+import { addBanSubcommands, handleBan, handleBanlist, handleUnban } from "./blacklist.js";
 import { addConfigGroup, handleConfig } from "./config.js";
 import { addDrawSubcommands, handleDraw, handleReroll } from "./draw.js";
 import {
@@ -40,8 +41,8 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   addManageSubcommands(data);
   addEntrySubcommands(data);
   addDrawSubcommands(data);
+  addBanSubcommands(data);
   data.addSubcommandGroup(addConfigGroup);
-  // Later issues: ban/unban (#13).
 
   return {
     data,
@@ -83,6 +84,15 @@ async function dispatch(
       return;
     case "reroll":
       await handleReroll(interaction, ctx);
+      return;
+    case "ban":
+      await handleBan(interaction, ctx);
+      return;
+    case "unban":
+      await handleUnban(interaction, ctx);
+      return;
+    case "banlist":
+      await handleBanlist(interaction, ctx);
       return;
     default:
       await interaction.reply({

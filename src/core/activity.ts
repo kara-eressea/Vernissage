@@ -6,6 +6,7 @@
  * step. Raw message content is never involved — only counts.
  */
 
+import { addDays, utcDay } from "./time.js";
 import type { DailyCount, DayWindow } from "./types.js";
 
 /**
@@ -50,4 +51,21 @@ export function cappedIncrement(
     return 0;
   }
   return Math.min(newMessages, remaining);
+}
+
+/**
+ * The UTC day strictly before which activity rows may be pruned (design.md:
+ * "prune rows older than the longest lookback window in use").
+ *
+ * Given `now`, the longest activity lookback in use (`maxReqDays`), and a safety
+ * margin, returns the cutoff day for `pruneActivityBefore` (which deletes rows
+ * with `day < cutoff`). The margin keeps a buffer of still-safe days so an
+ * off-by-one or a slightly longer window never deletes rows a check still needs.
+ */
+export function pruneCutoffDay(
+  now: string,
+  maxReqDays: number,
+  safetyDays = 1,
+): string {
+  return addDays(utcDay(now), -(maxReqDays + safetyDays));
 }

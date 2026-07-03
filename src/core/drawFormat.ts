@@ -55,6 +55,8 @@ export interface ResultPost {
   secret: string;
   /** The derived draw seed (SHA-256 of hash + secret). */
   seed: string;
+  /** Ids excluded from selection (left the guild or blacklisted at draw). */
+  excluded?: string[];
   now: string;
 }
 
@@ -69,7 +71,7 @@ export function formatResultPost(input: ResultPost): string {
     input.winners.length > 0
       ? input.winners.map(userMention).join(", ")
       : "no eligible entrants";
-  return [
+  const lines = [
     `🏆 **Draw result — ${name}** (#${input.raffleId})`,
     `**Winner(s):** ${who} — ${discordTimestamp(input.now, "f")}`,
     ``,
@@ -77,7 +79,13 @@ export function formatResultPost(input: ResultPost): string {
     `**Revealed secret:** \`${input.secret}\``,
     `**Commitment check:** SHA-256(secret) must equal \`${input.commitment}\``,
     `**Draw seed:** \`${input.seed}\` = SHA-256(hash + secret)`,
-  ].join("\n");
+  ];
+  if (input.excluded && input.excluded.length > 0) {
+    // Publishing the excluded ids keeps the draw verifiable: a checker must skip
+    // these (left the guild or blacklisted at draw) to reproduce the winners.
+    lines.push(`**Excluded (left or blacklisted):** ${input.excluded.map(userMention).join(", ")}`);
+  }
+  return lines.join("\n");
 }
 
 /** Inputs for a reroll post published to the audit channel. */
