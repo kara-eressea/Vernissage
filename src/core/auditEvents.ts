@@ -11,6 +11,7 @@
 export const AUDIT_EVENTS = {
   raffleCreated: "raffle_created",
   raffleEdited: "raffle_edited",
+  raffleScheduled: "raffle_scheduled",
   raffleOpened: "raffle_opened",
   raffleClosed: "raffle_closed",
   raffleDrawn: "raffle_drawn",

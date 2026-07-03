@@ -61,6 +61,8 @@ export function formatAuditLine(event: AuditLineInput): string {
       return `📋 ${actor} created ${raffle} — ${when}`;
     case AUDIT_EVENTS.raffleEdited:
       return `✏️ ${actor} edited ${raffle} — ${when}`;
+    case AUDIT_EVENTS.raffleScheduled:
+      return `🗓️ ${actor} scheduled ${raffle} — ${when}`;
     case AUDIT_EVENTS.raffleOpened:
       return `🎉 ${raffle} is now open for entries — ${when}`;
     case AUDIT_EVENTS.raffleClosed:

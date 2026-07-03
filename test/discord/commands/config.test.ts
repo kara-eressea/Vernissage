@@ -20,7 +20,15 @@ let ctx: CommandContext;
 
 beforeEach(() => {
   db = openDb(":memory:");
-  ctx = { db, config: {} as BotConfig };
+  ctx = {
+    db,
+    config: {} as BotConfig,
+    notifier: {
+      resolveAuditChannel: async () => undefined,
+      mirrorAudit: async () => undefined,
+      postEntryMessage: async () => undefined,
+    },
+  };
 });
 
 afterEach(() => {

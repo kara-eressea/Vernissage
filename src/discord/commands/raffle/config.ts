@@ -15,7 +15,6 @@
 
 import {
   MessageFlags,
-  PermissionFlagsBits,
   SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
@@ -28,7 +27,6 @@ import {
   type ClearableField,
   type ConfigValidation,
 } from "../../../core/config.js";
-import { isModerator } from "../../../core/permissions.js";
 import { writeAudit } from "../../../db/repositories/audit.js";
 import {
   listChannelRules,
@@ -42,6 +40,7 @@ import {
 } from "../../../db/repositories/guilds.js";
 import type { ChannelMode } from "../../../core/types.js";
 import type { CommandContext } from "../index.js";
+import { ensureModerator } from "../moderator.js";
 
 /** Attach the `config` subcommand group to the shared `/raffle` builder. */
 export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): SlashCommandSubcommandGroupBuilder {
@@ -125,46 +124,15 @@ function reply(interaction: ChatInputCommandInteraction, content: string): Promi
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
-/** Role ids the invoking member holds, across both member shapes discord.js hands us. */
-function memberRoleIds(interaction: ChatInputCommandInteraction): string[] {
-  const member = interaction.member;
-  if (!member) {
-    return [];
-  }
-  const roles = member.roles;
-  // Gateway interactions give a GuildMember (RoleManager); the raw API member
-  // shape gives a plain string[] of role ids.
-  if (Array.isArray(roles)) {
-    return [...roles];
-  }
-  return [...roles.cache.keys()];
-}
-
 /**
- * Gate every config subcommand behind the moderator check, then dispatch. The
- * pure `isModerator` decision is fed from the interaction and the guild's
- * stored mod role.
+ * Gate every config subcommand behind the shared moderator check, then dispatch.
  */
 export async function handleConfig(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
 ): Promise<void> {
-  const guildId = interaction.guildId;
+  const guildId = await ensureModerator(interaction, ctx.db);
   if (!guildId) {
-    await reply(interaction, "This command can only be used in a server.");
-    return;
-  }
-
-  const guild = getGuild(ctx.db, guildId);
-  const allowed = isModerator({
-    modRole: guild?.mod_role ?? null,
-    memberRoleIds: memberRoleIds(interaction),
-    isGuildOwner: interaction.guild?.ownerId === interaction.user.id,
-    hasManageGuild:
-      interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ?? false,
-  });
-  if (!allowed) {
-    await reply(interaction, "You do not have permission to manage raffle settings.");
     return;
   }
 

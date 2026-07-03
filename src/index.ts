@@ -13,10 +13,18 @@ import { MessageCounter } from "./counting/counter.js";
 import { openDb } from "./db/index.js";
 import { createClient } from "./discord/client.js";
 import { buildCommands } from "./discord/commands/index.js";
+import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEnd.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
+import {
+  createInteractionRouter,
+  isRoutableComponent,
+  type CustomIdInteraction,
+} from "./discord/interactions.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { createNotifier } from "./discord/notifier.js";
 import { routeInteraction } from "./discord/router.js";
+import { createWizard, type WizardInteraction } from "./discord/wizard/index.js";
+import { WIZARD_PREFIX } from "./discord/wizard/customId.js";
 import { startScheduler } from "./scheduler/runner.js";
 
 async function main(): Promise<void> {
@@ -28,25 +36,37 @@ async function main(): Promise<void> {
   const client = createClient();
   attachHomeGuildEnforcement(client, config.homeGuildId);
 
+  // The shared Discord-posting seam (audit-channel mirror + announcements).
+  const notifier = createNotifier(client, db);
+
   // Build the command set with the dependencies handlers close over.
-  const commands = buildCommands({ db, config });
+  const commands = buildCommands({ db, config, notifier });
+
+  // Wizard component/modal interactions and the open-raffle end-extension modal
+  // are dispatched by custom-id namespace.
+  const wizard = createWizard({ db, notifier });
+  const interactionRouter = createInteractionRouter();
+  interactionRouter.register(WIZARD_PREFIX, (i) =>
+    wizard.handle(i as unknown as WizardInteraction),
+  );
+  interactionRouter.register(EDIT_END_PREFIX, (i) =>
+    handleEditEnd(i as never, { db, notifier }),
+  );
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counter = new MessageCounter();
   const counting = attachMessageCounter(client, db, counter);
-
-  // The shared Discord-posting seam (audit-channel mirror + announcements).
-  const notifier = createNotifier(client, db);
 
   client.once(Events.ClientReady, (ready) => {
     console.log(`Logged in as ${ready.user.tag}; serving guild ${config.homeGuildId}.`);
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
-    if (!interaction.isChatInputCommand()) {
-      return;
+    if (interaction.isChatInputCommand()) {
+      void routeInteraction(interaction, commands);
+    } else if (isRoutableComponent(interaction)) {
+      void interactionRouter.route(interaction as unknown as CustomIdInteraction);
     }
-    void routeInteraction(interaction, commands);
   });
 
   // Drive raffle state transitions on an interval, reconciling on startup. Each

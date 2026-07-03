@@ -20,15 +20,19 @@ import {
 import type { CommandContext } from "../index.js";
 import type { Command } from "../types.js";
 import { addConfigGroup, handleConfig } from "./config.js";
+import { addManageSubcommands, handleCancel, handleCreate, handleEdit } from "./manage.js";
 
-/** Build the `/raffle` command, wiring every subcommand group to `ctx`. */
+/** Build the `/raffle` command, wiring every subcommand (group) to `ctx`. */
 export function buildRaffleCommand(ctx: CommandContext): Command {
   const data = new SlashCommandBuilder()
     .setName("raffle")
     .setDescription("Run and manage raffles.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommandGroup(addConfigGroup);
-  // Later issues: `.addSubcommandGroup(addCreateGroup)`, etc.
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+  // Top-level subcommands (create/edit/cancel) added while `data` is still a
+  // full SlashCommandBuilder, then the config subcommand group.
+  addManageSubcommands(data);
+  data.addSubcommandGroup(addConfigGroup);
+  // Later issues: enter/status/list (#11), draw/reroll (#12), ban/unban (#13).
 
   return {
     data,
@@ -36,14 +40,25 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   };
 }
 
-/** Route a `/raffle` invocation to the handler for its subcommand group. */
+/** Route a `/raffle` invocation to the handler for its subcommand (group). */
 async function dispatch(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
 ): Promise<void> {
-  switch (interaction.options.getSubcommandGroup(false)) {
-    case "config":
-      await handleConfig(interaction, ctx);
+  // Subcommand groups (config) first; then top-level subcommands.
+  if (interaction.options.getSubcommandGroup(false) === "config") {
+    await handleConfig(interaction, ctx);
+    return;
+  }
+  switch (interaction.options.getSubcommand(false)) {
+    case "create":
+      await handleCreate(interaction, ctx);
+      return;
+    case "edit":
+      await handleEdit(interaction, ctx);
+      return;
+    case "cancel":
+      await handleCancel(interaction, ctx);
       return;
     default:
       await interaction.reply({

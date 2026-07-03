@@ -7,7 +7,21 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+/**
+ * v2: the wizard resumption pointer. Only the step is tracked here; the raffle's
+ * collected values live in the (nullable) `raffles` columns, keyed by the same
+ * draft raffle id, so a restart mid-wizard loses nothing. Kept as a separate
+ * const so the incremental migration can create it on an existing v1 database.
+ */
+export const WIZARD_STATE_SQL = `
+CREATE TABLE IF NOT EXISTS wizard_state (
+  raffle_id  INTEGER PRIMARY KEY,
+  step       TEXT NOT NULL,
+  updated_at TEXT
+);
+`;
 
 /**
  * The full v1 schema. Every statement is idempotent (IF NOT EXISTS) so applying
@@ -120,4 +134,4 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_guild_raffle
   ON audit_log (guild_id, raffle_id);
-`;
+${WIZARD_STATE_SQL}`;

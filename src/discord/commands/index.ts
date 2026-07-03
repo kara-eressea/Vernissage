@@ -13,6 +13,7 @@
 
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../config.js";
+import type { Notifier } from "../notifier.js";
 import { buildRaffleCommand } from "./raffle/index.js";
 import type { Command } from "./types.js";
 
@@ -20,6 +21,8 @@ import type { Command } from "./types.js";
 export interface CommandContext {
   db: Database;
   config: BotConfig;
+  /** The Discord-posting seam (audit mirror + announcements). */
+  notifier: Notifier;
 }
 
 /** Build the full command set, wiring each handler to `ctx`. */

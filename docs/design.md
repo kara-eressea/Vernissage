@@ -287,6 +287,14 @@ audit_log (
   payload    TEXT,                  -- JSON details
   created_at TEXT
 )
+
+wizard_state (
+  raffle_id  INTEGER PRIMARY KEY,   -- the draft raffle being built
+  step       TEXT,                  -- basics/schedule/eligibility/draw/summary
+  updated_at TEXT
+)
+-- Resumption pointer only: the collected values live in the draft raffles row,
+-- so a restart mid-wizard resumes at the right step with nothing lost.
 ```
 
 ## Technical stack

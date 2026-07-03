@@ -57,6 +57,84 @@ export function getRaffle(db: Database, raffleId: number): RaffleRow | undefined
     .get(raffleId) as RaffleRow | undefined;
 }
 
+/** Columns the wizard/edit flow may patch on a raffle row. */
+export type RaffleFieldPatch = Partial<
+  Pick<
+    RaffleRow,
+    | "name"
+    | "description"
+    | "prize"
+    | "starts_at"
+    | "ends_at"
+    | "winner_count"
+    | "req_messages"
+    | "req_days"
+    | "window_anchor"
+    | "new_member_exempt"
+    | "new_member_days"
+    | "min_account_age_days"
+    | "cooldown_days"
+    | "cooldown_count"
+    | "draw_mode"
+    | "message_id"
+  >
+>;
+
+/** The exact set of patchable columns, used to reject anything unexpected. */
+const PATCHABLE_COLUMNS = new Set<keyof RaffleFieldPatch>([
+  "name",
+  "description",
+  "prize",
+  "starts_at",
+  "ends_at",
+  "winner_count",
+  "req_messages",
+  "req_days",
+  "window_anchor",
+  "new_member_exempt",
+  "new_member_days",
+  "min_account_age_days",
+  "cooldown_days",
+  "cooldown_count",
+  "draw_mode",
+  "message_id",
+]);
+
+/**
+ * Patch a subset of a raffle's columns, leaving the rest untouched. Only
+ * whitelisted columns are written (the wizard fills the row incrementally as
+ * each step is submitted). A null value in the patch clears that column.
+ */
+export function updateRaffleFields(
+  db: Database,
+  raffleId: number,
+  patch: RaffleFieldPatch,
+): void {
+  const keys = (Object.keys(patch) as (keyof RaffleFieldPatch)[]).filter(
+    (key) => patch[key] !== undefined && PATCHABLE_COLUMNS.has(key),
+  );
+  if (keys.length === 0) {
+    return;
+  }
+  const assignments = keys.map((key) => `${key} = @${key}`).join(", ");
+  const params: Record<string, string | number | null> = { raffle_id: raffleId };
+  for (const key of keys) {
+    params[key] = patch[key] ?? null;
+  }
+  db.prepare(`UPDATE raffles SET ${assignments} WHERE raffle_id = @raffle_id`).run(params);
+}
+
+/** All draft raffles for a guild, newest first — used by /raffle edit. */
+export function listDrafts(db: Database, guildId: string): RaffleRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM raffles
+       WHERE guild_id = ? AND status = 'draft'
+       ORDER BY raffle_id DESC`,
+    )
+    .all(guildId) as RaffleRow[];
+}
+
 /** Update a raffle's status. */
 export function setStatus(
   db: Database,
