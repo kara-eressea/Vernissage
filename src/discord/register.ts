@@ -9,14 +9,14 @@
 
 import { REST, Routes } from "discord.js";
 import type { BotConfig } from "../config.js";
-import { commands as defaultCommands, type Command } from "./commands/index.js";
+import type { Command } from "./commands/index.js";
 
 /**
  * Register the given commands to the home guild. Returns the number registered.
  */
 export async function registerCommands(
   config: BotConfig,
-  commands: readonly Command[] = defaultCommands,
+  commands: readonly Command[],
 ): Promise<number> {
   const rest = new REST().setToken(config.token);
   const body = commands.map((command) => command.data.toJSON());

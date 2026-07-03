@@ -36,6 +36,54 @@ export function getHourlyCap(db: Database, guildId: string): number | null {
   return row?.hourly_cap ?? null;
 }
 
+/** The settable guild-config columns (everything except the id and created_at). */
+export type GuildConfigPatch = Partial<
+  Omit<GuildRow, "guild_id" | "created_at">
+>;
+
+/**
+ * Apply a config patch to a guild, creating the row on first write.
+ *
+ * Unlike `upsertGuild`, this distinguishes "leave as-is" from "clear": a key
+ * absent from `patch` is untouched, while a key present with a `null` value is
+ * written as NULL. That is exactly what `/raffle config` needs — the coalescing
+ * `upsertGuild` can never clear a previously-set field. `created_at` is set once
+ * on the initial insert and never overwritten.
+ */
+export function setGuildConfig(
+  db: Database,
+  guildId: string,
+  patch: GuildConfigPatch,
+  now: string,
+): void {
+  // Ensure the row exists so the UPDATE below has something to write. Only the
+  // very first insert stamps created_at; later calls leave it untouched.
+  db.prepare(
+    `INSERT INTO guilds (guild_id, created_at) VALUES (?, ?)
+     ON CONFLICT (guild_id) DO NOTHING`,
+  ).run(guildId, now);
+
+  // Only keys explicitly present (value !== undefined) are written; a null
+  // value clears the column. Keys come from GuildConfigPatch, so the column
+  // names interpolated here are code-controlled, never user input.
+  const keys = (Object.keys(patch) as (keyof GuildConfigPatch)[]).filter(
+    (key) => patch[key] !== undefined,
+  );
+  if (keys.length === 0) {
+    return;
+  }
+
+  const assignments = keys.map((key) => `${key} = @${key}`).join(", ");
+  const params: Record<string, string | number | null> = { guild_id: guildId };
+  for (const key of keys) {
+    params[key] = patch[key] ?? null;
+  }
+
+  db.prepare(`UPDATE guilds SET ${assignments} WHERE guild_id = @guild_id`).run(
+    params,
+  );
+}
+
 /**
  * Create the guild row if absent, or update the provided fields if present.
  * Only fields present in `patch` are written; omitted fields are left as-is.

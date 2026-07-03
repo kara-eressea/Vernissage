@@ -11,7 +11,7 @@ import { loadConfig } from "./config.js";
 import { MessageCounter } from "./counting/counter.js";
 import { openDb } from "./db/index.js";
 import { createClient } from "./discord/client.js";
-import { commands } from "./discord/commands/index.js";
+import { buildCommands } from "./discord/commands/index.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { routeInteraction } from "./discord/router.js";
@@ -25,6 +25,9 @@ async function main(): Promise<void> {
 
   const client = createClient();
   attachHomeGuildEnforcement(client, config.homeGuildId);
+
+  // Build the command set with the dependencies handlers close over.
+  const commands = buildCommands({ db, config });
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counter = new MessageCounter();
