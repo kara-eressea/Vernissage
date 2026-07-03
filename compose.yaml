@@ -1,0 +1,22 @@
+services:
+  bot:
+    build: .
+    # Restart automatically after a crash or a host reboot. The bot must run
+    # continuously to count messages; on startup it reconciles anything it
+    # missed while it was down.
+    restart: unless-stopped
+    # Run an init process so the container forwards SIGTERM to the bot on stop,
+    # letting it flush counts, stop its timers, and close the database cleanly.
+    init: true
+    # Loads DISCORD_TOKEN, DISCORD_APP_ID, and HOME_GUILD_ID.
+    env_file: .env
+    environment:
+      # Store the database in the mounted volume so it survives restarts.
+      DATABASE_PATH: /data/vernissage.db
+    volumes:
+      - vernissage-data:/data
+    # No ports are published on purpose: the bot only makes outbound connections
+    # to Discord and does not accept any incoming traffic.
+
+volumes:
+  vernissage-data:

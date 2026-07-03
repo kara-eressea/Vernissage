@@ -1,0 +1,11 @@
+# Keep the build context small and, importantly, never copy the host's
+# node_modules into the image: it may contain a natively-compiled better-sqlite3
+# built for a different glibc. The image installs and compiles its own.
+node_modules
+dist
+.git
+.env
+*.db
+*.db-shm
+*.db-wal
+npm-debug.log
