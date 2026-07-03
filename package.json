@@ -10,6 +10,9 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "start": "node dist/src/index.js",
+    "dev": "tsx src/index.ts",
+    "deploy-commands": "tsx src/deploy-commands.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
