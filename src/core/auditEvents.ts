@@ -1,0 +1,27 @@
+/**
+ * The shared vocabulary of audit event types.
+ *
+ * Every state change writes an `audit_log` row (see CLAUDE.md), and the audit
+ * channel mirrors those rows. Emitters and the formatter must agree on the exact
+ * `event_type` strings, so they live here in one place. The `raffle_opened` /
+ * `raffle_closed` values match the strings the scheduler already writes in
+ * src/scheduler/transitions.ts. See design.md "Auditability".
+ */
+
+export const AUDIT_EVENTS = {
+  raffleCreated: "raffle_created",
+  raffleEdited: "raffle_edited",
+  raffleOpened: "raffle_opened",
+  raffleClosed: "raffle_closed",
+  raffleDrawn: "raffle_drawn",
+  raffleCancelled: "raffle_cancelled",
+  entryAccepted: "entry_accepted",
+  entryRemoved: "entry_removed",
+  blacklistAdded: "blacklist_added",
+  blacklistRemoved: "blacklist_removed",
+  drawCommitted: "draw_committed",
+  drawResult: "draw_result",
+} as const;
+
+/** Every known audit event type string. */
+export type AuditEventType = (typeof AUDIT_EVENTS)[keyof typeof AUDIT_EVENTS];

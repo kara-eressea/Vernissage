@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { activityWindow, addDays, utcDay } from "../../src/core/time.js";
+import { activityWindow, addDays, discordTimestamp, utcDay } from "../../src/core/time.js";
+
+describe("discordTimestamp", () => {
+  it("converts a UTC ISO string to epoch-seconds markup", () => {
+    // 2026-07-10T12:00:00Z is 1783684800 seconds since the epoch.
+    expect(discordTimestamp("2026-07-10T12:00:00.000Z")).toBe("<t:1783684800:F>");
+  });
+
+  it("defaults to the F (long date-time) style and accepts an override", () => {
+    expect(discordTimestamp("2026-07-10T12:00:00.000Z", "R")).toBe("<t:1783684800:R>");
+  });
+
+  it("floors to whole seconds and handles a UTC-midnight boundary", () => {
+    expect(discordTimestamp("2026-07-10T00:00:00.000Z", "d")).toBe("<t:1783641600:d>");
+    expect(discordTimestamp("2026-07-10T12:00:00.999Z", "f")).toBe("<t:1783684800:f>");
+  });
+
+  it("throws on an invalid timestamp", () => {
+    expect(() => discordTimestamp("not-a-date")).toThrow();
+  });
+});
 
 describe("utcDay", () => {
   it("extracts the UTC calendar day from a timestamp", () => {

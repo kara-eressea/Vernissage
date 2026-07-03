@@ -8,12 +8,14 @@
 
 import { Events } from "discord.js";
 import { loadConfig } from "./config.js";
+import { AUDIT_EVENTS } from "./core/auditEvents.js";
 import { MessageCounter } from "./counting/counter.js";
 import { openDb } from "./db/index.js";
 import { createClient } from "./discord/client.js";
 import { buildCommands } from "./discord/commands/index.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
+import { createNotifier } from "./discord/notifier.js";
 import { routeInteraction } from "./discord/router.js";
 import { startScheduler } from "./scheduler/runner.js";
 
@@ -33,6 +35,9 @@ async function main(): Promise<void> {
   const counter = new MessageCounter();
   const counting = attachMessageCounter(client, db, counter);
 
+  // The shared Discord-posting seam (audit-channel mirror + announcements).
+  const notifier = createNotifier(client, db);
+
   client.once(Events.ClientReady, (ready) => {
     console.log(`Logged in as ${ready.user.tag}; serving guild ${config.homeGuildId}.`);
   });
@@ -44,10 +49,19 @@ async function main(): Promise<void> {
     void routeInteraction(interaction, commands);
   });
 
-  // Drive raffle state transitions on an interval, reconciling on startup.
+  // Drive raffle state transitions on an interval, reconciling on startup. Each
+  // opened/closed transition is mirrored to the guild's audit channel; the
+  // audit_log row itself is already written inside the sweep transaction.
   const scheduler = startScheduler(db, {
     onTransition: (t) => {
       console.log(`Raffle ${t.raffleId}: ${t.from} -> ${t.to} (${t.guildId}).`);
+      void notifier.mirrorAudit({
+        guildId: t.guildId,
+        raffleId: t.raffleId,
+        eventType: t.to === "open" ? AUDIT_EVENTS.raffleOpened : AUDIT_EVENTS.raffleClosed,
+        actorId: "scheduler",
+        createdAt: new Date().toISOString(),
+      });
     },
   });
 

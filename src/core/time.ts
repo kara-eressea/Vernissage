@@ -21,6 +21,25 @@ function toEpochMs(when: string | Date): number {
 }
 
 /**
+ * Discord timestamp styles for `<t:epoch:style>` markup: short/long time,
+ * short/long date, short/long date-time, and relative ("in 3 hours"). Discord
+ * renders these in each viewer's own timezone. See design.md "Time handling".
+ */
+export type DiscordTimestampStyle = "t" | "T" | "d" | "D" | "f" | "F" | "R";
+
+/**
+ * Render a UTC ISO timestamp as Discord timestamp markup, e.g.
+ * `<t:1751545200:F>`. The epoch is whole seconds (Discord ignores fractions).
+ */
+export function discordTimestamp(
+  when: string | Date,
+  style: DiscordTimestampStyle = "F",
+): string {
+  const seconds = Math.floor(toEpochMs(when) / 1000);
+  return `<t:${seconds}:${style}>`;
+}
+
+/**
  * The UTC calendar day for a timestamp, as an ISO date string "YYYY-MM-DD".
  */
 export function utcDay(when: string | Date): string {
