@@ -1,8 +1,20 @@
-import BetterSqlite3 from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type BetterSqlite3 from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
 import { openDb } from "../../src/db/index.js";
 import { migrate } from "../../src/db/migrate.js";
 import { SCHEMA_VERSION } from "../../src/db/schema.js";
+
+// A unique on-disk path so the reopen test exercises real persistence.
+const dbPath = join(tmpdir(), `vernissage-migration-test-${process.pid}.db`);
+
+afterEach(() => {
+  for (const suffix of ["", "-shm", "-wal"]) {
+    rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+});
 
 function columnNames(db: BetterSqlite3.Database, table: string): string[] {
   return (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((c) => c.name);
@@ -12,72 +24,61 @@ function indexNames(db: BetterSqlite3.Database, table: string): string[] {
   return (db.pragma(`index_list(${table})`) as Array<{ name: string }>).map((i) => i.name);
 }
 
-describe("schema migration", () => {
-  it("a fresh database is at the current version with the announce-channel and blacklist columns", () => {
+describe("schema", () => {
+  it("a fresh database has the full current schema at the current version", () => {
     const db = openDb(":memory:");
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
-    expect(columnNames(db, "guilds")).toContain("announce_channel");
-    expect(columnNames(db, "raffles")).toContain("channel_id");
-    expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
-    // v6 commit-reveal columns.
-    expect(columnNames(db, "raffles")).toContain("draw_commitment");
-    expect(columnNames(db, "raffles")).toContain("draw_secret");
-    // v7 guild defaults + timezone.
-    expect(columnNames(db, "guilds")).toContain("default_req_messages");
-    expect(columnNames(db, "guilds")).toContain("default_req_days");
-    expect(columnNames(db, "guilds")).toContain("timezone");
+
+    // Columns that accumulated across the (now flattened) schema history.
+    expect(columnNames(db, "guilds")).toEqual(
+      expect.arrayContaining([
+        "announce_channel",
+        "blacklist_generic_message",
+        "default_req_messages",
+        "default_req_days",
+        "timezone",
+      ]),
+    );
+    expect(columnNames(db, "raffles")).toEqual(
+      expect.arrayContaining(["channel_id", "draw_commitment", "draw_secret"]),
+    );
+    // The wizard_state table (once its own migration) is part of the baseline.
+    expect(columnNames(db, "wizard_state")).toContain("step");
+
     db.close();
   });
 
-  it("a fresh database has the v5 index layout (redundant activity index dropped, audit-by-raffle index present)", () => {
+  it("has the intended index layout", () => {
     const db = openDb(":memory:");
-    expect(indexNames(db, "activity")).not.toContain("idx_activity_guild_user_day");
+    // activity: only the pruning-by-day index; the PK covers the window lookup.
     expect(indexNames(db, "activity")).toContain("idx_activity_day");
-    expect(indexNames(db, "audit_log")).toContain("idx_audit_raffle");
-    db.close();
-  });
-
-  it("upgrades an older database, adding columns without losing data", () => {
-    // A minimal pre-v3 database. A real v2 DB was built by the v1 baseline, so
-    // it carries all v1 tables and the (then-present) redundant activity index.
-    const db = new BetterSqlite3(":memory:");
-    db.exec(`CREATE TABLE guilds (guild_id TEXT PRIMARY KEY, audit_channel TEXT);`);
-    db.exec(`CREATE TABLE raffles (raffle_id INTEGER PRIMARY KEY, guild_id TEXT, status TEXT);`);
-    db.exec(`CREATE TABLE activity (guild_id TEXT, user_id TEXT, day TEXT, count INTEGER,
-      PRIMARY KEY (guild_id, user_id, day));`);
-    db.exec(`CREATE INDEX idx_activity_guild_user_day ON activity (guild_id, user_id, day);`);
-    db.exec(`CREATE TABLE audit_log (event_id INTEGER PRIMARY KEY, raffle_id INTEGER);`);
-    db.prepare(`INSERT INTO guilds (guild_id) VALUES ('g1')`).run();
-    db.prepare(`INSERT INTO raffles (raffle_id, guild_id, status) VALUES (1, 'g1', 'open')`).run();
-    db.pragma("user_version = 2");
-
-    migrate(db);
-
-    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
-    expect(columnNames(db, "guilds")).toContain("announce_channel");
-    expect(columnNames(db, "raffles")).toContain("channel_id");
-    expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
-    expect(columnNames(db, "raffles")).toContain("draw_commitment");
-    expect(columnNames(db, "raffles")).toContain("draw_secret");
-    expect(columnNames(db, "guilds")).toContain("default_req_messages");
-    expect(columnNames(db, "guilds")).toContain("timezone");
-    // v5 index hygiene applied to the existing database.
     expect(indexNames(db, "activity")).not.toContain("idx_activity_guild_user_day");
+    // audit_log: seek by raffle_id only; no unused guild-leading index.
     expect(indexNames(db, "audit_log")).toContain("idx_audit_raffle");
-    // Existing rows survive; the new columns default to null.
-    expect(db.prepare(`SELECT announce_channel FROM guilds WHERE guild_id='g1'`).get()).toEqual({
-      announce_channel: null,
-    });
-    expect(db.prepare(`SELECT status FROM raffles WHERE raffle_id=1`).get()).toEqual({
-      status: "open",
-    });
+    expect(indexNames(db, "audit_log")).not.toContain("idx_audit_guild_raffle");
+    // wins: read by raffle_id (draw/reroll) and by user_id (cooldown).
+    expect(indexNames(db, "wins")).toContain("idx_wins_raffle");
+    expect(indexNames(db, "wins")).toContain("idx_wins_user");
     db.close();
   });
 
-  it("is idempotent — running migrate again does not error", () => {
+  it("is idempotent — running migrate again does not error or change the version", () => {
     const db = openDb(":memory:");
     expect(() => migrate(db)).not.toThrow();
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     db.close();
+  });
+
+  it("leaves an existing database and its data intact when reopened", () => {
+    // Reopening runs migrate again; the baseline gate must skip re-applying the
+    // schema and no data may be lost.
+    const db1 = openDb(dbPath);
+    db1.prepare(`INSERT INTO guilds (guild_id, created_at) VALUES ('g1', 't')`).run();
+    db1.close();
+
+    const db2 = openDb(dbPath);
+    expect(db2.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    expect(db2.prepare(`SELECT guild_id FROM guilds`).get()).toEqual({ guild_id: "g1" });
+    db2.close();
   });
 });

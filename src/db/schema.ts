@@ -1,88 +1,23 @@
 /**
- * SQLite schema for Vernissage (v1 baseline).
+ * SQLite schema for Vernissage.
  *
  * Transcribed from design.md "Data model". Kept portable (no SQLite-only column
  * types) so a later move to Postgres is straightforward. All timestamps are UTC
  * ISO strings; message content is never stored, only counts.
+ *
+ * This is a single flattened baseline. The schema evolved through incremental
+ * migrations up to version 7; since no database exists below that version, the
+ * incremental steps were collapsed into this one CREATE-everything baseline. The
+ * version marker stays at 7 so any already-migrated database is left untouched
+ * and any future change adds a `current < 8` step (see migrate.ts).
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
 export const SCHEMA_VERSION = 7;
 
 /**
- * v7: guild-level defaults for the activity requirement (so the wizard's "Use
- * defaults" can fill the eligibility step entirely) and a guild timezone (so
- * friendly schedule input is read in the mods' local time). Added the same
- * idempotent way as the v3 columns.
- */
-export const V7_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
-  { table: "guilds", column: "default_req_messages", decl: "INTEGER" },
-  { table: "guilds", column: "default_req_days", decl: "INTEGER" },
-  { table: "guilds", column: "timezone", decl: "TEXT" },
-];
-
-/**
- * v6: commit-reveal persistence for the provably-fair draw (design.md "Provably
- * fair draw"). `draw_commitment` (SHA-256 of the secret) is published at close;
- * `draw_secret` is revealed at draw. Both live on the raffle row so a restart
- * between close and draw loses nothing. Added the same idempotent way as the v3
- * columns.
- */
-export const V6_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
-  { table: "raffles", column: "draw_commitment", decl: "TEXT" },
-  { table: "raffles", column: "draw_secret", decl: "TEXT" },
-];
-
-/**
- * v5: index hygiene. Drop `idx_activity_guild_user_day`, which exactly
- * duplicates the `activity` primary key (guild_id, user_id, day) and only added
- * write cost on the hottest table. Add `idx_audit_raffle` so `getAuditForRaffle`
- * (which filters on raffle_id alone) can seek instead of scanning the
- * ever-growing audit_log; the existing (guild_id, raffle_id) index cannot serve
- * a raffle_id-only predicate. Both statements are idempotent.
- */
-export const V5_INDEXES_SQL = `
-DROP INDEX IF EXISTS idx_activity_guild_user_day;
-CREATE INDEX IF NOT EXISTS idx_audit_raffle ON audit_log (raffle_id);
-`;
-
-/**
- * v4: a per-guild toggle for whether blacklist rejections show a generic entry
- * failure instead of naming the blacklist (design.md "Entry flow"). Added the
- * same idempotent way as the v3 columns.
- */
-export const V4_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
-  { table: "guilds", column: "blacklist_generic_message", decl: "INTEGER NOT NULL DEFAULT 0" },
-];
-
-/**
- * v3 columns that store where a raffle announces: a guild-level default channel
- * and a per-raffle override. Declared as (table, column, decl) so the migration
- * can add them idempotently to an existing database (an ALTER, unlike a CREATE
- * IF NOT EXISTS, is not itself idempotent).
- */
-export const V3_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
-  { table: "guilds", column: "announce_channel", decl: "TEXT" },
-  { table: "raffles", column: "channel_id", decl: "TEXT" },
-];
-
-/**
- * v2: the wizard resumption pointer. Only the step is tracked here; the raffle's
- * collected values live in the (nullable) `raffles` columns, keyed by the same
- * draft raffle id, so a restart mid-wizard loses nothing. Kept as a separate
- * const so the incremental migration can create it on an existing v1 database.
- */
-export const WIZARD_STATE_SQL = `
-CREATE TABLE IF NOT EXISTS wizard_state (
-  raffle_id  INTEGER PRIMARY KEY,
-  step       TEXT NOT NULL,
-  updated_at TEXT
-);
-`;
-
-/**
- * The full v1 schema. Every statement is idempotent (IF NOT EXISTS) so applying
- * it to an already-migrated database is a no-op.
+ * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
+ * applying it to an already-created database is a no-op.
  */
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS guilds (
@@ -116,8 +51,8 @@ CREATE TABLE IF NOT EXISTS activity (
   PRIMARY KEY (guild_id, user_id, day)
 );
 
--- Note: no separate index on (guild_id, user_id, day) — the activity PRIMARY
--- KEY already covers that lookup. Only the pruning-by-day index is added.
+-- No separate index on (guild_id, user_id, day): the activity PRIMARY KEY
+-- already covers that lookup. Only the pruning-by-day index is added.
 CREATE INDEX IF NOT EXISTS idx_activity_day
   ON activity (day);
 
@@ -176,6 +111,9 @@ CREATE TABLE IF NOT EXISTS wins (
 CREATE INDEX IF NOT EXISTS idx_wins_user
   ON wins (user_id);
 
+CREATE INDEX IF NOT EXISTS idx_wins_raffle
+  ON wins (raffle_id);
+
 CREATE TABLE IF NOT EXISTS blacklist (
   guild_id   TEXT NOT NULL,
   user_id    TEXT NOT NULL,
@@ -196,9 +134,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_guild_raffle
-  ON audit_log (guild_id, raffle_id);
-
+-- audit_log is only read by raffle id (getAuditForRaffle); a raffle_id index
+-- serves that seek. No query filters by guild_id, so no guild-leading index.
 CREATE INDEX IF NOT EXISTS idx_audit_raffle
   ON audit_log (raffle_id);
-${WIZARD_STATE_SQL}`;
+
+CREATE TABLE IF NOT EXISTS wizard_state (
+  raffle_id  INTEGER PRIMARY KEY,
+  step       TEXT NOT NULL,
+  updated_at TEXT
+);
+`;
