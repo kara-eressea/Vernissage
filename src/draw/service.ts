@@ -337,7 +337,22 @@ export async function rerollWinner(
   const seed = deriveSeed(entrantsHash, secret);
   let replacement: string | null = null;
 
+  // Re-check status and the win's rerolled flag inside the transaction so a
+  // double-clicked reroll can't fire twice: the second call would otherwise
+  // pass the pre-transaction guards, re-mark the same win, and emit a spurious
+  // draw_reroll. Transactions serialize, so only the first flips rerolled.
+  let rerolled = false;
   db.transaction(() => {
+    const freshRaffle = getRaffle(db, raffleId);
+    const freshWin = getWin(db, winId);
+    if (
+      !freshRaffle ||
+      freshRaffle.status !== "drawn" ||
+      !freshWin ||
+      freshWin.rerolled === 1
+    ) {
+      return;
+    }
     markRerolled(db, winId);
     const excluded = new Set(
       listWinsForRaffle(db, raffleId)
@@ -359,7 +374,11 @@ export async function rerollWinner(
       payload: { disqualified: win.user_id, replacement, reason, seed },
       createdAt: now,
     });
+    rerolled = true;
   })();
+  if (!rerolled) {
+    return { ok: false, reason: "invalid_win" };
+  }
 
   await announcer.postAudit(
     raffle.guild_id,

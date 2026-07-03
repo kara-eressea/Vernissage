@@ -67,6 +67,12 @@ export function activeWinnerIds(db: Database, raffleId: number): string[] {
 /**
  * A user's non-rerolled wins, as core WinRecords for the cooldown check.
  * Rerolled wins are excluded — a disqualified win should not gate re-entry.
+ *
+ * Note: `wins` has no `guild_id`, so this is not guild-scoped. That is correct
+ * only under the single-home-guild constraint (the bot leaves any other guild);
+ * the time-based win cooldown would need a guild filter here before any
+ * multi-guild support. The count-based mode already scopes by guild via
+ * countRafflesSince.
  */
 export function getUserWins(db: Database, userId: string): WinRecord[] {
   const rows = db

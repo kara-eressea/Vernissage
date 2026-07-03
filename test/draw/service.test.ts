@@ -253,6 +253,24 @@ describe("rerollWinner", () => {
     expect(announcer.auditPosts.at(-1)).not.toContain("did not claim");
   });
 
+  it("does not reroll the same win twice under concurrent invocations", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+    const winId = listWinsForRaffle(db, raffleId)[0]!.win_id; // the win for "d"
+
+    // Two concurrent rerolls of the same win: the in-transaction rerolled-check
+    // must let exactly one through.
+    const results = await Promise.all([
+      rerollWinner(db, announcer, raffleId, winId, "double click", NOW),
+      rerollWinner(db, announcer, raffleId, winId, "double click", NOW),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    // "d" is rerolled once; a single replacement "c" is active; one reroll audit.
+    expect(activeWinnerIds(db, raffleId)).toEqual(["c"]);
+    expect(auditTypes(raffleId)).toEqual(["draw_committed", "raffle_drawn", "draw_reroll"]);
+  });
+
   it("rejects rerolling a non-winner or a raffle that is not drawn", async () => {
     const raffleId = seedClosedRaffle(["a", "b"]);
     const announcer = fakeAnnouncer();
