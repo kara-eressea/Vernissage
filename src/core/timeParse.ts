@@ -12,7 +12,7 @@
  * No discord.js/database import — fully unit-testable.
  */
 
-import { addDays } from "./time.js";
+import { addDays, offsetMinutesFor } from "./time.js";
 
 export type ParseResult =
   | { ok: true; utcIso: string }
@@ -131,4 +131,34 @@ export function parseFriendlyTime(
     error:
       'Sorry, I couldn\'t read that time. Try "tomorrow 20:00", "in 3 days", or "2026-08-01 20:00".',
   };
+}
+
+/**
+ * Parse friendly time in a named IANA timezone, resolving the offset for the
+ * *target* instant so a raffle scheduled across a DST boundary lands on the
+ * right wall clock. A null/empty zone means UTC.
+ *
+ * DST makes the offset depend on the instant we're computing, so we parse once
+ * with the offset at `now`, then recompute the offset at that candidate instant
+ * and re-parse if it differs. One correction is enough: offsets change by whole
+ * hours at rare boundaries, and the re-parse uses the target-side offset.
+ */
+export function parseFriendlyTimeInZone(
+  input: string,
+  nowUtc: string,
+  timeZone: string | null,
+): ParseResult {
+  if (!timeZone) {
+    return parseFriendlyTime(input, nowUtc, 0);
+  }
+  const firstOffset = offsetMinutesFor(nowUtc, timeZone);
+  const first = parseFriendlyTime(input, nowUtc, firstOffset);
+  if (!first.ok) {
+    return first;
+  }
+  const targetOffset = offsetMinutesFor(first.utcIso, timeZone);
+  if (targetOffset === firstOffset) {
+    return first;
+  }
+  return parseFriendlyTime(input, nowUtc, targetOffset);
 }

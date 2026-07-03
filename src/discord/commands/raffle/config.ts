@@ -24,6 +24,9 @@ import {
   validateCooldownDays,
   validateHourlyCap,
   validateMinAccountAge,
+  validateReqDays,
+  validateReqMessages,
+  validateTimezone,
   type ClearableField,
   type ConfigValidation,
 } from "../../../core/config.js";
@@ -89,6 +92,23 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
             .setDescription("Default minimum Discord account age, in days.")
             .setMinValue(0),
         )
+        .addIntegerOption((o) =>
+          o
+            .setName("req-messages")
+            .setDescription("Default messages required to enter (X).")
+            .setMinValue(0),
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("req-days")
+            .setDescription("Default activity window in days (Y).")
+            .setMinValue(1),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("timezone")
+            .setDescription("IANA timezone for schedule input, e.g. Europe/Copenhagen."),
+        )
         .addBooleanOption((o) =>
           o
             .setName("blacklist-generic-message")
@@ -106,6 +126,9 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
               { name: "cooldown days", value: "default_cooldown_days" },
               { name: "cooldown count", value: "default_cooldown_count" },
               { name: "minimum account age", value: "default_min_account_age_days" },
+              { name: "messages required", value: "default_req_messages" },
+              { name: "activity window days", value: "default_req_days" },
+              { name: "timezone", value: "timezone" },
             ),
         ),
     )
@@ -194,6 +217,8 @@ async function handleConfigShow(
     `- Hourly message cap: ${fmtNum(guild?.hourly_cap)}`,
     `- Default cooldown: ${fmtNum(guild?.default_cooldown_days, " day(s)")} / ${fmtNum(guild?.default_cooldown_count, " raffle(s)")}`,
     `- Default minimum account age: ${fmtNum(guild?.default_min_account_age_days, " day(s)")}`,
+    `- Default activity requirement: ${fmtNum(guild?.default_req_messages, " message(s)")} in ${fmtNum(guild?.default_req_days, " day(s)")}`,
+    `- Timezone: ${guild?.timezone ?? "not set (UTC)"}`,
     `- Blacklist rejections: ${guild?.blacklist_generic_message === 1 ? "generic message" : "named"}`,
     `- Counted channels — include: ${includes.length ? includes.join(", ") : "none"}`,
     `- Counted channels — exclude: ${excludes.length ? excludes.join(", ") : "none"}`,
@@ -229,7 +254,9 @@ async function handleConfigSet(
     | "hourly_cap"
     | "default_cooldown_days"
     | "default_cooldown_count"
-    | "default_min_account_age_days";
+    | "default_min_account_age_days"
+    | "default_req_messages"
+    | "default_req_days";
   const applyInt = (
     optName: string,
     validate: (raw: number) => ConfigValidation,
@@ -250,6 +277,18 @@ async function handleConfigSet(
   applyInt("cooldown-days", validateCooldownDays, "default_cooldown_days");
   applyInt("cooldown-count", validateCooldownCount, "default_cooldown_count");
   applyInt("min-account-age-days", validateMinAccountAge, "default_min_account_age_days");
+  applyInt("req-messages", validateReqMessages, "default_req_messages");
+  applyInt("req-days", validateReqDays, "default_req_days");
+
+  const timezone = interaction.options.getString("timezone");
+  if (timezone !== null) {
+    const result = validateTimezone(timezone);
+    if (result.ok) {
+      patch.timezone = result.value;
+    } else {
+      errors.push(result.error);
+    }
+  }
 
   const blacklistGeneric = interaction.options.getBoolean("blacklist-generic-message");
   if (blacklistGeneric !== null) {

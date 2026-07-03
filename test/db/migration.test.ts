@@ -22,6 +22,10 @@ describe("schema migration", () => {
     // v6 commit-reveal columns.
     expect(columnNames(db, "raffles")).toContain("draw_commitment");
     expect(columnNames(db, "raffles")).toContain("draw_secret");
+    // v7 guild defaults + timezone.
+    expect(columnNames(db, "guilds")).toContain("default_req_messages");
+    expect(columnNames(db, "guilds")).toContain("default_req_days");
+    expect(columnNames(db, "guilds")).toContain("timezone");
     db.close();
   });
 
@@ -55,6 +59,8 @@ describe("schema migration", () => {
     expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
     expect(columnNames(db, "raffles")).toContain("draw_commitment");
     expect(columnNames(db, "raffles")).toContain("draw_secret");
+    expect(columnNames(db, "guilds")).toContain("default_req_messages");
+    expect(columnNames(db, "guilds")).toContain("timezone");
     // v5 index hygiene applied to the existing database.
     expect(indexNames(db, "activity")).not.toContain("idx_activity_guild_user_day");
     expect(indexNames(db, "audit_log")).toContain("idx_audit_raffle");

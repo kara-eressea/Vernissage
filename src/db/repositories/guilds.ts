@@ -16,6 +16,9 @@ export interface GuildRow {
   default_cooldown_days: number | null;
   default_cooldown_count: number | null;
   default_min_account_age_days: number | null;
+  default_req_messages: number | null;
+  default_req_days: number | null;
+  timezone: string | null;
   blacklist_generic_message: number;
   created_at: string | null;
 }
@@ -56,6 +59,9 @@ const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
   "default_cooldown_days",
   "default_cooldown_count",
   "default_min_account_age_days",
+  "default_req_messages",
+  "default_req_days",
+  "timezone",
   "blacklist_generic_message",
 ]);
 

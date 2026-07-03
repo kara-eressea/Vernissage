@@ -28,7 +28,7 @@ import {
   validateSchedule,
   type RaffleDraftFields,
 } from "../../core/raffleValidation.js";
-import { parseFriendlyTime } from "../../core/timeParse.js";
+import { parseFriendlyTimeInZone } from "../../core/timeParse.js";
 import { writeAudit } from "../../db/repositories/audit.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 import {
@@ -251,14 +251,17 @@ export function createWizard(deps: WizardDeps): Wizard {
     }
     if (action === "submit" && interaction.isModalSubmit()) {
       const now = new Date().toISOString();
+      // Interpret wall-clock input in the guild's configured timezone (if any),
+      // so "tomorrow 20:00" means the mods' local 20:00, not 20:00 UTC.
+      const timeZone = getGuild(db, raffle.guild_id)?.timezone ?? null;
       const startText = interaction.fields.getTextInputValue("start");
       const endText = interaction.fields.getTextInputValue("end");
-      const start = parseFriendlyTime(startText, now);
+      const start = parseFriendlyTimeInZone(startText, now, timeZone);
       if (!start.ok) {
         await respond(interaction, withError("schedule", raffle, start.error));
         return;
       }
-      const end = parseFriendlyTime(endText, now);
+      const end = parseFriendlyTimeInZone(endText, now, timeZone);
       if (!end.ok) {
         await respond(interaction, withError("schedule", raffle, end.error));
         return;
@@ -435,6 +438,8 @@ export function createWizard(deps: WizardDeps): Wizard {
       window_anchor: raffle.window_anchor ?? "start",
       new_member_exempt: raffle.new_member_exempt ?? 0,
       min_account_age_days: raffle.min_account_age_days ?? guild?.default_min_account_age_days ?? null,
+      req_messages: raffle.req_messages ?? guild?.default_req_messages ?? null,
+      req_days: raffle.req_days ?? guild?.default_req_days ?? null,
     });
   }
 

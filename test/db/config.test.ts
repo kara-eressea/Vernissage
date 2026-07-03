@@ -100,9 +100,17 @@ describe("setGuildConfig", () => {
         default_cooldown_days: 7,
         default_cooldown_count: 2,
         default_min_account_age_days: 30,
+        default_req_messages: 20,
+        default_req_days: 14,
+        timezone: "Europe/Copenhagen",
       },
       "2026-07-01T00:00:00.000Z",
     );
+    const set = getGuild(db, "g1")!;
+    expect(set.default_req_messages).toBe(20);
+    expect(set.default_req_days).toBe(14);
+    expect(set.timezone).toBe("Europe/Copenhagen");
+
     setGuildConfig(
       db,
       "g1",
@@ -113,6 +121,9 @@ describe("setGuildConfig", () => {
         default_cooldown_days: null,
         default_cooldown_count: null,
         default_min_account_age_days: null,
+        default_req_messages: null,
+        default_req_days: null,
+        timezone: null,
       },
       "2026-07-02T00:00:00.000Z",
     );
@@ -123,6 +134,9 @@ describe("setGuildConfig", () => {
     expect(row.default_cooldown_days).toBeNull();
     expect(row.default_cooldown_count).toBeNull();
     expect(row.default_min_account_age_days).toBeNull();
+    expect(row.default_req_messages).toBeNull();
+    expect(row.default_req_days).toBeNull();
+    expect(row.timezone).toBeNull();
   });
 });
 

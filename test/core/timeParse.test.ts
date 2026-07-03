@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFriendlyTime } from "../../src/core/timeParse.js";
+import { parseFriendlyTime, parseFriendlyTimeInZone } from "../../src/core/timeParse.js";
 
 const NOW = "2026-07-03T12:00:00.000Z";
 
@@ -79,5 +79,35 @@ describe("parseFriendlyTime — errors", () => {
 
   it("rejects an empty string", () => {
     expect(parseFriendlyTime("   ", NOW).ok).toBe(false);
+  });
+});
+
+describe("parseFriendlyTimeInZone", () => {
+  function isoInZone(input: string, now: string, tz: string | null): string {
+    const r = parseFriendlyTimeInZone(input, now, tz);
+    if (!r.ok) throw new Error(`expected ok, got: ${r.error}`);
+    return r.utcIso;
+  }
+
+  it("treats a null zone as UTC", () => {
+    expect(isoInZone("tomorrow 20:00", NOW, null)).toBe("2026-07-04T20:00:00.000Z");
+  });
+
+  it("interprets wall-clock input in the guild zone (summer CEST = +120)", () => {
+    // 20:00 in Copenhagen on a summer day is 18:00 UTC.
+    const now = "2026-07-14T09:00:00.000Z";
+    expect(isoInZone("tomorrow 20:00", now, "Europe/Copenhagen")).toBe(
+      "2026-07-15T18:00:00.000Z",
+    );
+  });
+
+  it("resolves the offset for the target instant across a DST boundary", () => {
+    // `now` is 2026-03-28 (still CET, +60); the target 2026-03-29 20:00 is after
+    // the spring-forward, so CEST (+120) applies. The two-pass resolution must
+    // use the target-side offset: 20:00 CEST = 18:00 UTC, not 19:00 UTC.
+    const now = "2026-03-28T10:00:00.000Z";
+    expect(isoInZone("tomorrow 20:00", now, "Europe/Copenhagen")).toBe(
+      "2026-03-29T18:00:00.000Z",
+    );
   });
 });

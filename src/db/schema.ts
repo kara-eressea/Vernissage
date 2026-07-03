@@ -7,7 +7,19 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
+
+/**
+ * v7: guild-level defaults for the activity requirement (so the wizard's "Use
+ * defaults" can fill the eligibility step entirely) and a guild timezone (so
+ * friendly schedule input is read in the mods' local time). Added the same
+ * idempotent way as the v3 columns.
+ */
+export const V7_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
+  { table: "guilds", column: "default_req_messages", decl: "INTEGER" },
+  { table: "guilds", column: "default_req_days", decl: "INTEGER" },
+  { table: "guilds", column: "timezone", decl: "TEXT" },
+];
 
 /**
  * v6: commit-reveal persistence for the provably-fair draw (design.md "Provably
@@ -82,6 +94,9 @@ CREATE TABLE IF NOT EXISTS guilds (
   default_cooldown_days        INTEGER,
   default_cooldown_count       INTEGER,
   default_min_account_age_days INTEGER,
+  default_req_messages         INTEGER,
+  default_req_days             INTEGER,
+  timezone        TEXT,
   blacklist_generic_message INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT
 );

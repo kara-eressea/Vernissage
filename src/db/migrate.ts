@@ -14,6 +14,7 @@ import {
   V4_COLUMNS,
   V5_INDEXES_SQL,
   V6_COLUMNS,
+  V7_COLUMNS,
   WIZARD_STATE_SQL,
 } from "./schema.js";
 
@@ -71,6 +72,13 @@ export function migrate(db: Database): void {
   // v6: commit-reveal persistence columns on raffles.
   if (current < 6) {
     for (const { table, column, decl } of V6_COLUMNS) {
+      addColumnIfMissing(db, table, column, decl);
+    }
+  }
+
+  // v7: guild activity-requirement defaults + guild timezone.
+  if (current < 7) {
+    for (const { table, column, decl } of V7_COLUMNS) {
       addColumnIfMissing(db, table, column, decl);
     }
   }

@@ -232,6 +232,9 @@ guilds (
   default_cooldown_days   INTEGER,
   default_cooldown_count  INTEGER,
   default_min_account_age_days INTEGER,  -- null = no requirement
+  default_req_messages    INTEGER,       -- default X for "Use defaults"
+  default_req_days        INTEGER,       -- default Y for "Use defaults"
+  timezone        TEXT,                  -- IANA zone for wizard schedule input
   created_at      TEXT
 )
 
@@ -341,7 +344,10 @@ wizard_state (
   id is not the configured home guild.
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
-  this automatically per viewer).
+  this automatically per viewer). Friendly schedule input in the wizard is
+  interpreted in the guild's configured `timezone` (an IANA name); the offset is
+  resolved for the *target* instant so a raffle scheduled across a DST boundary
+  lands on the intended wall clock. With no timezone set, input is read as UTC.
 
 ## Edge cases and decisions to confirm
 - Bot downtime: messages sent while offline are not counted. Acceptable for

@@ -7,6 +7,7 @@ import {
   updateRaffleFields,
 } from "../../src/db/repositories/raffles.js";
 import { getWizardState, upsertWizardStep } from "../../src/db/repositories/wizardState.js";
+import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import { createWizard, type WizardInteraction } from "../../src/discord/wizard/index.js";
 
 let db: Database;
@@ -125,6 +126,26 @@ function fakeChannelSelect(
     reply: vi.fn().mockResolvedValue(undefined),
   } as unknown as WizardInteraction & { update: ReturnType<typeof vi.fn> };
 }
+
+describe("wizard eligibility defaults", () => {
+  it("fills the activity requirement from the guild defaults on 'Use defaults'", async () => {
+    setGuildConfig(
+      db,
+      "g1",
+      { default_req_messages: 20, default_req_days: 14, default_min_account_age_days: 30 },
+      "2026-07-01T00:00:00.000Z",
+    );
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "eligibility", "2026-07-01T00:00:00.000Z");
+
+    await wizard().handle(fakeButton(`wiz:eligibility:defaults:${id}`));
+
+    const raffle = getRaffle(db, id)!;
+    expect(raffle.req_messages).toBe(20);
+    expect(raffle.req_days).toBe(14);
+    expect(raffle.min_account_age_days).toBe(30);
+  });
+});
 
 describe("wizard announce channel override", () => {
   it("stores the selected channel on the raffle, and clears it on empty", async () => {

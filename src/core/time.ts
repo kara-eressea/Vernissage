@@ -86,3 +86,38 @@ export function activityWindow(anchor: string | Date, reqDays: number): DayWindo
   const startDay = addDays(endDay, -(reqDays - 1));
   return { startDay, endDay };
 }
+
+/**
+ * The UTC offset, in minutes east of UTC, that `timeZone` has at the instant
+ * `iso`. Positive is east (e.g. +120 for Europe/Copenhagen in summer, +60 in
+ * winter), so a wall-clock time in the zone equals `wallMs - offset*60000` in
+ * UTC. Resolving the offset for the specific instant means DST is handled
+ * correctly, even when the target instant is on the other side of a DST switch
+ * from now. Pure — Intl is a standard built-in.
+ */
+export function offsetMinutesFor(iso: string | Date, timeZone: string): number {
+  const date = iso instanceof Date ? iso : new Date(toEpochMs(iso));
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string): number =>
+    Number(parts.find((p) => p.type === type)?.value ?? "0");
+  // The same instant expressed as the zone's wall clock, then read back as if it
+  // were UTC. The gap between that and the true instant is the zone's offset.
+  const asIfUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  return Math.round((asIfUtc - date.getTime()) / 60_000);
+}

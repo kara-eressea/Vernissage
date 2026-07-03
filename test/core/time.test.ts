@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { activityWindow, addDays, discordTimestamp, utcDay } from "../../src/core/time.js";
+import {
+  activityWindow,
+  addDays,
+  discordTimestamp,
+  offsetMinutesFor,
+  utcDay,
+} from "../../src/core/time.js";
 
 describe("discordTimestamp", () => {
   it("converts a UTC ISO string to epoch-seconds markup", () => {
@@ -74,5 +80,20 @@ describe("activityWindow", () => {
   it("rejects non-positive windows", () => {
     expect(() => activityWindow("2026-07-03T00:00:00.000Z", 0)).toThrow();
     expect(() => activityWindow("2026-07-03T00:00:00.000Z", -5)).toThrow();
+  });
+});
+
+describe("offsetMinutesFor", () => {
+  it("resolves the offset for the given instant, honoring DST", () => {
+    // Copenhagen: CET (+60) in winter, CEST (+120) in summer.
+    expect(offsetMinutesFor("2026-01-15T12:00:00Z", "Europe/Copenhagen")).toBe(60);
+    expect(offsetMinutesFor("2026-07-15T12:00:00Z", "Europe/Copenhagen")).toBe(120);
+    // New York: EST (-300) in winter, EDT (-240) in summer.
+    expect(offsetMinutesFor("2026-01-15T12:00:00Z", "America/New_York")).toBe(-300);
+    expect(offsetMinutesFor("2026-07-15T12:00:00Z", "America/New_York")).toBe(-240);
+  });
+
+  it("is 0 for UTC", () => {
+    expect(offsetMinutesFor("2026-07-15T12:00:00Z", "UTC")).toBe(0);
   });
 });
