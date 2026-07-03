@@ -20,6 +20,12 @@ import {
 import type { CommandContext } from "../index.js";
 import type { Command } from "../types.js";
 import { addConfigGroup, handleConfig } from "./config.js";
+import {
+  addEntrySubcommands,
+  handleEnter,
+  handleList,
+  handleStatus,
+} from "./entry.js";
 import { addManageSubcommands, handleCancel, handleCreate, handleEdit } from "./manage.js";
 
 /** Build the `/raffle` command, wiring every subcommand (group) to `ctx`. */
@@ -31,8 +37,9 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   // Top-level subcommands (create/edit/cancel) added while `data` is still a
   // full SlashCommandBuilder, then the config subcommand group.
   addManageSubcommands(data);
+  addEntrySubcommands(data);
   data.addSubcommandGroup(addConfigGroup);
-  // Later issues: enter/status/list (#11), draw/reroll (#12), ban/unban (#13).
+  // Later issues: draw/reroll (#12), ban/unban (#13).
 
   return {
     data,
@@ -59,6 +66,15 @@ async function dispatch(
       return;
     case "cancel":
       await handleCancel(interaction, ctx);
+      return;
+    case "enter":
+      await handleEnter(interaction, ctx);
+      return;
+    case "status":
+      await handleStatus(interaction, ctx);
+      return;
+    case "list":
+      await handleList(interaction, ctx);
       return;
     default:
       await interaction.reply({

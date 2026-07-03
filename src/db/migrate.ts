@@ -7,7 +7,7 @@
  */
 
 import type { Database } from "better-sqlite3";
-import { SCHEMA_SQL, SCHEMA_VERSION, V3_COLUMNS, WIZARD_STATE_SQL } from "./schema.js";
+import { SCHEMA_SQL, SCHEMA_VERSION, V3_COLUMNS, V4_COLUMNS, WIZARD_STATE_SQL } from "./schema.js";
 
 /** Add a column only if it does not already exist (idempotent, unlike ALTER). */
 function addColumnIfMissing(
@@ -43,6 +43,13 @@ export function migrate(db: Database): void {
   // SCHEMA_SQL; addColumnIfMissing makes the ALTER safe to run either way.
   if (current < 3) {
     for (const { table, column, decl } of V3_COLUMNS) {
+      addColumnIfMissing(db, table, column, decl);
+    }
+  }
+
+  // v4: per-guild blacklist generic-message toggle.
+  if (current < 4) {
+    for (const { table, column, decl } of V4_COLUMNS) {
       addColumnIfMissing(db, table, column, decl);
     }
   }

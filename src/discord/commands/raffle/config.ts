@@ -89,6 +89,11 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
             .setDescription("Default minimum Discord account age, in days.")
             .setMinValue(0),
         )
+        .addBooleanOption((o) =>
+          o
+            .setName("blacklist-generic-message")
+            .setDescription("Show a generic failure (not 'blacklisted') to blacklisted members."),
+        )
         .addStringOption((o) =>
           o
             .setName("clear")
@@ -189,6 +194,7 @@ async function handleConfigShow(
     `- Hourly message cap: ${fmtNum(guild?.hourly_cap)}`,
     `- Default cooldown: ${fmtNum(guild?.default_cooldown_days, " day(s)")} / ${fmtNum(guild?.default_cooldown_count, " raffle(s)")}`,
     `- Default minimum account age: ${fmtNum(guild?.default_min_account_age_days, " day(s)")}`,
+    `- Blacklist rejections: ${guild?.blacklist_generic_message === 1 ? "generic message" : "named"}`,
     `- Counted channels — include: ${includes.length ? includes.join(", ") : "none"}`,
     `- Counted channels — exclude: ${excludes.length ? excludes.join(", ") : "none"}`,
     `_${countingNote}_`,
@@ -244,6 +250,11 @@ async function handleConfigSet(
   applyInt("cooldown-days", validateCooldownDays, "default_cooldown_days");
   applyInt("cooldown-count", validateCooldownCount, "default_cooldown_count");
   applyInt("min-account-age-days", validateMinAccountAge, "default_min_account_age_days");
+
+  const blacklistGeneric = interaction.options.getBoolean("blacklist-generic-message");
+  if (blacklistGeneric !== null) {
+    patch.blacklist_generic_message = blacklistGeneric ? 1 : 0;
+  }
 
   // A `clear` selection unsets one field to null. Applied last so it wins over
   // a same-field set in the same invocation.

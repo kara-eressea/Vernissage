@@ -8,11 +8,12 @@ function columnNames(db: BetterSqlite3.Database, table: string): string[] {
 }
 
 describe("schema v3 migration", () => {
-  it("a fresh database is at v3 with the announce-channel columns", () => {
+  it("a fresh database is at v4 with the announce-channel and blacklist columns", () => {
     const db = openDb(":memory:");
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
     expect(columnNames(db, "guilds")).toContain("announce_channel");
     expect(columnNames(db, "raffles")).toContain("channel_id");
+    expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
     db.close();
   });
 
@@ -27,9 +28,10 @@ describe("schema v3 migration", () => {
 
     migrate(db);
 
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
     expect(columnNames(db, "guilds")).toContain("announce_channel");
     expect(columnNames(db, "raffles")).toContain("channel_id");
+    expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
     // Existing rows survive; the new columns default to null.
     expect(db.prepare(`SELECT announce_channel FROM guilds WHERE guild_id='g1'`).get()).toEqual({
       announce_channel: null,
@@ -43,7 +45,7 @@ describe("schema v3 migration", () => {
   it("is idempotent — running migrate again does not error", () => {
     const db = openDb(":memory:");
     expect(() => migrate(db)).not.toThrow();
-    expect(db.pragma("user_version", { simple: true })).toBe(3);
+    expect(db.pragma("user_version", { simple: true })).toBe(4);
     db.close();
   });
 });

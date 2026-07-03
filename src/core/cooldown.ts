@@ -61,3 +61,41 @@ export function isInWinCooldown(input: CooldownInput): boolean {
 
   return false;
 }
+
+export interface WinCooldownStatus {
+  /** Whether the user is currently barred by a win cooldown. */
+  active: boolean;
+  /** When the time-based cooldown lifts (UTC ISO), or null if not time-gated. */
+  endsAt: string | null;
+  /** Raffles still to skip under the count mode, or null if not count-gated. */
+  rafflesRemaining: number | null;
+}
+
+/**
+ * A richer view of the win cooldown for `/raffle status`: not just whether it
+ * is active, but when it lifts and/or how many raffles remain. Consistent with
+ * `isInWinCooldown` (the boolean the entry check uses).
+ */
+export function winCooldownStatus(input: CooldownInput): WinCooldownStatus {
+  const last = latestWin(input.wins);
+  if (last === null) {
+    return { active: false, endsAt: null, rafflesRemaining: null };
+  }
+
+  let endsAt: string | null = null;
+  let timeActive = false;
+  if (input.cooldownDays !== null && input.cooldownDays > 0) {
+    const endMs = Date.parse(last.wonAt) + input.cooldownDays * MS_PER_DAY;
+    endsAt = new Date(endMs).toISOString();
+    timeActive = Date.parse(input.now) < endMs;
+  }
+
+  let rafflesRemaining: number | null = null;
+  let countActive = false;
+  if (input.cooldownCount !== null && input.cooldownCount > 0) {
+    rafflesRemaining = Math.max(0, input.cooldownCount - input.rafflesSinceLastWin);
+    countActive = input.rafflesSinceLastWin < input.cooldownCount;
+  }
+
+  return { active: timeActive || countActive, endsAt, rafflesRemaining };
+}

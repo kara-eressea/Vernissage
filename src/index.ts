@@ -12,8 +12,11 @@ import { AUDIT_EVENTS } from "./core/auditEvents.js";
 import { MessageCounter } from "./counting/counter.js";
 import { openDb } from "./db/index.js";
 import { createClient } from "./discord/client.js";
-import { buildCommands } from "./discord/commands/index.js";
+import { buildCommands, type CommandContext } from "./discord/commands/index.js";
 import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEnd.js";
+import { handleEnterButton } from "./discord/commands/raffle/entry.js";
+import { ENTER_PREFIX } from "./discord/components/enterButton.js";
+import { announceOpenRaffle } from "./discord/entryFlow.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import {
   createInteractionRouter,
@@ -25,6 +28,7 @@ import { createNotifier } from "./discord/notifier.js";
 import { routeInteraction } from "./discord/router.js";
 import { createWizard, type WizardInteraction } from "./discord/wizard/index.js";
 import { WIZARD_PREFIX } from "./discord/wizard/customId.js";
+import type { ButtonInteraction } from "discord.js";
 import { startScheduler } from "./scheduler/runner.js";
 
 async function main(): Promise<void> {
@@ -40,10 +44,12 @@ async function main(): Promise<void> {
   const notifier = createNotifier(client, db);
 
   // Build the command set with the dependencies handlers close over.
-  const commands = buildCommands({ db, config, notifier });
+  const commandCtx: CommandContext = { db, config, notifier };
+  const commands = buildCommands(commandCtx);
 
-  // Wizard component/modal interactions and the open-raffle end-extension modal
-  // are dispatched by custom-id namespace.
+  // Component/modal interactions are dispatched by custom-id namespace: the
+  // wizard ("wiz"), the end-extension modal ("editend"), and the Enter button
+  // ("raffle").
   const wizard = createWizard({ db, notifier });
   const interactionRouter = createInteractionRouter();
   interactionRouter.register(WIZARD_PREFIX, (i) =>
@@ -51,6 +57,9 @@ async function main(): Promise<void> {
   );
   interactionRouter.register(EDIT_END_PREFIX, (i) =>
     handleEditEnd(i as never, { db, notifier }),
+  );
+  interactionRouter.register(ENTER_PREFIX, (i) =>
+    handleEnterButton(i as unknown as ButtonInteraction, commandCtx),
   );
 
   // Start counting messages toward activity, flushed to the DB on an interval.
@@ -82,6 +91,10 @@ async function main(): Promise<void> {
         actorId: "scheduler",
         createdAt: new Date().toISOString(),
       });
+      // On open, post the public entry message with the Enter button.
+      if (t.to === "open") {
+        void announceOpenRaffle(db, notifier, t.raffleId);
+      }
     },
   });
 

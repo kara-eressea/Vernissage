@@ -16,6 +16,7 @@ export interface GuildRow {
   default_cooldown_days: number | null;
   default_cooldown_count: number | null;
   default_min_account_age_days: number | null;
+  blacklist_generic_message: number;
   created_at: string | null;
 }
 

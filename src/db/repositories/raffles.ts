@@ -127,6 +127,25 @@ export function updateRaffleFields(
   db.prepare(`UPDATE raffles SET ${assignments} WHERE raffle_id = @raffle_id`).run(params);
 }
 
+/**
+ * How many raffles in the guild have completed their draw since `sinceIso` —
+ * i.e. raffles the user had the chance to enter after their last win. Counts
+ * raffles whose draw is done (`drawn`/`completed`) and whose start is strictly
+ * after `sinceIso`. Drives the count-based win cooldown (design.md "Win
+ * cooldown").
+ */
+export function countRafflesSince(db: Database, guildId: string, sinceIso: string): number {
+  const row = db
+    .prepare(
+      `SELECT count(*) AS n FROM raffles
+       WHERE guild_id = ?
+         AND status IN ('drawn', 'completed')
+         AND starts_at > ?`,
+    )
+    .get(guildId, sinceIso) as { n: number };
+  return row.n;
+}
+
 /** All draft raffles for a guild, newest first — used by /raffle edit. */
 export function listDrafts(db: Database, guildId: string): RaffleRow[] {
   return db

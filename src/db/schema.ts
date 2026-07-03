@@ -7,7 +7,16 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
+
+/**
+ * v4: a per-guild toggle for whether blacklist rejections show a generic entry
+ * failure instead of naming the blacklist (design.md "Entry flow"). Added the
+ * same idempotent way as the v3 columns.
+ */
+export const V4_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
+  { table: "guilds", column: "blacklist_generic_message", decl: "INTEGER NOT NULL DEFAULT 0" },
+];
 
 /**
  * v3 columns that store where a raffle announces: a guild-level default channel
@@ -48,6 +57,7 @@ CREATE TABLE IF NOT EXISTS guilds (
   default_cooldown_days        INTEGER,
   default_cooldown_count       INTEGER,
   default_min_account_age_days INTEGER,
+  blacklist_generic_message INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT
 );
 

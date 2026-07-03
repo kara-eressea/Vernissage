@@ -78,6 +78,7 @@ function fakeInteraction(opts: FakeOpts): ChatInputCommandInteraction & {
       getRole: (name: string) => get(name),
       getInteger: (name: string) => get(name),
       getString: (name: string, required?: boolean) => get(name, required),
+      getBoolean: (name: string) => get(name),
     },
     reply: vi.fn().mockResolvedValue(undefined),
   } as unknown as ChatInputCommandInteraction & { reply: ReturnType<typeof vi.fn> };

@@ -18,7 +18,7 @@ import { meetsMinAccountAge } from "./accountAge.js";
 import { messagesInWindow } from "./activity.js";
 import { isInWinCooldown } from "./cooldown.js";
 import { activityWindow } from "./time.js";
-import type { EligibilityInput, EligibilityResult } from "./types.js";
+import type { DayWindow, EligibilityInput, EligibilityResult } from "./types.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -48,6 +48,32 @@ export function meetsActivityRequirement(input: EligibilityInput): boolean {
   const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
   const window = activityWindow(anchor, input.reqDays);
   return messagesInWindow(input.dailyCounts, window) >= input.reqMessages;
+}
+
+export interface ActivityProgress {
+  /** Whether the new-member exemption waives the activity requirement. */
+  exempt: boolean;
+  /** Messages the user has in the window. */
+  have: number;
+  /** Messages required (X). */
+  need: number;
+  /** The UTC-day window evaluated. */
+  window: DayWindow;
+}
+
+/**
+ * The user's progress toward the activity requirement, for `/raffle status`.
+ * Uses the same window/anchor math as the eligibility check.
+ */
+export function activityProgress(input: EligibilityInput): ActivityProgress {
+  const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
+  const window = activityWindow(anchor, input.reqDays);
+  return {
+    exempt: isNewMemberExempt(input),
+    have: messagesInWindow(input.dailyCounts, window),
+    need: input.reqMessages,
+    window,
+  };
 }
 
 /**

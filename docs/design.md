@@ -97,6 +97,10 @@ automatic at close or manually triggered by a mod (configurable per raffle).
   - Time-based: cannot enter for Z days after a win.
   - Count-based: must skip the next N raffles after a win.
 - Checked at entry time against the wins table.
+- "Raffles since last win" (the count mode) means raffles in the guild whose
+  draw has completed (status `drawn` or `completed`) and whose start time is
+  after the user's most recent non-rerolled win. A rerolled (disqualified) win
+  does not gate re-entry.
 
 ### Blacklist
 - Mod-only commands: /raffle ban, /raffle unban, /raffle banlist.
