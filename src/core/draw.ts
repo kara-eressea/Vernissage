@@ -59,26 +59,40 @@ function seedIndex(seed: string, count: number): number {
  * skipped by advancing to the next seed. Returns the winning ids in selection
  * order. An empty entrant list yields no winners; requesting more winners than
  * entrants returns everyone (in selection order).
+ *
+ * `excludedIds` are disqualified entrants that can never be selected — the
+ * reroll mechanism (design.md "/raffle reroll"). Rerolling re-runs the *same*
+ * selection from the *same* base seed with the disqualified ids excluded, so a
+ * reroll is fully recomputable from public data (base seed + entrant list +
+ * disqualified list) with no per-win seed to persist. Excluded ids are skipped
+ * exactly as already-chosen indices are, preserving the order of the survivors.
  */
 export function selectWinners(
   entrants: string[],
   seed: string,
   winnerCount: number,
+  excludedIds?: ReadonlySet<string>,
 ): string[] {
   const n = entrants.length;
   if (n === 0 || winnerCount <= 0) {
     return [];
   }
-  const target = Math.min(winnerCount, n);
+  const excluded = excludedIds ?? new Set<string>();
+  const eligibleCount = entrants.reduce((c, id) => (excluded.has(id) ? c : c + 1), 0);
+  const target = Math.min(winnerCount, eligibleCount);
+  if (target === 0) {
+    return [];
+  }
   const chosen = new Set<number>();
   const winners: string[] = [];
   let current = seed;
 
   while (winners.length < target) {
     const index = seedIndex(current, n);
-    if (!chosen.has(index)) {
+    const id = entrants[index]!;
+    if (!chosen.has(index) && !excluded.has(id)) {
       chosen.add(index);
-      winners.push(entrants[index]!);
+      winners.push(id);
     }
     current = nextSeed(current);
   }

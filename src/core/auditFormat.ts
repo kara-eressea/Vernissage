@@ -87,6 +87,13 @@ export function formatAuditLine(event: AuditLineInput): string {
       const who = winners.length ? winners.join(", ") : "no eligible entrants";
       return `🏆 ${raffle} drawn — winner(s): ${who} — ${when}`;
     }
+    case AUDIT_EVENTS.drawReroll: {
+      // The disqualified/replacement ids are safe to show; the mod-entered
+      // reason stays in the DB payload only (mirrors the blacklist rule).
+      const replacement = str(event.payload, "replacement");
+      const to = replacement ? userMention(replacement) : "no replacement available";
+      return `♻️ ${raffle} winner rerolled → ${to} — ${when}`;
+    }
     default:
       // Unknown type: emit only the type, raffle id, and timestamp — never the
       // raw payload, which could contain private detail.

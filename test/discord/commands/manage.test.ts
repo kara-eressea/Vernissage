@@ -24,6 +24,8 @@ beforeEach(() => {
       resolveAuditChannel: async () => undefined,
       mirrorAudit: async () => undefined,
       postEntryMessage: async () => undefined,
+      postAudit: async () => undefined,
+      postAnnouncement: async () => undefined,
     },
   };
 });

@@ -20,6 +20,8 @@ const notifier: Notifier = {
   resolveAuditChannel: async () => undefined,
   mirrorAudit: vi.fn().mockResolvedValue(undefined),
   postEntryMessage: async () => undefined,
+  postAudit: async () => undefined,
+  postAnnouncement: async () => undefined,
 };
 
 const NOW = "2026-07-15T12:00:00.000Z";

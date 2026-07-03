@@ -17,6 +17,7 @@ import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEn
 import { handleEnterButton } from "./discord/commands/raffle/entry.js";
 import { ENTER_PREFIX } from "./discord/components/enterButton.js";
 import { announceOpenRaffle } from "./discord/entryFlow.js";
+import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
 import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
 import {
   createInteractionRouter,
@@ -105,8 +106,22 @@ async function main(): Promise<void> {
           console.error(`Failed to announce raffle ${t.raffleId}:`, err),
         );
       }
+      // On close, freeze entries and publish the commitment; auto-draw if the
+      // raffle draws automatically. Manual raffles wait for `/raffle draw`.
+      if (t.to === "closed") {
+        void onRaffleClosed(db, notifier, t.raffleId, t.drawMode, new Date().toISOString()).catch(
+          (err) => console.error(`Failed to close/draw raffle ${t.raffleId}:`, err),
+        );
+      }
     },
   });
+
+  // The scheduler's startup sweep only emits transitions for raffles still
+  // scheduled/open; a raffle already `closed` in the DB (closed just before a
+  // shutdown, commit/draw missed) emits none. Reconcile those once at startup.
+  void reconcilePendingDraws(db, notifier, new Date().toISOString()).catch((err) =>
+    console.error("Failed to reconcile pending draws on startup:", err),
+  );
 
   const shutdown = (signal: string): void => {
     console.log(`Received ${signal}; shutting down.`);

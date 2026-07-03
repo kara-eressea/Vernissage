@@ -36,6 +36,34 @@ export function markRerolled(db: Database, winId: number): void {
   db.prepare(`UPDATE wins SET rerolled = 1 WHERE win_id = ?`).run(winId);
 }
 
+/** Fetch a single win row by id, or undefined if it does not exist. */
+export function getWin(db: Database, winId: number): WinRow | undefined {
+  return db.prepare(`SELECT * FROM wins WHERE win_id = ?`).get(winId) as
+    | WinRow
+    | undefined;
+}
+
+/** All win rows for a raffle (including rerolled), oldest first. */
+export function listWinsForRaffle(db: Database, raffleId: number): WinRow[] {
+  return db
+    .prepare(`SELECT * FROM wins WHERE raffle_id = ? ORDER BY win_id ASC`)
+    .all(raffleId) as WinRow[];
+}
+
+/**
+ * The current (non-rerolled) winner ids for a raffle, oldest first. These are
+ * the survivors a reroll re-selection must preserve; the newly-selected ids not
+ * already here are the replacements.
+ */
+export function activeWinnerIds(db: Database, raffleId: number): string[] {
+  const rows = db
+    .prepare(
+      `SELECT user_id FROM wins WHERE raffle_id = ? AND rerolled = 0 ORDER BY win_id ASC`,
+    )
+    .all(raffleId) as Array<{ user_id: string }>;
+  return rows.map((r) => r.user_id);
+}
+
 /**
  * A user's non-rerolled wins, as core WinRecords for the cooldown check.
  * Rerolled wins are excluded — a disqualified win should not gate re-entry.

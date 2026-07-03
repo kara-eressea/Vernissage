@@ -30,6 +30,8 @@ export interface RaffleRow {
   channel_id: string | null;
   message_id: string | null;
   entrants_hash: string | null;
+  draw_commitment: string | null;
+  draw_secret: string | null;
   drand_round: number | null;
   created_by: string | null;
   created_at: string | null;
@@ -179,6 +181,22 @@ export function setEntrantsHash(
     entrantsHash,
     raffleId,
   );
+}
+
+/**
+ * Persist the commit-reveal pair for a raffle: the commitment published at close
+ * and the secret revealed at draw. Stored together so a restart between close
+ * and draw resumes with both (design.md "Provably fair draw").
+ */
+export function setDrawCommitment(
+  db: Database,
+  raffleId: number,
+  commitment: string,
+  secret: string,
+): void {
+  db.prepare(
+    `UPDATE raffles SET draw_commitment = ?, draw_secret = ? WHERE raffle_id = ?`,
+  ).run(commitment, secret, raffleId);
 }
 
 /**

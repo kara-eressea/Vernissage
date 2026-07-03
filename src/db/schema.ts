@@ -7,7 +7,19 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
+
+/**
+ * v6: commit-reveal persistence for the provably-fair draw (design.md "Provably
+ * fair draw"). `draw_commitment` (SHA-256 of the secret) is published at close;
+ * `draw_secret` is revealed at draw. Both live on the raffle row so a restart
+ * between close and draw loses nothing. Added the same idempotent way as the v3
+ * columns.
+ */
+export const V6_COLUMNS: ReadonlyArray<{ table: string; column: string; decl: string }> = [
+  { table: "raffles", column: "draw_commitment", decl: "TEXT" },
+  { table: "raffles", column: "draw_secret", decl: "TEXT" },
+];
 
 /**
  * v5: index hygiene. Drop `idx_activity_guild_user_day`, which exactly
@@ -116,6 +128,8 @@ CREATE TABLE IF NOT EXISTS raffles (
   channel_id      TEXT,
   message_id      TEXT,
   entrants_hash   TEXT,
+  draw_commitment TEXT,
+  draw_secret     TEXT,
   drand_round     INTEGER,
   created_by      TEXT,
   created_at      TEXT

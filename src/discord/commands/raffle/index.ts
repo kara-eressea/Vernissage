@@ -20,6 +20,7 @@ import {
 import type { CommandContext } from "../index.js";
 import type { Command } from "../types.js";
 import { addConfigGroup, handleConfig } from "./config.js";
+import { addDrawSubcommands, handleDraw, handleReroll } from "./draw.js";
 import {
   addEntrySubcommands,
   handleEnter,
@@ -38,8 +39,9 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   // full SlashCommandBuilder, then the config subcommand group.
   addManageSubcommands(data);
   addEntrySubcommands(data);
+  addDrawSubcommands(data);
   data.addSubcommandGroup(addConfigGroup);
-  // Later issues: draw/reroll (#12), ban/unban (#13).
+  // Later issues: ban/unban (#13).
 
   return {
     data,
@@ -75,6 +77,12 @@ async function dispatch(
       return;
     case "list":
       await handleList(interaction, ctx);
+      return;
+    case "draw":
+      await handleDraw(interaction, ctx);
+      return;
+    case "reroll":
+      await handleReroll(interaction, ctx);
       return;
     default:
       await interaction.reply({

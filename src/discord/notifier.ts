@@ -23,7 +23,7 @@ import { getGuild } from "../db/repositories/guilds.js";
 interface SendableChannel {
   send(payload: {
     content: string;
-    allowedMentions?: { parse: [] };
+    allowedMentions?: { parse: [] | ["users"] };
     components?: readonly unknown[];
   }): Promise<{ id: string }>;
 }
@@ -42,6 +42,17 @@ export interface Notifier {
     content: EntryMessageContent,
     components?: readonly unknown[],
   ): Promise<string | undefined>;
+  /**
+   * Post pre-formatted text to the guild's audit channel (mentions suppressed).
+   * Used for the draw's provably-fair verification data, which the narrow
+   * `mirrorAudit` ledger line intentionally omits. Never throws.
+   */
+  postAudit(guildId: string, content: string): Promise<void>;
+  /**
+   * Post a public announcement (e.g. the winner reveal) to a channel, allowing
+   * user mentions so winners are pinged. Never throws; undefined on failure.
+   */
+  postAnnouncement(channelId: string, content: string): Promise<string | undefined>;
 }
 
 /**
@@ -123,5 +134,35 @@ export function createNotifier(client: Client, db: Database): Notifier {
     }
   }
 
-  return { resolveAuditChannel, mirrorAudit, postEntryMessage };
+  async function postAudit(guildId: string, content: string): Promise<void> {
+    const channel = await resolveAuditChannel(guildId);
+    if (!channel) {
+      return;
+    }
+    try {
+      await channel.send({ content, allowedMentions: { parse: [] } });
+    } catch (err) {
+      console.error("Failed to post to audit channel:", err);
+    }
+  }
+
+  async function postAnnouncement(
+    channelId: string,
+    content: string,
+  ): Promise<string | undefined> {
+    const channel = await fetchSendable(client, channelId);
+    if (!channel) {
+      return undefined;
+    }
+    try {
+      // Winners should actually be pinged, unlike the quiet audit ledger.
+      const message = await channel.send({ content, allowedMentions: { parse: ["users"] } });
+      return message.id;
+    } catch (err) {
+      console.error(`Failed to post announcement to channel ${channelId}:`, err);
+      return undefined;
+    }
+  }
+
+  return { resolveAuditChannel, mirrorAudit, postEntryMessage, postAudit, postAnnouncement };
 }

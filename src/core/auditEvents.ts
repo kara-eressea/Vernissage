@@ -22,6 +22,7 @@ export const AUDIT_EVENTS = {
   blacklistRemoved: "blacklist_removed",
   drawCommitted: "draw_committed",
   drawResult: "draw_result",
+  drawReroll: "draw_reroll",
 } as const;
 
 /** Every known audit event type string. */

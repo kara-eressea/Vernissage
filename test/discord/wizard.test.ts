@@ -14,6 +14,8 @@ const notifier = {
   resolveAuditChannel: async () => undefined,
   mirrorAudit: vi.fn().mockResolvedValue(undefined),
   postEntryMessage: async () => undefined,
+  postAudit: async () => undefined,
+  postAnnouncement: async () => undefined,
 };
 
 beforeEach(() => {

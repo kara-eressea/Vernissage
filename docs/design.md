@@ -133,6 +133,26 @@ secret (publish SHA-256(secret) before close, reveal secret after draw). This
 proves no rerolling but still requires trusting that the secret was not chosen
 after seeing entrants, so prefer drand for the final version.
 
+v1 implements this fallback. At close the bot freezes the entrant list, stores
+its hash (`raffles.entrants_hash`), generates a random secret, and stores the
+secret (`raffles.draw_secret`) alongside its commitment
+(`raffles.draw_commitment = SHA-256(secret)`); the hash and commitment are
+published to the audit channel. Persisting the secret and commitment on the
+raffle row means a restart between close and draw loses nothing. At draw the
+seed is `SHA-256(entrant_list_hash + secret)` and the secret is revealed with
+the results. The randomness source sits behind `deriveSeed(entrants_hash,
+randomness)`, so a drand round signature can replace the revealed secret later
+without changing the selection code.
+
+**Reroll semantics.** A reroll re-runs the *same* selection from the *same*
+base seed with the disqualified winner(s) added to an exclusion set: the seed
+is iterated as usual but excluded ids are skipped, so surviving winners keep
+their slots and the disqualified slot is filled by the next eligible id. This
+is fully reproducible from public data (base seed + entrant list + disqualified
+set) and needs no per-win seed stored. The disqualifying reason is recorded in
+the audit_log row (mod-visible) but not published, mirroring the blacklist
+rule.
+
 ## Auditability
 - A designated audit channel (read-only for members) receives:
   - Raffle created, edited, opened, closed, drawn, cancelled.
@@ -161,9 +181,10 @@ after seeing entrants, so prefer drand for the final version.
   end-time extension, and edits are audit-logged.
 - /raffle cancel <raffle> <reason>.
 - /raffle draw <raffle> - manual draw trigger if configured.
-- /raffle reroll <raffle> - if a winner is disqualified; must be logged with
-  reason, and the reroll uses the next iteration of the seed so it remains
-  verifiable.
+- /raffle reroll <raffle> <winner> <reason> - if a winner is disqualified;
+  must be logged with reason. The replacement is re-selected from the same base
+  seed with the disqualified winner excluded, so it stays verifiable from
+  public data (see "Provably fair draw").
 - /raffle ban <user> [duration] [reason], /raffle unban <user>,
   /raffle banlist.
 - /raffle config - guild defaults: audit channel, counted channels, hourly
@@ -252,7 +273,9 @@ raffles (
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the announcement/entry message
   entrants_hash   TEXT,             -- set at close
-  drand_round     INTEGER,          -- committed at close
+  draw_commitment TEXT,             -- SHA-256(secret), published at close (commit-reveal)
+  draw_secret     TEXT,             -- the secret, revealed at draw
+  drand_round     INTEGER,          -- committed at close (reserved for the drand path)
   created_by      TEXT,
   created_at      TEXT
 )

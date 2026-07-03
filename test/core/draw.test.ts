@@ -76,14 +76,35 @@ describe("selectWinners", () => {
     );
   });
 
-  it("reroll uses the next seed iteration and stays verifiable", () => {
-    // Disqualify the first winner: reroll draws from the next seed, excluding
-    // the disqualified id. The result must be reproducible from public data.
+  it("never selects an excluded id", () => {
+    const winners = selectWinners(entrants, seed, 5, new Set(["a", "b"]));
+    expect(winners).not.toContain("a");
+    expect(winners).not.toContain("b");
+    // Only the three eligible entrants can win, even when more are requested.
+    expect(new Set(winners)).toEqual(new Set(["c", "d", "e"]));
+  });
+
+  it("returns nothing when every entrant is excluded", () => {
+    expect(selectWinners(entrants, seed, 1, new Set(entrants))).toEqual([]);
+  });
+
+  it("reroll re-selects from the same seed with the disqualified id excluded", () => {
+    // The reroll mechanism (design.md): re-run the full selection from the same
+    // base seed, excluding the disqualified winner. Reproducible from public
+    // data (base seed + entrant list + disqualified set), no per-win seed.
     const first = selectWinners(entrants, seed, 1)[0]!;
-    const remaining = entrants.filter((e) => e !== first);
-    const rerolled = selectWinners(remaining, nextSeed(seed), 1);
-    expect(rerolled).toEqual(selectWinners(remaining, nextSeed(seed), 1));
-    expect(remaining).toContain(rerolled[0]);
+    const replacement = selectWinners(entrants, seed, 1, new Set([first]));
+    expect(replacement).toEqual(selectWinners(entrants, seed, 1, new Set([first])));
+    expect(replacement[0]).not.toBe(first);
+    expect(entrants).toContain(replacement[0]);
+    // Survivors keep their slots: excluding one winner of a multi-draw returns
+    // the same others plus one fresh replacement, never a duplicate.
+    const three = selectWinners(entrants, seed, 3);
+    const afterReroll = selectWinners(entrants, seed, 3, new Set([three[0]!]));
+    expect(new Set(afterReroll).size).toBe(3);
+    expect(afterReroll).not.toContain(three[0]);
+    expect(afterReroll).toContain(three[1]);
+    expect(afterReroll).toContain(three[2]);
   });
 });
 

@@ -19,6 +19,9 @@ describe("schema migration", () => {
     expect(columnNames(db, "guilds")).toContain("announce_channel");
     expect(columnNames(db, "raffles")).toContain("channel_id");
     expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
+    // v6 commit-reveal columns.
+    expect(columnNames(db, "raffles")).toContain("draw_commitment");
+    expect(columnNames(db, "raffles")).toContain("draw_secret");
     db.close();
   });
 
@@ -50,6 +53,8 @@ describe("schema migration", () => {
     expect(columnNames(db, "guilds")).toContain("announce_channel");
     expect(columnNames(db, "raffles")).toContain("channel_id");
     expect(columnNames(db, "guilds")).toContain("blacklist_generic_message");
+    expect(columnNames(db, "raffles")).toContain("draw_commitment");
+    expect(columnNames(db, "raffles")).toContain("draw_secret");
     // v5 index hygiene applied to the existing database.
     expect(indexNames(db, "activity")).not.toContain("idx_activity_guild_user_day");
     expect(indexNames(db, "audit_log")).toContain("idx_audit_raffle");

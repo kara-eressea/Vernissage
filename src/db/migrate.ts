@@ -13,6 +13,7 @@ import {
   V3_COLUMNS,
   V4_COLUMNS,
   V5_INDEXES_SQL,
+  V6_COLUMNS,
   WIZARD_STATE_SQL,
 } from "./schema.js";
 
@@ -65,6 +66,13 @@ export function migrate(db: Database): void {
   // index). Both statements are idempotent, so this is safe on any prior version.
   if (current < 5) {
     db.exec(V5_INDEXES_SQL);
+  }
+
+  // v6: commit-reveal persistence columns on raffles.
+  if (current < 6) {
+    for (const { table, column, decl } of V6_COLUMNS) {
+      addColumnIfMissing(db, table, column, decl);
+    }
   }
 
   if (current !== SCHEMA_VERSION) {
