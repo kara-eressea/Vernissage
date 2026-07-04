@@ -5,7 +5,7 @@ function baseEnv(): NodeJS.ProcessEnv {
   return {
     [ENV.token]: "tok",
     [ENV.appId]: "app",
-    [ENV.homeGuildId]: "guild",
+    [ENV.guildIds]: "guild",
   };
 }
 
@@ -14,9 +14,28 @@ describe("loadConfig", () => {
     expect(loadConfig(baseEnv())).toEqual({
       token: "tok",
       appId: "app",
-      homeGuildId: "guild",
+      guildIds: ["guild"],
       databasePath: "./vernissage.db",
     });
+  });
+
+  it("parses a comma-separated allowlist, trimming and de-duplicating", () => {
+    const env = { ...baseEnv(), [ENV.guildIds]: " g1 , g2 ,g1, " };
+    expect(loadConfig(env).guildIds).toEqual(["g1", "g2"]);
+  });
+
+  it("falls back to the legacy HOME_GUILD_ID when GUILD_IDS is unset", () => {
+    const env = {
+      [ENV.token]: "tok",
+      [ENV.appId]: "app",
+      [ENV.homeGuildId]: "legacy-guild",
+    };
+    expect(loadConfig(env).guildIds).toEqual(["legacy-guild"]);
+  });
+
+  it("prefers GUILD_IDS over HOME_GUILD_ID when both are set", () => {
+    const env = { ...baseEnv(), [ENV.guildIds]: "g1,g2", [ENV.homeGuildId]: "legacy" };
+    expect(loadConfig(env).guildIds).toEqual(["g1", "g2"]);
   });
 
   it("uses a provided database path", () => {
@@ -37,12 +56,12 @@ describe("loadConfig", () => {
       const message = (err as Error).message;
       expect(message).toContain(ENV.token);
       expect(message).toContain(ENV.appId);
-      expect(message).toContain(ENV.homeGuildId);
+      expect(message).toContain(ENV.guildIds);
     }
   });
 
-  it("treats blank/whitespace-only values as missing", () => {
-    const env = { ...baseEnv(), [ENV.homeGuildId]: "   " };
-    expect(() => loadConfig(env)).toThrow(ENV.homeGuildId);
+  it("treats a blank/whitespace-only guild list as missing", () => {
+    const env = { ...baseEnv(), [ENV.guildIds]: "  ,  " };
+    expect(() => loadConfig(env)).toThrow(ENV.guildIds);
   });
 });

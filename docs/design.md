@@ -22,8 +22,9 @@ entry with equal odds.
 ## Non-goals
 - Paid entries or prize fulfilment (handled by humans).
 - Weighted entries or bonus tickets.
-- Cross-server raffles (single guild per raffle; multi-guild support can be
-  considered later).
+- Cross-server raffles (a raffle belongs to one guild). The bot can run in more
+  than one guild via the GUILD_IDS allowlist, but each guild's raffles,
+  activity, wins, blacklist, and config are independent and never mixed.
 
 ## Key constraint: message counting
 Discord's API provides no per-user message statistics. The bot must count
@@ -155,8 +156,8 @@ the audit_log row (mod-visible) but not published, mirroring the blacklist
 rule.
 
 Crucially, the reroll (and the draw failsafe below) re-run selection over the
-*frozen committed entrant list* — the exact list the published hash covers —
-not the current set of active entries. The draw failsafe soft-removes winners
+*frozen committed entrant list* (the exact list the published hash covers), not
+the current set of active entries. The draw failsafe soft-removes winners
 who left or were blacklisted, so the live entry list can be smaller than the
 committed one; those removed ids are frozen in `raffles.draw_disqualified` and
 added back (then excluded) when reconstructing the committed list, so the
@@ -351,8 +352,12 @@ wizard_state (
 - Hosting: small VPS or always-on container. The bot must run continuously to
   count messages; serverless is unsuitable.
 - Private bot: "Public Bot" disabled in the developer portal so only the
-  owner can invite it. On startup and on guild join, leave any guild whose
-  id is not the configured home guild.
+  owner can invite it. The bot serves an allowlist of one or more guilds
+  (`GUILD_IDS`, comma-separated; the legacy single-value `HOME_GUILD_ID` is
+  still honored as a fallback). On startup and on guild join, it leaves any
+  guild not on the allowlist, and it registers its slash commands in each
+  allowlisted guild. Per-guild data is scoped by `guild_id`; a member's
+  activity and win cooldown in one guild never affect another.
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
   this automatically per viewer). Friendly schedule input in the wizard is
@@ -368,8 +373,8 @@ wizard_state (
   against current guild membership and the blacklist; a winner who has left the
   server or been blacklisted since entering has their entry removed (logged),
   recorded in `raffles.draw_disqualified`, and excluded, and the draw re-runs
-  from the same base seed with them excluded (verifiable exactly like a reroll —
-  the excluded ids are published). Selection runs over the frozen committed
+  from the same base seed with them excluded (verifiable exactly like a reroll,
+  since the excluded ids are published). Selection runs over the frozen committed
   entrant list, so a later reroll reproduces the same indices even though the
   live entry list shrank. If every eligible winner is disqualified the raffle is
   drawn with no winner and logged as `no_eligible_winners` (distinct from the

@@ -20,7 +20,7 @@ import { announceOpenRaffle, closeEntryMessage } from "./discord/entryFlow.js";
 import { makePresenceResolver } from "./discord/memberPresence.js";
 import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
 import { startActivityPruning } from "./scheduler/pruning.js";
-import { attachHomeGuildEnforcement } from "./discord/homeGuild.js";
+import { attachGuildAllowlist } from "./discord/guildAllowlist.js";
 import {
   createInteractionRouter,
   isRoutableComponent,
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   const db = openDb(config.databasePath);
 
   const client = createClient();
-  attachHomeGuildEnforcement(client, config.homeGuildId);
+  attachGuildAllowlist(client, config.guildIds);
 
   // The shared Discord-posting seam (audit-channel mirror + announcements).
   const notifier = createNotifier(client, db);
@@ -67,7 +67,7 @@ async function main(): Promise<void> {
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counter = new MessageCounter();
-  const counting = attachMessageCounter(client, db, counter, config.homeGuildId);
+  const counting = attachMessageCounter(client, db, counter, config.guildIds);
 
   // The draw's left-guild / blacklist failsafe checks pulled winners against
   // current membership via REST (only winners, so a handful of lookups).
@@ -77,7 +77,9 @@ async function main(): Promise<void> {
   const pruning = startActivityPruning(db);
 
   client.once(Events.ClientReady, (ready) => {
-    console.log(`Logged in as ${ready.user.tag}; serving guild ${config.homeGuildId}.`);
+    console.log(
+      `Logged in as ${ready.user.tag}; serving ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
+    );
   });
 
   client.on(Events.InteractionCreate, (interaction) => {

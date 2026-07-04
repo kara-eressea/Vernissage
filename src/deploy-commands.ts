@@ -1,5 +1,5 @@
 /**
- * One-off script to register slash commands with Discord for the home guild.
+ * One-off script to register slash commands with Discord in every allowlisted guild.
  *
  * Usage: `npm run deploy-commands` (after setting the env vars). Safe to re-run;
  * it replaces the guild's command set with the current registry.
@@ -34,7 +34,9 @@ async function main(): Promise<void> {
   try {
     const commands = buildCommands({ db, config, notifier: noopNotifier });
     const count = await registerCommands(config, commands);
-    console.log(`Registered ${count} command(s) to guild ${config.homeGuildId}.`);
+    console.log(
+      `Registered ${count} command(s) to ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
+    );
   } finally {
     db.close();
   }
