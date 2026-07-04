@@ -8,12 +8,13 @@
  * This started as a single flattened baseline. The schema evolved through
  * incremental migrations up to version 7; those were collapsed into this
  * CREATE-everything baseline. Later changes add an incremental step in migrate.ts
- * (v8 added raffles.draw_disqualified) and are also reflected here so a fresh
- * database is created at the current version directly.
+ * (v8 added raffles.draw_disqualified; v9 dropped the redundant
+ * idx_entries_raffle) and are also reflected here so a fresh database is created
+ * at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -99,11 +100,10 @@ CREATE TABLE IF NOT EXISTS entries (
   entered_at     TEXT,
   removed_at     TEXT,
   removed_reason TEXT,
+  -- No separate index on raffle_id: the (raffle_id, user_id) PRIMARY KEY already
+  -- has raffle_id as its leading column, covering hasEntry/listEntrants.
   PRIMARY KEY (raffle_id, user_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_entries_raffle
-  ON entries (raffle_id);
 
 CREATE TABLE IF NOT EXISTS wins (
   win_id     INTEGER PRIMARY KEY AUTOINCREMENT,

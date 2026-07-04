@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "better-sqlite3";
 import { AUDIT_EVENTS } from "../../src/core/auditEvents.js";
 import { openDb } from "../../src/db/index.js";
-import { upsertGuild } from "../../src/db/repositories/guilds.js";
+import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import { createNotifier } from "../../src/discord/notifier.js";
 import { startScheduler } from "../../src/scheduler/runner.js";
 
@@ -31,7 +31,7 @@ function fakeClient(fetch: (id: string) => unknown): Client {
 }
 
 function setAuditChannel(guildId: string, channelId: string): void {
-  upsertGuild(db, guildId, { audit_channel: channelId, created_at: "2026-07-01T00:00:00.000Z" });
+  setGuildConfig(db, guildId, { audit_channel: channelId }, "2026-07-01T00:00:00.000Z");
 }
 
 const openEvent = {
@@ -49,7 +49,7 @@ describe("resolveAuditChannel", () => {
   });
 
   it("returns undefined when audit_channel is null", async () => {
-    upsertGuild(db, "g1", { hourly_cap: 5, created_at: "2026-07-01T00:00:00.000Z" });
+    setGuildConfig(db, "g1", { hourly_cap: 5 }, "2026-07-01T00:00:00.000Z");
     const notifier = createNotifier(fakeClient(() => null), db);
     expect(await notifier.resolveAuditChannel("g1")).toBeUndefined();
   });

@@ -7,19 +7,8 @@
  * memory (design.md "Raffle creation wizard"). No discord.js import.
  */
 
-import type { WizardStep } from "../../db/repositories/wizardState.js";
-
 /** The custom-id namespace the interaction router dispatches on. */
 export const WIZARD_PREFIX = "wiz";
-
-/** The ordered wizard steps. */
-export const WIZARD_STEPS: readonly WizardStep[] = [
-  "basics",
-  "schedule",
-  "eligibility",
-  "draw",
-  "summary",
-];
 
 export interface WizardCustomId {
   step: string;
@@ -43,13 +32,4 @@ export function parseWizardId(customId: string): WizardCustomId | null {
     return null;
   }
   return { step: parts[1]!, action: parts[2]!, raffleId };
-}
-
-/** The step after `step`, or null if `step` is the last (summary). */
-export function nextStep(step: WizardStep): WizardStep | null {
-  const index = WIZARD_STEPS.indexOf(step);
-  if (index < 0 || index === WIZARD_STEPS.length - 1) {
-    return null;
-  }
-  return WIZARD_STEPS[index + 1]!;
 }

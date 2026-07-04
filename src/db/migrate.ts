@@ -23,9 +23,13 @@ export function migrate(db: Database): void {
     db.exec(SCHEMA_SQL);
   } else {
     // Existing database: apply only the steps it is missing. Each step upgrades
-    // one version; add the next as `if (current < 9) { ... }`.
+    // one version; add the next as `if (current < 10) { ... }`.
     if (current < 8) {
       db.exec(`ALTER TABLE raffles ADD COLUMN draw_disqualified TEXT`);
+    }
+    if (current < 9) {
+      // Redundant with the entries (raffle_id, user_id) primary key.
+      db.exec(`DROP INDEX IF EXISTS idx_entries_raffle`);
     }
   }
 

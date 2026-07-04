@@ -10,7 +10,6 @@ import {
   getGuild,
   getHourlyCap,
   setGuildConfig,
-  upsertGuild,
 } from "../../src/db/repositories/guilds.js";
 
 let db: Database;
@@ -30,14 +29,14 @@ describe("guild config", () => {
   });
 
   it("creates a guild row and reads it back", () => {
-    upsertGuild(db, "g1", { hourly_cap: 20, created_at: "2026-07-01T00:00:00.000Z" });
+    setGuildConfig(db, "g1", { hourly_cap: 20 }, "2026-07-01T00:00:00.000Z");
     expect(getGuild(db, "g1")?.hourly_cap).toBe(20);
     expect(getHourlyCap(db, "g1")).toBe(20);
   });
 
   it("updates provided fields without clobbering others", () => {
-    upsertGuild(db, "g1", { hourly_cap: 20, created_at: "2026-07-01T00:00:00.000Z" });
-    upsertGuild(db, "g1", { mod_role: "role1", created_at: "2026-07-02T00:00:00.000Z" });
+    setGuildConfig(db, "g1", { hourly_cap: 20 }, "2026-07-01T00:00:00.000Z");
+    setGuildConfig(db, "g1", { mod_role: "role1" }, "2026-07-02T00:00:00.000Z");
     const row = getGuild(db, "g1")!;
     expect(row.hourly_cap).toBe(20); // preserved
     expect(row.mod_role).toBe("role1"); // updated

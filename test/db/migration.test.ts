@@ -59,6 +59,21 @@ describe("schema", () => {
     // wins: read by raffle_id (draw/reroll) and by user_id (cooldown).
     expect(indexNames(db, "wins")).toContain("idx_wins_raffle");
     expect(indexNames(db, "wins")).toContain("idx_wins_user");
+    // entries: no raffle_id index; the (raffle_id, user_id) PK already covers it.
+    expect(indexNames(db, "entries")).not.toContain("idx_entries_raffle");
+    db.close();
+  });
+
+  it("upgrades a pre-v9 database by dropping the redundant idx_entries_raffle", () => {
+    const db = openDb(":memory:");
+    // Recreate the index a pre-v9 database would still carry.
+    db.exec(`CREATE INDEX idx_entries_raffle ON entries (raffle_id)`);
+    db.pragma("user_version = 8");
+
+    migrate(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    expect(indexNames(db, "entries")).not.toContain("idx_entries_raffle");
     db.close();
   });
 

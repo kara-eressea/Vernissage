@@ -8,14 +8,6 @@
 
 import type { Database } from "better-sqlite3";
 
-export interface EntryRow {
-  raffle_id: number;
-  user_id: string;
-  entered_at: string | null;
-  removed_at: string | null;
-  removed_reason: string | null;
-}
-
 /**
  * Record an entry. Throws on the unique constraint if the user already has a
  * row for this raffle (callers check eligibility first).

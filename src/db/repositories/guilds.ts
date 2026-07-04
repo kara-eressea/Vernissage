@@ -2,7 +2,8 @@
  * Guild config repository.
  *
  * Holds per-guild defaults and settings (audit channel, mod role, hourly cap,
- * cooldown/account-age defaults). Rows are created lazily via upsertGuild.
+ * cooldown/account-age defaults). Rows are created lazily on first write via
+ * setGuildConfig.
  */
 
 import type { Database } from "better-sqlite3";
@@ -68,11 +69,10 @@ const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
 /**
  * Apply a config patch to a guild, creating the row on first write.
  *
- * Unlike `upsertGuild`, this distinguishes "leave as-is" from "clear": a key
- * absent from `patch` is untouched, while a key present with a `null` value is
- * written as NULL. That is exactly what `/raffle config` needs — the coalescing
- * `upsertGuild` can never clear a previously-set field. `created_at` is set once
- * on the initial insert and never overwritten.
+ * This distinguishes "leave as-is" from "clear": a key absent from `patch` is
+ * untouched, while a key present with a `null` value is written as NULL. That is
+ * exactly what `/raffle config` needs. `created_at` is set once on the initial
+ * insert and never overwritten.
  */
 export function setGuildConfig(
   db: Database,
@@ -107,42 +107,4 @@ export function setGuildConfig(
   db.prepare(`UPDATE guilds SET ${assignments} WHERE guild_id = @guild_id`).run(
     params,
   );
-}
-
-/**
- * Create the guild row if absent, or update the provided fields if present.
- * Only fields present in `patch` are written; omitted fields are left as-is.
- */
-export function upsertGuild(
-  db: Database,
-  guildId: string,
-  patch: Partial<Omit<GuildRow, "guild_id">> & { created_at: string },
-): void {
-  db.prepare(
-    `INSERT INTO guilds (
-       guild_id, audit_channel, mod_role, hourly_cap,
-       default_cooldown_days, default_cooldown_count,
-       default_min_account_age_days, created_at
-     ) VALUES (
-       @guild_id, @audit_channel, @mod_role, @hourly_cap,
-       @default_cooldown_days, @default_cooldown_count,
-       @default_min_account_age_days, @created_at
-     )
-     ON CONFLICT (guild_id) DO UPDATE SET
-       audit_channel = coalesce(excluded.audit_channel, audit_channel),
-       mod_role = coalesce(excluded.mod_role, mod_role),
-       hourly_cap = coalesce(excluded.hourly_cap, hourly_cap),
-       default_cooldown_days = coalesce(excluded.default_cooldown_days, default_cooldown_days),
-       default_cooldown_count = coalesce(excluded.default_cooldown_count, default_cooldown_count),
-       default_min_account_age_days = coalesce(excluded.default_min_account_age_days, default_min_account_age_days)`,
-  ).run({
-    guild_id: guildId,
-    audit_channel: patch.audit_channel ?? null,
-    mod_role: patch.mod_role ?? null,
-    hourly_cap: patch.hourly_cap ?? null,
-    default_cooldown_days: patch.default_cooldown_days ?? null,
-    default_cooldown_count: patch.default_cooldown_count ?? null,
-    default_min_account_age_days: patch.default_min_account_age_days ?? null,
-    created_at: patch.created_at,
-  });
 }
