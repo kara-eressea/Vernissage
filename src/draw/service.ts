@@ -23,6 +23,7 @@ import type { Database } from "better-sqlite3";
 import { resolveAnnounceChannelId } from "../core/announceFormat.js";
 import { AUDIT_EVENTS } from "../core/auditEvents.js";
 import { formatAuditLine } from "../core/auditFormat.js";
+import { claimDeadline, claimWindowEnabled } from "../core/claim.js";
 import { commitSecret } from "../core/commitReveal.js";
 import { deriveSeed, hashEntrants, selectWinners } from "../core/draw.js";
 import {
@@ -49,7 +50,10 @@ import {
 import {
   activeWinnerIds,
   addWin,
+  claimWin,
+  getActiveWinForUser,
   getWin,
+  listExpiredUnclaimedWins,
   listWinsForRaffle,
   markRerolled,
 } from "../db/repositories/wins.js";
@@ -138,10 +142,28 @@ export type RerollOutcome =
   | { ok: true; disqualified: string; replacement: string | null }
   | { ok: false; reason: "not_found" | "not_drawn" | "invalid_win" };
 
+export type ClaimOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "not_found" | "not_drawn" | "not_winner" | "no_claim_required" | "already_claimed";
+    };
+
 /** Resolve the channel a raffle announces in, or null if none is configured. */
 function announceChannelFor(db: Database, raffle: RaffleRow): string | null {
   const guild = getGuild(db, raffle.guild_id);
   return resolveAnnounceChannelId(raffle.channel_id, guild?.announce_channel ?? null);
+}
+
+/**
+ * The claim deadline a winner drawn at `now` gets, or null when the raffle sets
+ * no claim window. All winners drawn in one step share the same deadline; a
+ * rerolled replacement gets a fresh one from its own draw moment.
+ */
+function winnerDeadline(raffle: RaffleRow, now: string): string | null {
+  return claimWindowEnabled(raffle.claim_window_hours)
+    ? claimDeadline(now, raffle.claim_window_hours)
+    : null;
 }
 
 /**
@@ -289,8 +311,9 @@ export async function executeDraw(
     if (removals.length > 0) {
       setDrawDisqualified(db, raffleId, removals.map((r) => r.id));
     }
+    const deadline = winnerDeadline(raffle, now);
     for (const winner of winners) {
-      addWin(db, raffleId, winner, now);
+      addWin(db, raffleId, winner, now, deadline);
     }
     setStatus(db, raffleId, "drawn");
     writeAudit(db, {
@@ -346,7 +369,12 @@ export async function executeDraw(
   if (channelId) {
     await announcer.postAnnouncement(
       channelId,
-      formatWinnerAnnouncement({ raffleName: raffle.name, prize: raffle.prize, winners }),
+      formatWinnerAnnouncement({
+        raffleName: raffle.name,
+        prize: raffle.prize,
+        winners,
+        claimDeadline: winnerDeadline(raffle, now),
+      }),
     );
   }
 
@@ -425,8 +453,10 @@ export async function rerollWinner(
     const selection = selectWinners(committedEntrants, seed, raffle.winner_count, excluded);
     const active = new Set(activeWinnerIds(db, raffleId));
     const replacements = selection.filter((id) => !active.has(id));
+    // A replacement drawn now starts its own claim window from this moment.
+    const deadline = winnerDeadline(raffle, now);
     for (const id of replacements) {
-      addWin(db, raffleId, id, now);
+      addWin(db, raffleId, id, now, deadline);
     }
     replacement = replacements[0] ?? null;
     writeAudit(db, {
@@ -461,11 +491,104 @@ export async function rerollWinner(
         raffleName: raffle.name,
         prize: raffle.prize,
         winners: [replacement],
+        claimDeadline: winnerDeadline(raffle, now),
       }),
     );
   }
 
   return { ok: true, disqualified: win.user_id, replacement };
+}
+
+/**
+ * Record a winner's claim. Valid only while the raffle is `drawn` and the caller
+ * holds a live (non-rerolled) win with a claim deadline. The `claimWin` update is
+ * conditional, so a double-click or a race with the expiry sweep can't
+ * double-claim. On success writes and mirrors a `win_claimed` audit row.
+ */
+export async function recordClaim(
+  db: Database,
+  announcer: DrawAnnouncer,
+  raffleId: number,
+  userId: string,
+  now: string,
+): Promise<ClaimOutcome> {
+  const raffle = getRaffle(db, raffleId);
+  if (!raffle) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (raffle.status !== "drawn") {
+    return { ok: false, reason: "not_drawn" };
+  }
+  const win = getActiveWinForUser(db, raffleId, userId);
+  if (!win) {
+    return { ok: false, reason: "not_winner" };
+  }
+  if (win.claim_deadline === null) {
+    // The raffle set no claim window, so there is nothing to claim.
+    return { ok: false, reason: "no_claim_required" };
+  }
+  if (win.claimed_at !== null) {
+    return { ok: false, reason: "already_claimed" };
+  }
+
+  let claimed = false;
+  db.transaction(() => {
+    if (!claimWin(db, win.win_id, now)) {
+      return; // Lost the race to another claim or the expiry sweep.
+    }
+    writeAudit(db, {
+      guildId: raffle.guild_id,
+      raffleId,
+      eventType: AUDIT_EVENTS.winClaimed,
+      actorId: userId,
+      payload: { userId },
+      createdAt: now,
+    });
+    claimed = true;
+  })();
+  if (!claimed) {
+    return { ok: false, reason: "already_claimed" };
+  }
+
+  void announcer.postAudit(
+    raffle.guild_id,
+    formatAuditLine({
+      eventType: AUDIT_EVENTS.winClaimed,
+      raffleId,
+      actorId: userId,
+      payload: { userId },
+      createdAt: now,
+    }),
+  );
+  return { ok: true };
+}
+
+/**
+ * Reroll every winner whose claim window has lapsed unclaimed. Each expired slot
+ * is rerolled to the next eligible entrant over the frozen committed list (via
+ * `rerollWinner`, so it stays provably fair), and the replacement starts its own
+ * claim window. Replacements that also go unclaimed are caught on a later sweep;
+ * when the pool is exhausted `rerollWinner` fills no slot and logs it. Returns
+ * how many slots were rerolled. The scheduler calls this on an interval.
+ */
+export async function expireUnclaimedWins(
+  db: Database,
+  announcer: DrawAnnouncer,
+  now: string,
+): Promise<number> {
+  const expired = listExpiredUnclaimedWins(db, now);
+  let rerolled = 0;
+  for (const win of expired) {
+    try {
+      const outcome = await rerollWinner(db, announcer, win.raffle_id, win.win_id, "unclaimed", now);
+      if (outcome.ok) {
+        rerolled += 1;
+      }
+    } catch (err) {
+      console.error(`Failed to expire unclaimed win ${win.win_id}:`, err);
+    }
+  }
+  return rerolled;
 }
 
 /**

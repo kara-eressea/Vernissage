@@ -12,6 +12,7 @@ import {
   updateRaffleFields,
   type RaffleFieldPatch,
 } from "../../src/db/repositories/raffles.js";
+import { addWin } from "../../src/db/repositories/wins.js";
 import { attemptEntry, closeEntryMessage } from "../../src/discord/entryFlow.js";
 import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
@@ -47,7 +48,14 @@ function seedOpenRaffle(overrides: RaffleFieldPatch = {}): number {
 }
 
 function ctxFor(raffleId: number, userId = "u1") {
-  return { raffle: getRaffle(db, raffleId)!, guild: undefined, userId, joinedAt: null, now: NOW };
+  return {
+    raffle: getRaffle(db, raffleId)!,
+    guild: undefined,
+    userId,
+    userRoleIds: [],
+    joinedAt: null,
+    now: NOW,
+  };
 }
 
 function auditCount(eventType: string): number {
@@ -108,6 +116,46 @@ describe("attemptEntry", () => {
       reason: "blacklisted",
     });
     expect(hasEntry(db, id, "u1")).toBe(false);
+  });
+
+  it("rejects the raffle's creator from entering their own raffle", () => {
+    const id = seedOpenRaffle(); // created_by = "mod1"
+    incrementActivity(db, "g1", "mod1", DAY, 5);
+    expect(attemptEntry(db, notifier, ctxFor(id, "mod1")).result).toEqual({
+      ok: false,
+      reason: "is_creator",
+    });
+    expect(hasEntry(db, id, "mod1")).toBe(false);
+  });
+
+  it("enforces the required-role gate from the gathered member roles", () => {
+    const id = seedOpenRaffle({ required_role_id: "vip" });
+    incrementActivity(db, "g1", "u1", DAY, 5);
+    // Missing the role: rejected.
+    expect(attemptEntry(db, notifier, ctxFor(id)).result).toEqual({
+      ok: false,
+      reason: "missing_required_role",
+    });
+    // Holding the role: accepted.
+    const ctx = { ...ctxFor(id), userRoleIds: ["vip"] };
+    expect(attemptEntry(db, notifier, ctx).result.ok).toBe(true);
+  });
+
+  it("bars a prior winner only when the raffle excludes prior winners", () => {
+    // A non-rerolled win in a completed raffle in the same guild.
+    const past = seedOpenRaffle();
+    setStatus(db, past, "completed");
+    addWin(db, past, "u1", "2026-07-05T00:00:00.000Z");
+
+    const off = seedOpenRaffle();
+    incrementActivity(db, "g1", "u1", DAY, 5);
+    expect(attemptEntry(db, notifier, ctxFor(off)).result.ok).toBe(true);
+
+    const on = seedOpenRaffle({ exclude_prior_winners: 1 });
+    expect(attemptEntry(db, notifier, ctxFor(on)).result).toEqual({
+      ok: false,
+      reason: "prior_winner",
+    });
   });
 
   it("rejects a second entry as already_entered", () => {

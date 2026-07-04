@@ -25,8 +25,12 @@ const validDraft: RaffleDraftFields = {
   new_member_exempt: 0,
   new_member_days: null,
   min_account_age_days: null,
+  exclude_prior_winners: 0,
+  required_role_id: null,
+  excluded_role_id: null,
   cooldown_days: null,
   cooldown_count: null,
+  claim_window_hours: null,
   draw_mode: "auto",
 };
 
@@ -135,15 +139,26 @@ describe("resolveRaffleSettings", () => {
 });
 
 describe("validateOpenRaffleEdit", () => {
-  it("accepts a strictly-later end", () => {
-    expect(
-      validateOpenRaffleEdit("2026-07-17T12:00:00.000Z", "2026-07-18T12:00:00.000Z").ok,
-    ).toBe(true);
+  // The first argument is the raffle's *start* time; the end may be corrected to
+  // any instant after it (earlier or later than the current end).
+  const start = "2026-07-15T12:00:00.000Z";
+
+  it("accepts a later end", () => {
+    expect(validateOpenRaffleEdit(start, "2026-07-20T12:00:00.000Z").ok).toBe(true);
   });
 
-  it("rejects an equal or earlier end", () => {
-    const end = "2026-07-17T12:00:00.000Z";
-    expect(validateOpenRaffleEdit(end, end).ok).toBe(false);
-    expect(validateOpenRaffleEdit(end, "2026-07-16T12:00:00.000Z").ok).toBe(false);
+  it("accepts an earlier end, as long as it is after the start", () => {
+    // The July-5 -> July-4 correction: still after the raffle opened.
+    expect(validateOpenRaffleEdit(start, "2026-07-16T00:00:00.000Z").ok).toBe(true);
+  });
+
+  it("rejects an end at or before the start", () => {
+    expect(validateOpenRaffleEdit(start, start).ok).toBe(false);
+    expect(validateOpenRaffleEdit(start, "2026-07-15T00:00:00.000Z").ok).toBe(false);
+  });
+
+  it("rejects an invalid time or a missing start", () => {
+    expect(validateOpenRaffleEdit(start, "not-a-time").ok).toBe(false);
+    expect(validateOpenRaffleEdit(null, "2026-07-20T12:00:00.000Z").ok).toBe(false);
   });
 });

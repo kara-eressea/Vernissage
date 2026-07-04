@@ -31,6 +31,22 @@ export function migrate(db: Database): void {
       // Redundant with the entries (raffle_id, user_id) primary key.
       db.exec(`DROP INDEX IF EXISTS idx_entries_raffle`);
     }
+    if (current < 10) {
+      // Optional entry gates (default off/unset).
+      db.exec(
+        `ALTER TABLE raffles ADD COLUMN exclude_prior_winners INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE raffles ADD COLUMN required_role_id TEXT;
+         ALTER TABLE raffles ADD COLUMN excluded_role_id TEXT`,
+      );
+    }
+    if (current < 11) {
+      // Winner claim window (default off/unset).
+      db.exec(
+        `ALTER TABLE raffles ADD COLUMN claim_window_hours INTEGER;
+         ALTER TABLE wins ADD COLUMN claim_deadline TEXT;
+         ALTER TABLE wins ADD COLUMN claimed_at TEXT`,
+      );
+    }
   }
 
   if (current !== SCHEMA_VERSION) {

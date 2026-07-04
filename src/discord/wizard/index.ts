@@ -14,6 +14,7 @@ import {
   type ChannelSelectMenuInteraction,
   type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
+  type RoleSelectMenuInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
 import type { Database } from "better-sqlite3";
@@ -49,6 +50,7 @@ import {
   drawModal,
   eligibilityModal,
   renderStep,
+  restrictionsScreen,
   scheduleModal,
   type WizardMessage,
 } from "./render.js";
@@ -57,6 +59,7 @@ import {
 export type WizardInteraction =
   | ButtonInteraction
   | StringSelectMenuInteraction
+  | RoleSelectMenuInteraction
   | ChannelSelectMenuInteraction
   | ModalSubmitInteraction;
 
@@ -87,8 +90,12 @@ function toDraftFields(r: RaffleRow): RaffleDraftFields {
     new_member_exempt: r.new_member_exempt,
     new_member_days: r.new_member_days,
     min_account_age_days: r.min_account_age_days,
+    exclude_prior_winners: r.exclude_prior_winners,
+    required_role_id: r.required_role_id,
+    excluded_role_id: r.excluded_role_id,
     cooldown_days: r.cooldown_days,
     cooldown_count: r.cooldown_count,
+    claim_window_hours: r.claim_window_hours,
     draw_mode: r.draw_mode,
   };
 }
@@ -315,6 +322,29 @@ export function createWizard(deps: WizardDeps): Wizard {
       applyEligibilityDefaults(raffle);
       return rerender(interaction, id, "eligibility");
     }
+    // The "More restrictions…" sub-screen: prior-winner + role gates. These live
+    // off the main step (Discord caps a message at five component rows), so they
+    // re-render the sub-screen rather than the step.
+    if (action === "more" && interaction.isButton()) {
+      await respond(interaction, restrictionsScreen(raffle));
+      return;
+    }
+    if (action === "priorwin" && interaction.isStringSelectMenu()) {
+      updateRaffleFields(db, id, { exclude_prior_winners: interaction.values[0] === "on" ? 1 : 0 });
+      return rerenderRestrictions(interaction, id);
+    }
+    if (action === "reqrole" && interaction.isRoleSelectMenu()) {
+      // Empty selection clears the gate.
+      updateRaffleFields(db, id, { required_role_id: interaction.values[0] ?? null });
+      return rerenderRestrictions(interaction, id);
+    }
+    if (action === "exclrole" && interaction.isRoleSelectMenu()) {
+      updateRaffleFields(db, id, { excluded_role_id: interaction.values[0] ?? null });
+      return rerenderRestrictions(interaction, id);
+    }
+    if (action === "back" && interaction.isButton()) {
+      return rerender(interaction, id, "eligibility");
+    }
     if (action === "next" && interaction.isButton()) {
       const fresh = getRaffle(db, id)!;
       const check = validateEligibility(toDraftFields(fresh));
@@ -344,7 +374,8 @@ export function createWizard(deps: WizardDeps): Wizard {
       const winners = intField(interaction, "winner_count", "Number of winners", true);
       const cdDays = intField(interaction, "cooldown_days", "Cooldown days", false);
       const cdCount = intField(interaction, "cooldown_count", "Cooldown raffles", false);
-      const bad = [winners, cdDays, cdCount].find((f) => "error" in f);
+      const claim = intField(interaction, "claim_window_hours", "Claim window (hours)", false);
+      const bad = [winners, cdDays, cdCount, claim].find((f) => "error" in f);
       if (bad && "error" in bad) {
         await respond(interaction, withError("draw", raffle, bad.error));
         return;
@@ -354,6 +385,7 @@ export function createWizard(deps: WizardDeps): Wizard {
         winner_count: (winners as { value: number }).value,
         cooldown_days: (cdDays as { value: number | null }).value,
         cooldown_count: (cdCount as { value: number | null }).value,
+        claim_window_hours: (claim as { value: number | null }).value,
       });
       return rerender(interaction, id, "draw");
     }
@@ -421,6 +453,15 @@ export function createWizard(deps: WizardDeps): Wizard {
   ): Promise<void> {
     const raffle = getRaffle(db, raffleId)!;
     await respond(interaction, renderStep(step, raffle, summaryLines(raffle)));
+  }
+
+  /** Reload the raffle and re-render the eligibility restrictions sub-screen. */
+  async function rerenderRestrictions(
+    interaction: WizardInteraction,
+    raffleId: number,
+  ): Promise<void> {
+    const raffle = getRaffle(db, raffleId)!;
+    await respond(interaction, restrictionsScreen(raffle));
   }
 
   /** "Use defaults" for eligibility: fill only the still-unset fields. */

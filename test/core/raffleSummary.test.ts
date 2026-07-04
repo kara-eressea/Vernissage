@@ -15,8 +15,12 @@ const base: ResolvedRaffleSettings = {
   new_member_exempt: 0,
   new_member_days: null,
   min_account_age_days: null,
+  exclude_prior_winners: 0,
+  required_role_id: null,
+  excluded_role_id: null,
   cooldown_days: null,
   cooldown_count: null,
+  claim_window_hours: null,
   draw_mode: "auto",
 };
 

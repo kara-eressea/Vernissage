@@ -94,6 +94,8 @@ export function formatAuditLine(event: AuditLineInput): string {
       const to = replacement ? userMention(replacement) : "no replacement available";
       return `♻️ ${raffle} winner rerolled → ${to} — ${when}`;
     }
+    case AUDIT_EVENTS.winClaimed:
+      return `🎁 ${subject} claimed their prize in ${raffle} — ${when}`;
     default:
       // Unknown type: emit only the type, raffle id, and timestamp — never the
       // raw payload, which could contain private detail.

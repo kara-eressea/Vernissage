@@ -57,8 +57,12 @@ export interface WinCooldownConfig {
 export type IneligibleReason =
   | "not_open"
   | "blacklisted"
+  | "is_creator"
+  | "missing_required_role"
+  | "has_excluded_role"
   | "account_too_new"
   | "in_cooldown"
+  | "prior_winner"
   | "insufficient_activity"
   | "already_entered";
 
@@ -77,6 +81,16 @@ export interface EligibilityInput {
   /** Whether the user is currently blacklisted (expiry already resolved). */
   blacklisted: boolean;
 
+  /** Whether this user created the raffle (creators can't enter their own). */
+  isCreator: boolean;
+
+  /** Role ids the member currently holds, for the optional role gates. */
+  userRoleIds: string[];
+  /** A role the member must hold to enter; null = no required-role gate. */
+  requiredRoleId: string | null;
+  /** A role that bars entry if held; null = no excluded-role gate. */
+  excludedRoleId: string | null;
+
   /** User's Discord id (snowflake) for account-age derivation. */
   userSnowflake: string;
   /** Minimum account age in days; null = no requirement. */
@@ -87,6 +101,11 @@ export interface EligibilityInput {
   wins: WinRecord[];
   /** Number of raffles the user could have entered since their last win. */
   rafflesSinceLastWin: number;
+
+  /** Whether this raffle bars anyone who has ever won here (non-rerolled). */
+  excludePriorWinners: boolean;
+  /** Whether the user has a prior non-rerolled win in this guild. */
+  hasPriorWin: boolean;
 
   /** Activity requirement. */
   reqMessages: number;

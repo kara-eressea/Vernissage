@@ -23,6 +23,7 @@ export const AUDIT_EVENTS = {
   drawCommitted: "draw_committed",
   drawResult: "draw_result",
   drawReroll: "draw_reroll",
+  winClaimed: "win_claimed",
   configSet: "config_set",
   countedChannelSet: "counted_channel_set",
   countedChannelCleared: "counted_channel_cleared",

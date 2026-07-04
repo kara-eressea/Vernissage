@@ -13,11 +13,17 @@ import {
   setStatus,
   updateRaffleFields,
 } from "../../src/db/repositories/raffles.js";
-import { activeWinnerIds, listWinsForRaffle } from "../../src/db/repositories/wins.js";
+import {
+  activeWinnerIds,
+  getActiveWinForUser,
+  listWinsForRaffle,
+} from "../../src/db/repositories/wins.js";
 import {
   commitOnClose,
   executeDraw,
+  expireUnclaimedWins,
   reconcilePendingDraws,
+  recordClaim,
   rerollWinner,
 } from "../../src/draw/service.js";
 
@@ -58,7 +64,7 @@ function fakeAnnouncer() {
 /** Seed a closed raffle with the given entrants and options. */
 function seedClosedRaffle(
   entrants: string[],
-  opts: { winnerCount?: number; drawMode?: "auto" | "manual" } = {},
+  opts: { winnerCount?: number; drawMode?: "auto" | "manual"; claimWindowHours?: number } = {},
 ): number {
   const raffleId = createDraft(db, GUILD, "creator", NOW);
   updateRaffleFields(db, raffleId, {
@@ -66,6 +72,7 @@ function seedClosedRaffle(
     prize: "A prize",
     winner_count: opts.winnerCount ?? 1,
     draw_mode: opts.drawMode ?? "manual",
+    claim_window_hours: opts.claimWindowHours ?? null,
     channel_id: null,
   });
   for (const id of entrants) {
@@ -371,6 +378,108 @@ describe("rerollWinner", () => {
     expect(await rerollWinner(db, announcer, raffleId, 999, "x", NOW)).toEqual({
       ok: false,
       reason: "invalid_win",
+    });
+  });
+});
+
+describe("claim window", () => {
+  // NOW = 2026-07-15T12:00Z; a 24h window makes the deadline 2026-07-16T12:00Z.
+  const DEADLINE = "2026-07-16T12:00:00.000Z";
+  const AFTER = "2026-07-17T00:00:00.000Z";
+
+  it("stamps a claim deadline on winners and notes it in the announcement", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"], { claimWindowHours: 24 });
+    const announcer = fakeAnnouncer();
+
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+
+    const win = getActiveWinForUser(db, raffleId, "d")!; // "d" is the deterministic winner
+    expect(win.claim_deadline).toBe(DEADLINE);
+    expect(win.claimed_at).toBeNull();
+    expect(announcer.announcements.at(-1)).toContain("/raffle claim");
+  });
+
+  it("leaves winners unstamped when the raffle has no claim window", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+    expect(getActiveWinForUser(db, raffleId, "d")!.claim_deadline).toBeNull();
+    expect(announcer.announcements.at(-1)).not.toContain("/raffle claim");
+  });
+
+  describe("recordClaim", () => {
+    it("records a winner's claim and audits it", async () => {
+      const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"], { claimWindowHours: 24 });
+      const announcer = fakeAnnouncer();
+      await executeDraw(db, announcer, raffleId, NOW, gen);
+
+      expect(await recordClaim(db, announcer, raffleId, "d", NOW)).toEqual({ ok: true });
+      expect(getActiveWinForUser(db, raffleId, "d")!.claimed_at).toBe(NOW);
+      expect(auditTypes(raffleId)).toContain("win_claimed");
+    });
+
+    it("rejects a non-winner, a double claim, and a no-window raffle", async () => {
+      const withWindow = seedClosedRaffle(["a", "b", "c", "d", "e"], { claimWindowHours: 24 });
+      const announcer = fakeAnnouncer();
+      await executeDraw(db, announcer, withWindow, NOW, gen);
+
+      expect(await recordClaim(db, announcer, withWindow, "z", NOW)).toEqual({
+        ok: false,
+        reason: "not_winner",
+      });
+      await recordClaim(db, announcer, withWindow, "d", NOW);
+      expect(await recordClaim(db, announcer, withWindow, "d", NOW)).toEqual({
+        ok: false,
+        reason: "already_claimed",
+      });
+
+      const noWindow = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+      await executeDraw(db, announcer, noWindow, NOW, gen);
+      expect(await recordClaim(db, announcer, noWindow, "d", NOW)).toEqual({
+        ok: false,
+        reason: "no_claim_required",
+      });
+    });
+  });
+
+  describe("expireUnclaimedWins", () => {
+    it("rerolls a lapsed unclaimed win to the next entrant with a fresh deadline", async () => {
+      const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"], { claimWindowHours: 24 });
+      const announcer = fakeAnnouncer();
+      await executeDraw(db, announcer, raffleId, NOW, gen);
+
+      const rerolled = await expireUnclaimedWins(db, announcer, AFTER);
+
+      expect(rerolled).toBe(1);
+      // "d" forfeits (rerolled), "c" is the reproducible replacement.
+      expect(activeWinnerIds(db, raffleId)).toEqual(["c"]);
+      expect(listWinsForRaffle(db, raffleId).find((w) => w.user_id === "d")!.rerolled).toBe(1);
+      // The replacement starts its own window from the sweep instant.
+      const cWin = getActiveWinForUser(db, raffleId, "c")!;
+      expect(cWin.claim_deadline).toBe("2026-07-18T00:00:00.000Z");
+      expect(auditTypes(raffleId)).toEqual(["draw_committed", "raffle_drawn", "draw_reroll"]);
+    });
+
+    it("does nothing before the deadline or once claimed", async () => {
+      const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"], { claimWindowHours: 24 });
+      const announcer = fakeAnnouncer();
+      await executeDraw(db, announcer, raffleId, NOW, gen);
+
+      // Before the deadline: no reroll.
+      expect(await expireUnclaimedWins(db, announcer, NOW)).toBe(0);
+
+      // Claimed in time: the sweep leaves it alone even after the deadline.
+      await recordClaim(db, announcer, raffleId, "d", NOW);
+      expect(await expireUnclaimedWins(db, announcer, AFTER)).toBe(0);
+      expect(activeWinnerIds(db, raffleId)).toEqual(["d"]);
+    });
+
+    it("ignores raffles with no claim window", async () => {
+      const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+      const announcer = fakeAnnouncer();
+      await executeDraw(db, announcer, raffleId, NOW, gen);
+      expect(await expireUnclaimedWins(db, announcer, AFTER)).toBe(0);
+      expect(activeWinnerIds(db, raffleId)).toEqual(["d"]);
     });
   });
 });

@@ -14,10 +14,13 @@ and settings are kept separate.
   uses those counts to decide who is eligible to enter a raffle. Only counts are
   stored, never message text.
 - Lets moderators create raffles with a step-by-step wizard: name and prize, a
-  schedule, an activity requirement, a winner count, and a draw mode.
+  schedule, an activity requirement, a winner count, a draw mode, and optional
+  extra restrictions (see Raffle options below).
 - Opens and closes raffles automatically at their scheduled times.
 - Draws winners using a provably fair scheme, so a third party can recompute the
   result from public data and confirm nothing was rigged.
+- Optionally requires winners to claim their prize within a time limit, and
+  automatically re-draws any prize left unclaimed — still provably fair.
 - Lets moderators re-draw a disqualified winner and block specific users from
   entering.
 - Writes every significant action to a log and can mirror those actions to a
@@ -253,13 +256,14 @@ All commands are subcommands of `/raffle`.
 | `/raffle enter [raffle]` | Enter an open raffle. You can also press the Enter button on the raffle post. |
 | `/raffle status [raffle]`| See your own eligibility: activity progress, cooldown, and entry status. Only you see the reply. |
 | `/raffle list`           | Show open and upcoming raffles.                                             |
+| `/raffle claim [raffle]` | Claim a prize you won, for raffles that have a claim window. Claim before the deadline shown in the winner announcement or the prize is re-drawn. |
 
 ### For moderators
 
 | Command                                     | What it does                                                              |
 | ------------------------------------------- | ------------------------------------------------------------------------ |
 | `/raffle create`                            | Start the guided wizard to create a raffle.                              |
-| `/raffle edit <raffle>`                     | Edit a draft or scheduled raffle. An open raffle allows only extending the end time. |
+| `/raffle edit <raffle>`                     | Edit a draft or scheduled raffle. On an open raffle you can correct the end time (earlier or later, but not before it started). |
 | `/raffle cancel <raffle> <reason>`          | Cancel a raffle before it is drawn.                                      |
 | `/raffle draw <raffle>`                     | Draw a closed raffle now, if it is not set to draw automatically.        |
 | `/raffle reroll <raffle> <winner> <reason>` | Replace a disqualified winner. Recorded with the reason.                 |
@@ -269,6 +273,44 @@ All commands are subcommands of `/raffle`.
 | `/raffle config show`                       | Show the server settings.                                                |
 | `/raffle config set [options]`              | Change server settings.                                                  |
 | `/raffle config channel <channel> <mode>`   | Include or exclude a channel from message counting.                      |
+
+## Raffle options
+
+When a moderator creates a raffle with `/raffle create`, the wizard offers these
+settings. Most have a server-wide default (set with `/raffle config`) that the
+wizard pre-fills, so you only change what you want to differ for that raffle.
+
+- **Activity requirement** — how many messages a member must have sent, over how
+  many days, to be eligible. The window can end at the raffle's start (the
+  default, so activity after the announcement doesn't count) or roll up to the
+  moment each person enters.
+- **Minimum account age** — optionally require that a member's Discord account is
+  at least a certain age.
+- **New-member exemption** — optionally let members who joined the server very
+  recently enter without meeting the activity requirement.
+- **Winner cooldown** — after winning, a member can be barred from entering again
+  for a number of days and/or for a number of future raffles.
+- **Winner count and draw mode** — how many winners to draw, and whether the draw
+  runs automatically at close or is triggered by a moderator.
+
+Under **More restrictions** in the wizard's eligibility step, these optional
+gates are all off by default:
+
+- **Bar past winners** — exclude anyone who has ever won a raffle in this server
+  (a permanent bar, separate from the temporary winner cooldown).
+- **Require a role** — only members with a chosen role may enter.
+- **Exclude a role** — members with a chosen role may not enter (for example, to
+  keep staff out).
+
+The person who created a raffle can never enter it themselves; this is always
+enforced and needs no setting.
+
+In the draw step you can also set a **claim window**: a number of hours within
+which each winner must claim their prize with `/raffle claim`. The winner
+announcement shows the deadline. If a winner doesn't claim in time, the bot
+automatically re-draws their prize to the next eligible entrant (who then gets
+their own claim window), keeping the draw provably fair. Leave it blank to give
+prizes out with no claim step.
 
 ## How it works, briefly
 
