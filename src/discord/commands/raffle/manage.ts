@@ -18,7 +18,7 @@ import { editModeForStatus, isCancellable } from "../../../core/raffleValidation
 import { writeAudit } from "../../../db/repositories/audit.js";
 import {
   createDraft,
-  getRaffle,
+  getGuildRaffle,
   setStatus,
   updateRaffleFields,
 } from "../../../db/repositories/raffles.js";
@@ -109,8 +109,8 @@ export async function handleEdit(
     return;
   }
   const raffleId = interaction.options.getInteger("raffle", true);
-  const raffle = getRaffle(ctx.db, raffleId);
-  if (!raffle || raffle.guild_id !== guildId) {
+  const raffle = getGuildRaffle(ctx.db, guildId, raffleId);
+  if (!raffle) {
     await reply(interaction, "No raffle with that id exists in this server.");
     return;
   }
@@ -141,8 +141,8 @@ export async function handleCancel(
   }
   const raffleId = interaction.options.getInteger("raffle", true);
   const reason = interaction.options.getString("reason", true);
-  const raffle = getRaffle(ctx.db, raffleId);
-  if (!raffle || raffle.guild_id !== guildId) {
+  const raffle = getGuildRaffle(ctx.db, guildId, raffleId);
+  if (!raffle) {
     await reply(interaction, "No raffle with that id exists in this server.");
     return;
   }

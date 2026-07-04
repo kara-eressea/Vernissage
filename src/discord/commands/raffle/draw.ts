@@ -15,7 +15,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { userMention } from "../../../core/format.js";
-import { getRaffle } from "../../../db/repositories/raffles.js";
+import { getGuildRaffle } from "../../../db/repositories/raffles.js";
 import { listWinsForRaffle } from "../../../db/repositories/wins.js";
 import { executeDraw, rerollWinner } from "../../../draw/service.js";
 import { makePresenceResolver } from "../../memberPresence.js";
@@ -60,8 +60,8 @@ export async function handleDraw(
     return;
   }
   const raffleId = interaction.options.getInteger("raffle", true);
-  const raffle = getRaffle(ctx.db, raffleId);
-  if (!raffle || raffle.guild_id !== guildId) {
+  const raffle = getGuildRaffle(ctx.db, guildId, raffleId);
+  if (!raffle) {
     await interaction.reply({
       content: "No raffle with that id in this server.",
       flags: MessageFlags.Ephemeral,
@@ -110,8 +110,8 @@ export async function handleReroll(
   const winnerUser = interaction.options.getUser("winner", true);
   const reason = interaction.options.getString("reason", true);
 
-  const raffle = getRaffle(ctx.db, raffleId);
-  if (!raffle || raffle.guild_id !== guildId) {
+  const raffle = getGuildRaffle(ctx.db, guildId, raffleId);
+  if (!raffle) {
     await interaction.reply({
       content: "No raffle with that id in this server.",
       flags: MessageFlags.Ephemeral,

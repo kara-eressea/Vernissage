@@ -66,6 +66,56 @@ export type SecretGenerator = () => string;
 /** A winner disqualified by the draw failsafe and why. */
 type Disqualification = { id: string; reason: "left_guild" | "blacklisted" };
 
+/** The outcome of the pulled-winner failsafe: the final winners and who was removed. */
+interface ResolvedWinners {
+  winners: string[];
+  removals: Disqualification[];
+  excluded: Set<string>;
+}
+
+/**
+ * Select winners over the frozen entrant list, applying the pulled-winner
+ * failsafe: any winner who has left the guild or been blacklisted is excluded
+ * and the selection re-runs from the same base seed with them removed
+ * (verifiable exactly like a reroll — indices stay seed mod entrant_count over
+ * the committed list). Only the pulled winners are checked, so this is cheap
+ * regardless of entrant count. Bounded: `excluded` grows each pass, so it
+ * terminates when every winner is valid or the eligible pool is exhausted.
+ */
+async function resolveValidWinners(
+  db: Database,
+  raffle: RaffleRow,
+  entrants: string[],
+  seed: string,
+  now: string,
+  resolveMembers?: PresenceResolver,
+): Promise<ResolvedWinners> {
+  const excluded = new Set<string>();
+  const removals: Disqualification[] = [];
+  let winners =
+    entrants.length === 0 ? [] : selectWinners(entrants, seed, raffle.winner_count, excluded);
+  while (winners.length > 0) {
+    const present = resolveMembers ? await resolveMembers(raffle.guild_id, winners) : null;
+    const invalid: Disqualification[] = [];
+    for (const w of winners) {
+      if (present && !present.has(w)) {
+        invalid.push({ id: w, reason: "left_guild" });
+      } else if (isBlacklisted(db, raffle.guild_id, w, now)) {
+        invalid.push({ id: w, reason: "blacklisted" });
+      }
+    }
+    if (invalid.length === 0) {
+      break;
+    }
+    for (const bad of invalid) {
+      excluded.add(bad.id);
+      removals.push(bad);
+    }
+    winners = selectWinners(entrants, seed, raffle.winner_count, excluded);
+  }
+  return { winners, removals, excluded };
+}
+
 /**
  * Resolves which of `candidateIds` are still present in the guild. Returns the
  * present set, or null when membership can't be reliably determined (in which
@@ -204,36 +254,14 @@ export async function executeDraw(
   // so this same committed list is reconstructable at reroll time.
   const entrants = listEntrants(db, raffleId);
   const seed = deriveSeed(entrantsHash, secret);
-
-  // Failsafe on the pulled winners only (cheap: 1–2 members, not all N): a
-  // winner who has since left the guild or been blacklisted is excluded and the
-  // draw re-runs from the same base seed with them excluded — verifiable exactly
-  // like a reroll (indices stay seed mod entrant_count over the committed list).
-  // The loop is bounded: `excluded` strictly grows each pass, so it terminates
-  // when the winner set is all valid or the eligible pool is exhausted.
-  const excluded = new Set<string>();
-  const removals: Disqualification[] = [];
-  let winners =
-    entrants.length === 0 ? [] : selectWinners(entrants, seed, raffle.winner_count, excluded);
-  while (winners.length > 0) {
-    const present = resolveMembers ? await resolveMembers(raffle.guild_id, winners) : null;
-    const invalid: Disqualification[] = [];
-    for (const w of winners) {
-      if (present && !present.has(w)) {
-        invalid.push({ id: w, reason: "left_guild" });
-      } else if (isBlacklisted(db, raffle.guild_id, w, now)) {
-        invalid.push({ id: w, reason: "blacklisted" });
-      }
-    }
-    if (invalid.length === 0) {
-      break;
-    }
-    for (const bad of invalid) {
-      excluded.add(bad.id);
-      removals.push(bad);
-    }
-    winners = selectWinners(entrants, seed, raffle.winner_count, excluded);
-  }
+  const { winners, removals, excluded } = await resolveValidWinners(
+    db,
+    raffle,
+    entrants,
+    seed,
+    now,
+    resolveMembers,
+  );
 
   // Re-check status inside the transaction so a concurrent close/reconcile path
   // cannot draw the same raffle twice (which would duplicate the wins rows).

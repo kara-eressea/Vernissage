@@ -62,3 +62,57 @@ export function entryFailureMessage(
       return "You're already entered into this raffle.";
   }
 }
+
+/** The `/raffle status` card: the member's standing against one raffle's gates. */
+export function statusMessage(raffleName: string | null, input: EligibilityInput): string {
+  const progress = activityProgress(input);
+  const cooldown = winCooldownStatus({
+    cooldownDays: input.cooldown.cooldownDays,
+    cooldownCount: input.cooldown.cooldownCount,
+    wins: input.wins,
+    rafflesSinceLastWin: input.rafflesSinceLastWin,
+    now: input.now,
+  });
+
+  const lines = [`**Your status for ${raffleName ?? "the raffle"}**`];
+  if (input.blacklisted) {
+    lines.push("- ⛔ You're blacklisted from raffles in this server.");
+  }
+  lines.push(
+    progress.exempt
+      ? "- ✅ Activity: exempt (new member)"
+      : `- ${progress.have >= progress.need ? "✅" : "⬜"} Activity: ${progress.have}/${progress.need} messages`,
+  );
+  lines.push(
+    cooldown.active
+      ? `- ⏳ Win cooldown active${cooldown.endsAt ? ` until ${discordTimestamp(cooldown.endsAt, "R")}` : ""}`
+      : "- ✅ No win cooldown",
+  );
+  lines.push(input.alreadyEntered ? "- 🎟️ You're already entered." : "- ⬜ Not entered yet.");
+  return lines.join("\n");
+}
+
+/** The raffle fields `/raffle list` needs (a plain projection of the row). */
+export interface RaffleListItem {
+  raffle_id: number;
+  name: string | null;
+  status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+/** The `/raffle list` reply: one line per open/upcoming raffle. */
+export function raffleListMessage(raffles: RaffleListItem[]): string {
+  const lines = raffles.map((r) => {
+    const when =
+      r.status === "open"
+        ? r.ends_at
+          ? `open, closes ${discordTimestamp(r.ends_at, "R")}`
+          : "open"
+        : r.starts_at
+          ? `opens ${discordTimestamp(r.starts_at, "R")}`
+          : "upcoming";
+    return `- **${r.name ?? `Raffle #${r.raffle_id}`}** (#${r.raffle_id}) — ${when}`;
+  });
+  return `**Raffles**\n${lines.join("\n")}`;
+}

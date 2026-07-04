@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLEARABLE_FIELDS,
   validateCooldownCount,
   validateCooldownDays,
   validateHourlyCap,
@@ -8,6 +9,7 @@ import {
   validateReqMessages,
   validateTimezone,
 } from "../../src/core/config.js";
+import { SETTABLE_COLUMNS } from "../../src/db/repositories/guilds.js";
 
 describe("config validation", () => {
   const validators = [
@@ -71,5 +73,16 @@ describe("validateTimezone", () => {
   it("rejects an unknown zone or empty string", () => {
     expect(validateTimezone("Mars/Olympus").ok).toBe(false);
     expect(validateTimezone("").ok).toBe(false);
+  });
+});
+
+describe("config field lists stay in sync", () => {
+  it("every clearable field is a settable guild column", () => {
+    // /raffle config clear offers CLEARABLE_FIELDS; setGuildConfig only writes
+    // SETTABLE_COLUMNS. A clearable field the repo would reject is a silent bug,
+    // so guard the two hand-maintained lists against drift.
+    for (const field of CLEARABLE_FIELDS) {
+      expect(SETTABLE_COLUMNS.has(field)).toBe(true);
+    }
   });
 });

@@ -18,6 +18,7 @@ import {
   SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
 import {
   CLEARABLE_FIELDS,
   validateCooldownCount,
@@ -319,7 +320,7 @@ async function handleConfigSet(
   writeAudit(ctx.db, {
     guildId,
     raffleId: null,
-    eventType: "config_set",
+    eventType: AUDIT_EVENTS.configSet,
     actorId: interaction.user.id,
     payload: patch,
     createdAt: now,
@@ -342,7 +343,7 @@ async function handleConfigChannel(
     writeAudit(ctx.db, {
       guildId,
       raffleId: null,
-      eventType: "counted_channel_cleared",
+      eventType: AUDIT_EVENTS.countedChannelCleared,
       actorId: interaction.user.id,
       payload: { channelId: channel.id },
       createdAt: now,
@@ -355,7 +356,7 @@ async function handleConfigChannel(
   writeAudit(ctx.db, {
     guildId,
     raffleId: null,
-    eventType: "counted_channel_set",
+    eventType: AUDIT_EVENTS.countedChannelSet,
     actorId: interaction.user.id,
     payload: { channelId: channel.id, mode },
     createdAt: now,

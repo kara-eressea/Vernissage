@@ -62,6 +62,20 @@ export function getRaffle(db: Database, raffleId: number): RaffleRow | undefined
     .get(raffleId) as RaffleRow | undefined;
 }
 
+/**
+ * Fetch a raffle only if it exists and belongs to `guildId`; otherwise
+ * undefined. The shared "resolve a raffle this server owns" guard the mod and
+ * entry commands use before acting on a raffle id.
+ */
+export function getGuildRaffle(
+  db: Database,
+  guildId: string,
+  raffleId: number,
+): RaffleRow | undefined {
+  const raffle = getRaffle(db, raffleId);
+  return raffle && raffle.guild_id === guildId ? raffle : undefined;
+}
+
 /** Columns the wizard/edit flow may patch on a raffle row. */
 export type RaffleFieldPatch = Partial<
   Pick<

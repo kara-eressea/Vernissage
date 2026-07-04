@@ -23,6 +23,9 @@ export const AUDIT_EVENTS = {
   drawCommitted: "draw_committed",
   drawResult: "draw_result",
   drawReroll: "draw_reroll",
+  configSet: "config_set",
+  countedChannelSet: "counted_channel_set",
+  countedChannelCleared: "counted_channel_cleared",
 } as const;
 
 /** Every known audit event type string. */

@@ -16,19 +16,25 @@ import {
   type GuildMember,
   type RepliableInteraction,
 } from "discord.js";
-import { activityProgress } from "../../../core/eligibility.js";
-import { winCooldownStatus } from "../../../core/cooldown.js";
-import { discordTimestamp } from "../../../core/time.js";
-import { isBlacklisted } from "../../../db/repositories/blacklist.js";
 import { getGuild } from "../../../db/repositories/guilds.js";
-import { getRaffle, listByStatus, type RaffleRow } from "../../../db/repositories/raffles.js";
+import {
+  getGuildRaffle,
+  getRaffle,
+  listByStatus,
+  type RaffleRow,
+} from "../../../db/repositories/raffles.js";
 import { parseEnterButtonId } from "../../components/enterButton.js";
 import {
   attemptEntry,
   gatherEligibilityInput,
   type EntryContext,
 } from "../../entryFlow.js";
-import { entryFailureMessage, entrySuccessMessage } from "../../messages/entryReplies.js";
+import {
+  entryFailureMessage,
+  entrySuccessMessage,
+  raffleListMessage,
+  statusMessage,
+} from "../../messages/entryReplies.js";
 import type { CommandContext } from "../index.js";
 
 /** Add the user-facing subcommands to the `/raffle` builder. */
@@ -74,8 +80,8 @@ function resolveTargetRaffle(
   explicitId: number | null,
 ): RaffleRow | string {
   if (explicitId !== null) {
-    const raffle = getRaffle(db, explicitId);
-    if (!raffle || raffle.guild_id !== guildId) {
+    const raffle = getGuildRaffle(db, guildId, explicitId);
+    if (!raffle) {
       return "No raffle with that id exists in this server.";
     }
     return raffle;
@@ -171,32 +177,7 @@ export async function handleStatus(
     now: new Date().toISOString(),
   });
 
-  const progress = activityProgress(input);
-  const cooldown = winCooldownStatus({
-    cooldownDays: input.cooldown.cooldownDays,
-    cooldownCount: input.cooldown.cooldownCount,
-    wins: input.wins,
-    rafflesSinceLastWin: input.rafflesSinceLastWin,
-    now: input.now,
-  });
-
-  const lines = [`**Your status for ${target.name ?? "the raffle"}**`];
-  if (input.blacklisted) {
-    lines.push("- ⛔ You're blacklisted from raffles in this server.");
-  }
-  lines.push(
-    progress.exempt
-      ? "- ✅ Activity: exempt (new member)"
-      : `- ${progress.have >= progress.need ? "✅" : "⬜"} Activity: ${progress.have}/${progress.need} messages`,
-  );
-  lines.push(
-    cooldown.active
-      ? `- ⏳ Win cooldown active${cooldown.endsAt ? ` until ${discordTimestamp(cooldown.endsAt, "R")}` : ""}`
-      : "- ✅ No win cooldown",
-  );
-  lines.push(input.alreadyEntered ? "- 🎟️ You're already entered." : "- ⬜ Not entered yet.");
-
-  await ephemeral(interaction, lines.join("\n"));
+  await ephemeral(interaction, statusMessage(target.name, input));
 }
 
 export async function handleList(
@@ -213,16 +194,5 @@ export async function handleList(
     await ephemeral(interaction, "There are no open or upcoming raffles.");
     return;
   }
-  const lines = raffles.map((r) => {
-    const when =
-      r.status === "open"
-        ? r.ends_at
-          ? `open, closes ${discordTimestamp(r.ends_at, "R")}`
-          : "open"
-        : r.starts_at
-          ? `opens ${discordTimestamp(r.starts_at, "R")}`
-          : "upcoming";
-    return `- **${r.name ?? `Raffle #${r.raffle_id}`}** (#${r.raffle_id}) — ${when}`;
-  });
-  await ephemeral(interaction, `**Raffles**\n${lines.join("\n")}`);
+  await ephemeral(interaction, raffleListMessage(raffles));
 }

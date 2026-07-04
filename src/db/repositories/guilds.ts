@@ -53,7 +53,7 @@ export type GuildConfigPatch = Partial<
  * erased at runtime, so this Set is the actual guard `applyColumnPatch` uses
  * against a stray key being interpolated into the UPDATE's column list.
  */
-const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
+export const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
   "audit_channel",
   "announce_channel",
   "mod_role",
