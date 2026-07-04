@@ -15,3 +15,8 @@ export function userMention(id: string): string {
 export function channelMention(id: string): string {
   return `<#${id}>`;
 }
+
+/** "1 day" / "3 days": a count with its word, pluralized. Shared by the formatters. */
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}

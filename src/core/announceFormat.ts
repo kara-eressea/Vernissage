@@ -8,6 +8,7 @@
  * the Discord adapter attaches the Enter button and sends this content.
  */
 
+import { plural } from "./format.js";
 import { discordTimestamp } from "./time.js";
 
 /** The raffle fields the entry message needs (a plain projection of the row). */
@@ -38,10 +39,6 @@ export function resolveAnnounceChannelId(
   guildAnnounceChannel: string | null,
 ): string | null {
   return raffleChannelId ?? guildAnnounceChannel;
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 /** Build the entry message's title and body. */

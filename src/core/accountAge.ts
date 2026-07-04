@@ -6,10 +6,10 @@
  * account age with no extra storage (see design.md entry flow).
  */
 
+import { MS_PER_DAY } from "./time.js";
+
 /** Discord epoch: 2015-01-01T00:00:00.000Z in Unix milliseconds. */
 export const DISCORD_EPOCH = 1420070400000;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
  * The account creation time encoded in a snowflake, as a Date (UTC).

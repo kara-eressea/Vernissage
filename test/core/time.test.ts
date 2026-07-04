@@ -96,4 +96,8 @@ describe("offsetMinutesFor", () => {
   it("is 0 for UTC", () => {
     expect(offsetMinutesFor("2026-07-15T12:00:00Z", "UTC")).toBe(0);
   });
+
+  it("throws on an invalid IANA zone", () => {
+    expect(() => offsetMinutesFor("2026-07-15T12:00:00Z", "Not/AZone")).toThrow();
+  });
 });

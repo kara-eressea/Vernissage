@@ -110,4 +110,14 @@ describe("parseFriendlyTimeInZone", () => {
       "2026-03-29T18:00:00.000Z",
     );
   });
+
+  it("resolves the offset across the autumn fall-back (offset decreases)", () => {
+    // The reverse: `now` is 2026-10-24 (still CEST, +120); the target 2026-10-25
+    // 20:00 is after the fall-back, so CET (+60) applies. The target-side offset
+    // gives 20:00 CET = 19:00 UTC, not the 18:00 the now-side offset would.
+    const now = "2026-10-24T10:00:00.000Z";
+    expect(isoInZone("tomorrow 20:00", now, "Europe/Copenhagen")).toBe(
+      "2026-10-25T19:00:00.000Z",
+    );
+  });
 });

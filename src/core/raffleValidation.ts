@@ -131,12 +131,12 @@ export function validateDraft(fields: RaffleDraftFields, nowUtc: string): Valida
   return checks.find((c) => !c.ok) ?? ok;
 }
 
-/** The eligibility/draw settings after "Use defaults" merges guild config. */
-export interface ResolvedRaffleSettings extends RaffleDraftFields {
-  cooldown_days: number | null;
-  cooldown_count: number | null;
-  min_account_age_days: number | null;
-}
+/**
+ * The eligibility/draw settings after "Use defaults" merges guild config. Same
+ * shape as a draft; the defaultable fields are just guaranteed to be resolved
+ * (per-raffle value or guild default) rather than left null by the wizard.
+ */
+export type ResolvedRaffleSettings = RaffleDraftFields;
 
 /**
  * Fill unset (null) raffle fields from the guild defaults, keeping explicit

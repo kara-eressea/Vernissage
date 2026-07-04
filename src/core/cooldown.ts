@@ -7,9 +7,8 @@
  * design.md "Win cooldown".
  */
 
+import { MS_PER_DAY } from "./time.js";
 import type { WinCooldownConfig, WinRecord } from "./types.js";
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface CooldownInput extends WinCooldownConfig {
   /** The user's win history. Empty means never won, so never in cooldown. */
@@ -39,27 +38,11 @@ function latestWin(wins: WinRecord[]): WinRecord | null {
  *
  * Time boundary is exclusive: exactly Z days after the win, the user may enter
  * again. Count boundary is likewise satisfied once N raffles have been skipped.
+ * This is the boolean view of `winCooldownStatus`, so the entry gate and the
+ * `/raffle status` display can never disagree.
  */
 export function isInWinCooldown(input: CooldownInput): boolean {
-  const last = latestWin(input.wins);
-  if (last === null) {
-    return false;
-  }
-
-  if (input.cooldownDays !== null && input.cooldownDays > 0) {
-    const elapsedMs = Date.parse(input.now) - Date.parse(last.wonAt);
-    if (elapsedMs < input.cooldownDays * MS_PER_DAY) {
-      return true;
-    }
-  }
-
-  if (input.cooldownCount !== null && input.cooldownCount > 0) {
-    if (input.rafflesSinceLastWin < input.cooldownCount) {
-      return true;
-    }
-  }
-
-  return false;
+  return winCooldownStatus(input).active;
 }
 
 export interface WinCooldownStatus {

@@ -9,7 +9,8 @@
 
 import type { DayWindow } from "./types.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/** Milliseconds in a day. The single definition shared across the core. */
+export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Parse a UTC ISO string (or Date) into epoch milliseconds. */
 function toEpochMs(when: string | Date): number {

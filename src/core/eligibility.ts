@@ -17,10 +17,19 @@
 import { meetsMinAccountAge } from "./accountAge.js";
 import { messagesInWindow } from "./activity.js";
 import { isInWinCooldown } from "./cooldown.js";
-import { activityWindow } from "./time.js";
+import { activityWindow, MS_PER_DAY } from "./time.js";
 import type { DayWindow, EligibilityInput, EligibilityResult } from "./types.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/**
+ * The activity window both the entry gate and `/raffle status` evaluate: the
+ * `reqDays` days ending at the anchor (raffle start or now). A non-positive
+ * `reqDays` is clamped to a single day so a malformed raffle row never throws;
+ * `meetsActivityRequirement` short-circuits before reaching here in that case.
+ */
+function resolveActivityWindow(input: EligibilityInput): DayWindow {
+  const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
+  return activityWindow(anchor, input.reqDays >= 1 ? input.reqDays : 1);
+}
 
 /**
  * Whether the new-member exemption applies: the raffle enables it and the user
@@ -51,8 +60,7 @@ export function meetsActivityRequirement(input: EligibilityInput): boolean {
   if (input.reqMessages < 1 || input.reqDays < 1) {
     return true;
   }
-  const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
-  const window = activityWindow(anchor, input.reqDays);
+  const window = resolveActivityWindow(input);
   return messagesInWindow(input.dailyCounts, window) >= input.reqMessages;
 }
 
@@ -72,10 +80,7 @@ export interface ActivityProgress {
  * Uses the same window/anchor math as the eligibility check.
  */
 export function activityProgress(input: EligibilityInput): ActivityProgress {
-  const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
-  // Mirror meetsActivityRequirement's tolerance: clamp a non-positive window to
-  // a single day so `/raffle status` never throws on a malformed raffle row.
-  const window = activityWindow(anchor, input.reqDays >= 1 ? input.reqDays : 1);
+  const window = resolveActivityWindow(input);
   return {
     exempt: isNewMemberExempt(input),
     have: messagesInWindow(input.dailyCounts, window),

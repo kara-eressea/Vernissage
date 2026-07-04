@@ -8,12 +8,9 @@
  * the Discord layer assembles the embed. No discord.js/database import.
  */
 
+import { plural } from "./format.js";
 import { discordTimestamp } from "./time.js";
 import type { ResolvedRaffleSettings } from "./raffleValidation.js";
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
 
 /** Build the summary lines for a resolved raffle configuration. */
 export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
