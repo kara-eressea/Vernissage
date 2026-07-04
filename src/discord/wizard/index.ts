@@ -29,7 +29,6 @@ import {
   type RaffleDraftFields,
 } from "../../core/raffleValidation.js";
 import { parseFriendlyTimeInZone } from "../../core/timeParse.js";
-import { writeAudit } from "../../db/repositories/audit.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 import {
   getRaffle,
@@ -43,7 +42,7 @@ import {
   upsertWizardStep,
   type WizardStep,
 } from "../../db/repositories/wizardState.js";
-import type { Notifier } from "../notifier.js";
+import { auditAndMirror, type Notifier } from "../notifier.js";
 import { parseWizardId } from "./customId.js";
 import {
   basicsModal,
@@ -398,7 +397,7 @@ export function createWizard(deps: WizardDeps): Wizard {
         return;
       }
       setStatus(db, id, "scheduled");
-      writeAudit(db, {
+      auditAndMirror(db, deps.notifier, {
         guildId: fresh.guild_id,
         raffleId: id,
         eventType: AUDIT_EVENTS.raffleScheduled,
@@ -407,13 +406,6 @@ export function createWizard(deps: WizardDeps): Wizard {
         createdAt: now,
       });
       clearWizardState(db, id);
-      void deps.notifier.mirrorAudit({
-        guildId: fresh.guild_id,
-        raffleId: id,
-        eventType: AUDIT_EVENTS.raffleScheduled,
-        actorId: interaction.user.id,
-        createdAt: now,
-      });
       await respond(interaction, {
         content: `🎉 **${fresh.name}** is scheduled. It will open automatically at its start time.`,
         components: [],

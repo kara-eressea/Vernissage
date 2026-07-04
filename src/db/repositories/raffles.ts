@@ -7,6 +7,7 @@
 
 import type { Database } from "better-sqlite3";
 import type { RaffleStatus } from "../../core/types.js";
+import { applyColumnPatch } from "../patch.js";
 
 export interface RaffleRow {
   raffle_id: number;
@@ -116,18 +117,7 @@ export function updateRaffleFields(
   raffleId: number,
   patch: RaffleFieldPatch,
 ): void {
-  const keys = (Object.keys(patch) as (keyof RaffleFieldPatch)[]).filter(
-    (key) => patch[key] !== undefined && PATCHABLE_COLUMNS.has(key),
-  );
-  if (keys.length === 0) {
-    return;
-  }
-  const assignments = keys.map((key) => `${key} = @${key}`).join(", ");
-  const params: Record<string, string | number | null> = { raffle_id: raffleId };
-  for (const key of keys) {
-    params[key] = patch[key] ?? null;
-  }
-  db.prepare(`UPDATE raffles SET ${assignments} WHERE raffle_id = @raffle_id`).run(params);
+  applyColumnPatch(db, "raffles", "raffle_id", raffleId, patch, PATCHABLE_COLUMNS);
 }
 
 /**

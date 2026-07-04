@@ -7,6 +7,7 @@
  */
 
 import type { Database } from "better-sqlite3";
+import { applyColumnPatch } from "../patch.js";
 
 export interface GuildRow {
   guild_id: string;
@@ -49,8 +50,8 @@ export type GuildConfigPatch = Partial<
 
 /**
  * Runtime allowlist of columns `setGuildConfig` may write. The TS type above is
- * erased at runtime, so this Set is the actual guard against a stray key being
- * interpolated into the UPDATE's column list (mirrors updateRaffleFields).
+ * erased at runtime, so this Set is the actual guard `applyColumnPatch` uses
+ * against a stray key being interpolated into the UPDATE's column list.
  */
 const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPatch>([
   "audit_channel",
@@ -87,24 +88,5 @@ export function setGuildConfig(
      ON CONFLICT (guild_id) DO NOTHING`,
   ).run(guildId, now);
 
-  // Only keys explicitly present (value !== undefined) and on the column
-  // allowlist are written; a null value clears the column. The allowlist means
-  // the column names interpolated below can never be attacker-controlled even
-  // if a caller builds a patch from untrusted keys.
-  const keys = (Object.keys(patch) as (keyof GuildConfigPatch)[]).filter(
-    (key) => patch[key] !== undefined && SETTABLE_COLUMNS.has(key),
-  );
-  if (keys.length === 0) {
-    return;
-  }
-
-  const assignments = keys.map((key) => `${key} = @${key}`).join(", ");
-  const params: Record<string, string | number | null> = { guild_id: guildId };
-  for (const key of keys) {
-    params[key] = patch[key] ?? null;
-  }
-
-  db.prepare(`UPDATE guilds SET ${assignments} WHERE guild_id = @guild_id`).run(
-    params,
-  );
+  applyColumnPatch(db, "guilds", "guild_id", guildId, patch, SETTABLE_COLUMNS);
 }

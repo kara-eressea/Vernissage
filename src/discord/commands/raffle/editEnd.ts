@@ -19,9 +19,8 @@ import type { Database } from "better-sqlite3";
 import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
 import { validateOpenRaffleEdit } from "../../../core/raffleValidation.js";
 import { parseFriendlyTime } from "../../../core/timeParse.js";
-import { writeAudit } from "../../../db/repositories/audit.js";
 import { getRaffle, updateRaffleFields } from "../../../db/repositories/raffles.js";
-import type { Notifier } from "../../notifier.js";
+import { auditAndMirror, type Notifier } from "../../notifier.js";
 
 /** Custom-id namespace for the end-extension modal submit. */
 export const EDIT_END_PREFIX = "editend";
@@ -73,19 +72,12 @@ export async function handleEditEnd(
   }
 
   updateRaffleFields(deps.db, raffleId, { ends_at: parsed.utcIso });
-  writeAudit(deps.db, {
+  auditAndMirror(deps.db, deps.notifier, {
     guildId: raffle.guild_id,
     raffleId,
     eventType: AUDIT_EVENTS.raffleEdited,
     actorId: interaction.user.id,
     payload: { ends_at: parsed.utcIso },
-    createdAt: now,
-  });
-  void deps.notifier.mirrorAudit({
-    guildId: raffle.guild_id,
-    raffleId,
-    eventType: AUDIT_EVENTS.raffleEdited,
-    actorId: interaction.user.id,
     createdAt: now,
   });
 

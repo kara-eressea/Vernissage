@@ -24,6 +24,7 @@ import {
 } from "../../../db/repositories/raffles.js";
 import { clearWizardState, upsertWizardStep } from "../../../db/repositories/wizardState.js";
 import type { CommandContext } from "../index.js";
+import { auditAndMirror } from "../../notifier.js";
 import { createWizard } from "../../wizard/index.js";
 import { editEndModal } from "./editEnd.js";
 import { ensureModerator } from "../moderator.js";
@@ -155,19 +156,12 @@ export async function handleCancel(
   clearWizardState(ctx.db, raffleId);
   // The reason is recorded in the audit_log row (mod-visible) but the mirrored
   // audit-channel line never shows it (formatAuditLine ignores `reason`).
-  writeAudit(ctx.db, {
+  auditAndMirror(ctx.db, ctx.notifier, {
     guildId,
     raffleId,
     eventType: AUDIT_EVENTS.raffleCancelled,
     actorId: interaction.user.id,
     payload: { reason },
-    createdAt: now,
-  });
-  void ctx.notifier.mirrorAudit({
-    guildId,
-    raffleId,
-    eventType: AUDIT_EVENTS.raffleCancelled,
-    actorId: interaction.user.id,
     createdAt: now,
   });
 

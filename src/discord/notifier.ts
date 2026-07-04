@@ -16,7 +16,7 @@ import type { Client } from "discord.js";
 import type { Database } from "better-sqlite3";
 import { formatAuditLine } from "../core/auditFormat.js";
 import type { EntryMessageContent } from "../core/announceFormat.js";
-import type { AuditEvent } from "../db/repositories/audit.js";
+import { writeAudit, type AuditEvent } from "../db/repositories/audit.js";
 import { getGuild } from "../db/repositories/guilds.js";
 
 /** The minimal channel shape we need: a text channel we can send to. */
@@ -165,4 +165,20 @@ export function createNotifier(client: Client, db: Database): Notifier {
   }
 
   return { resolveAuditChannel, mirrorAudit, postEntryMessage, postAudit, postAnnouncement };
+}
+
+/**
+ * Write an audit row and mirror it to the audit channel from the *same* event
+ * object, so the persisted ledger and the channel line can never drift apart.
+ * The mirror is fire-and-forget and never throws. Privacy is preserved by
+ * `formatAuditLine`, which reads only whitelisted fields (never a reason), so
+ * passing the full payload here is safe.
+ *
+ * For a state change that must be atomic with other writes, keep `writeAudit`
+ * inside the transaction and call `notifier.mirrorAudit(event)` with the same
+ * object after it commits; this helper is for the common single-write case.
+ */
+export function auditAndMirror(db: Database, notifier: Notifier, event: AuditEvent): void {
+  writeAudit(db, event);
+  void notifier.mirrorAudit(event);
 }

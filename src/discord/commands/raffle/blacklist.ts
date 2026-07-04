@@ -77,6 +77,16 @@ export async function handleBan(
     return;
   }
 
+  // The reason is deliberately kept out of the audit payload (mod-only surface).
+  const banEvent = {
+    guildId,
+    raffleId: null,
+    eventType: AUDIT_EVENTS.blacklistAdded,
+    actorId: interaction.user.id,
+    payload: { userId: user.id },
+    createdAt: now,
+  };
+
   // Ban, its audit row, and the entry removals are one state change: wrap them
   // in a single transaction so a crash can't leave a ban without its audit row
   // (removeEntriesForBan's own transaction nests safely via a savepoint).
@@ -89,28 +99,13 @@ export async function handleBan(
       bannedAt: now,
       expiresAt,
     });
-    // The reason is deliberately kept out of the audit payload (mod-only surface).
-    writeAudit(ctx.db, {
-      guildId,
-      raffleId: null,
-      eventType: AUDIT_EVENTS.blacklistAdded,
-      actorId: interaction.user.id,
-      payload: { userId: user.id },
-      createdAt: now,
-    });
+    writeAudit(ctx.db, banEvent);
     return removeEntriesForBan(ctx.db, guildId, user.id, now, interaction.user.id);
   })();
 
   // Mirror the ban and each entry removal to the audit channel — reason-free by
   // construction (formatAuditLine never reads a reason).
-  void ctx.notifier.mirrorAudit({
-    guildId,
-    raffleId: null,
-    eventType: AUDIT_EVENTS.blacklistAdded,
-    actorId: interaction.user.id,
-    payload: { userId: user.id },
-    createdAt: now,
-  });
+  void ctx.notifier.mirrorAudit(banEvent);
   for (const raffleId of affected) {
     void ctx.notifier.mirrorAudit({
       guildId,
@@ -143,26 +138,20 @@ export async function handleUnban(
   const user = interaction.options.getUser("user", true);
   const now = new Date().toISOString();
 
-  // Unban + its audit row are one state change (atomic).
-  ctx.db.transaction(() => {
-    removeBan(ctx.db, guildId, user.id);
-    writeAudit(ctx.db, {
-      guildId,
-      raffleId: null,
-      eventType: AUDIT_EVENTS.blacklistRemoved,
-      actorId: interaction.user.id,
-      payload: { userId: user.id },
-      createdAt: now,
-    });
-  })();
-  void ctx.notifier.mirrorAudit({
+  const unbanEvent = {
     guildId,
     raffleId: null,
     eventType: AUDIT_EVENTS.blacklistRemoved,
     actorId: interaction.user.id,
     payload: { userId: user.id },
     createdAt: now,
-  });
+  };
+  // Unban + its audit row are one state change (atomic).
+  ctx.db.transaction(() => {
+    removeBan(ctx.db, guildId, user.id);
+    writeAudit(ctx.db, unbanEvent);
+  })();
+  void ctx.notifier.mirrorAudit(unbanEvent);
 
   await reply(
     interaction,
