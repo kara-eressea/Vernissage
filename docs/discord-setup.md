@@ -52,12 +52,23 @@ stores message text. Leaving these off is both simpler and more private.
 
 ## 4. Make the bot private
 
-On the Bot tab, turn off Public Bot. With this off, only you can add the bot to
-servers. This matches how Vernissage is meant to run: one bot for one server.
+The goal here is to turn off Public Bot on the Bot tab, so only you can add the
+bot to servers. Discord will not let an app be private while it still advertises
+a default install link, so do this first:
 
-As an extra safeguard, the bot leaves any server that is not the one you
-configure as its home server, so even if it is added elsewhere it will not
-operate there.
+1. In the left sidebar, open the Installation tab.
+2. Find Install Link and change the dropdown to None. Save changes. (This does
+   not affect how you invite the bot; you will invite it with an explicit
+   OAuth2 URL in the next step.)
+3. Go back to the Bot tab and turn off Public Bot. It now saves without the
+   "Private application cannot have a default authorisation link" error.
+
+If you skipped ahead and saw that error, this is the fix: set Install Link to
+None on the Installation tab, then turn off Public Bot.
+
+As an extra safeguard, the bot leaves any server that is not on its configured
+allowlist (`GUILD_IDS`), so even if it is added elsewhere it will not operate
+there.
 
 ## 5. Invite the bot to your server
 
