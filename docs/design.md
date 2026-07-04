@@ -60,7 +60,8 @@ draft -> scheduled -> open -> closed -> drawn -> completed
 - **draft**: created by a mod, editable, not visible to users.
 - **scheduled**: has start/end times, announced or silent until start.
 - **open**: entries accepted between start and end time.
-- **closed**: end time reached, entries frozen, awaiting draw.
+- **closed**: end time reached, entries frozen, awaiting draw. The entry
+  message is edited to drop the Enter button (via the stored `message_id`).
 - **drawn**: winner(s) selected and announced.
 - **completed**: prize handled, raffle archived.
 - **cancelled**: aborted by a mod; logged with reason.
@@ -283,7 +284,7 @@ raffles (
   cooldown_count  INTEGER,
   draw_mode       TEXT,             -- auto or manual
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
-  message_id      TEXT,             -- the announcement/entry message
+  message_id      TEXT,             -- the entry message; edited at close to remove the Enter button
   entrants_hash   TEXT,             -- set at close
   draw_commitment TEXT,             -- SHA-256(secret), published at close (commit-reveal)
   draw_secret     TEXT,             -- the secret, revealed at draw

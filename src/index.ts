@@ -16,7 +16,7 @@ import { buildCommands, type CommandContext } from "./discord/commands/index.js"
 import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEnd.js";
 import { handleEnterButton } from "./discord/commands/raffle/entry.js";
 import { ENTER_PREFIX } from "./discord/components/enterButton.js";
-import { announceOpenRaffle } from "./discord/entryFlow.js";
+import { announceOpenRaffle, closeEntryMessage } from "./discord/entryFlow.js";
 import { makePresenceResolver } from "./discord/memberPresence.js";
 import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
 import { startActivityPruning } from "./scheduler/pruning.js";
@@ -118,6 +118,11 @@ async function main(): Promise<void> {
       // On close, freeze entries and publish the commitment; auto-draw if the
       // raffle draws automatically. Manual raffles wait for `/raffle draw`.
       if (t.to === "closed") {
+        // Retire the entry message's Enter button so it can't be pressed after
+        // entries close. Independent of the draw; guarded so it can't crash the tick.
+        void closeEntryMessage(db, notifier, t.raffleId).catch((err) =>
+          console.error(`Failed to close entry message for raffle ${t.raffleId}:`, err),
+        );
         void onRaffleClosed(
           db,
           notifier,

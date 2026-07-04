@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatClosedEntryMessage,
   formatEntryMessage,
   resolveAnnounceChannelId,
   type EntryMessageInput,
@@ -60,6 +61,22 @@ describe("formatEntryMessage", () => {
       minAccountAgeDays: null,
     });
     expect(body).toMatch(/open to everyone/i);
+  });
+});
+
+describe("formatClosedEntryMessage", () => {
+  it("marks the raffle closed and keeps the prize", () => {
+    const { title, body } = formatClosedEntryMessage({ name: "Summer Giveaway", prize: "A vinyl record" });
+    expect(title).toContain("Summer Giveaway");
+    expect(title).toContain("(closed)");
+    expect(body).toContain("A vinyl record");
+    expect(body).toMatch(/entries are now closed/i);
+  });
+
+  it("falls back to a default name and omits the prize line when unset", () => {
+    const { title, body } = formatClosedEntryMessage({ name: null, prize: null });
+    expect(title).toContain("Raffle");
+    expect(body).not.toMatch(/prize/i);
   });
 });
 

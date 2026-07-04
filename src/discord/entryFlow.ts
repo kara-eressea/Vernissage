@@ -11,7 +11,11 @@
 
 import type { Database } from "better-sqlite3";
 import { AUDIT_EVENTS } from "../core/auditEvents.js";
-import { resolveAnnounceChannelId, formatEntryMessage } from "../core/announceFormat.js";
+import {
+  resolveAnnounceChannelId,
+  formatEntryMessage,
+  formatClosedEntryMessage,
+} from "../core/announceFormat.js";
 import { checkEligibility } from "../core/eligibility.js";
 import { resolveEntrySettings } from "../core/settings.js";
 import { activityWindow } from "../core/time.js";
@@ -185,4 +189,29 @@ export async function announceOpenRaffle(
   if (messageId) {
     updateRaffleFields(db, raffleId, { message_id: messageId });
   }
+}
+
+/**
+ * When a raffle closes, edit its entry message to say entries are closed and
+ * drop the Enter button, so members don't press a button that now rejects them.
+ * Best-effort and idempotent: a no-op if the raffle never stored a message id or
+ * its channel can't be resolved. The message id was saved by `announceOpenRaffle`.
+ */
+export async function closeEntryMessage(
+  db: Database,
+  notifier: Notifier,
+  raffleId: number,
+): Promise<void> {
+  const raffle = getRaffle(db, raffleId);
+  if (!raffle || !raffle.message_id) {
+    return;
+  }
+  const guild = getGuild(db, raffle.guild_id);
+  const channelId = resolveAnnounceChannelId(raffle.channel_id, guild?.announce_channel ?? null);
+  if (!channelId) {
+    return;
+  }
+  const content = formatClosedEntryMessage({ name: raffle.name, prize: raffle.prize });
+  // Empty components remove the Enter button.
+  await notifier.editMessage(channelId, raffle.message_id, `**${content.title}**\n${content.body}`, []);
 }

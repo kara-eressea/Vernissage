@@ -83,3 +83,21 @@ export function formatEntryMessage(raffle: EntryMessageInput): EntryMessageConte
 
   return { title, body: lines.join("\n") };
 }
+
+/**
+ * The entry message rewritten for a closed raffle: same header, but stating that
+ * entries are closed. The Discord adapter drops the Enter button when it applies
+ * this, so a closed raffle no longer shows a live (and now-rejecting) button.
+ */
+export function formatClosedEntryMessage(raffle: {
+  name: string | null;
+  prize: string | null;
+}): EntryMessageContent {
+  const title = `🎟️ ${raffle.name ?? "Raffle"} (closed)`;
+  const lines: string[] = [];
+  if (raffle.prize) {
+    lines.push(`**Prize:** ${raffle.prize}`);
+  }
+  lines.push("**Entries are now closed.** The winner will be announced shortly.");
+  return { title, body: lines.join("\n") };
+}

@@ -12,7 +12,7 @@ import {
   updateRaffleFields,
   type RaffleFieldPatch,
 } from "../../src/db/repositories/raffles.js";
-import { attemptEntry } from "../../src/discord/entryFlow.js";
+import { attemptEntry, closeEntryMessage } from "../../src/discord/entryFlow.js";
 import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
 let db: Database;
@@ -24,6 +24,7 @@ const DAY = "2026-07-15";
 beforeEach(() => {
   db = openDb(":memory:");
   notifier.mirrorAudit.mockClear();
+  notifier.editMessage.mockClear();
 });
 afterEach(() => db.close());
 
@@ -161,5 +162,33 @@ describe("countRafflesSince", () => {
     createDraft(db, "g2", "mod1", "2026-07-01T00:00:00.000Z"); // other guild
 
     expect(countRafflesSince(db, "g1", "2026-07-05T00:00:00.000Z")).toBe(2);
+  });
+});
+
+describe("closeEntryMessage", () => {
+  it("edits the stored entry message to drop the button and mark it closed", async () => {
+    const id = seedOpenRaffle({ channel_id: "chan1", message_id: "msg1" });
+
+    await closeEntryMessage(db, notifier, id);
+
+    expect(notifier.editMessage).toHaveBeenCalledTimes(1);
+    const [channelId, messageId, content, components] = notifier.editMessage.mock.calls[0]!;
+    expect(channelId).toBe("chan1");
+    expect(messageId).toBe("msg1");
+    expect(content).toContain("(closed)");
+    expect(content).toContain("Entries are now closed");
+    expect(components).toEqual([]); // Enter button removed
+  });
+
+  it("is a no-op when the raffle never stored a message id", async () => {
+    const id = seedOpenRaffle({ channel_id: "chan1" }); // no message_id
+    await closeEntryMessage(db, notifier, id);
+    expect(notifier.editMessage).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when no announce channel can be resolved", async () => {
+    const id = seedOpenRaffle({ channel_id: null, message_id: "msg1" }); // no channel, no guild default
+    await closeEntryMessage(db, notifier, id);
+    expect(notifier.editMessage).not.toHaveBeenCalled();
   });
 });

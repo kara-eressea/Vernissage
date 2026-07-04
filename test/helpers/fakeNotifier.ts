@@ -18,5 +18,6 @@ export function makeFakeNotifier() {
     postEntryMessage: vi.fn().mockResolvedValue(undefined),
     postAudit: vi.fn().mockResolvedValue(undefined),
     postAnnouncement: vi.fn().mockResolvedValue(undefined),
+    editMessage: vi.fn().mockResolvedValue(undefined),
   } satisfies Notifier;
 }

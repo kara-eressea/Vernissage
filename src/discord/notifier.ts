@@ -28,6 +28,20 @@ interface SendableChannel {
   }): Promise<{ id: string }>;
 }
 
+/** A text channel whose messages we can edit by id. */
+interface EditableChannel {
+  messages: {
+    edit(
+      messageId: string,
+      payload: {
+        content: string;
+        components?: readonly unknown[];
+        allowedMentions?: { parse: [] };
+      },
+    ): Promise<unknown>;
+  };
+}
+
 export interface Notifier {
   /** Resolve the guild's audit channel, or undefined if unset/missing/non-text. */
   resolveAuditChannel(guildId: string): Promise<SendableChannel | undefined>;
@@ -53,6 +67,16 @@ export interface Notifier {
    * user mentions so winners are pinged. Never throws; undefined on failure.
    */
   postAnnouncement(channelId: string, content: string): Promise<string | undefined>;
+  /**
+   * Edit a previously-posted message in place (e.g. the entry message at close,
+   * to drop the Enter button). Mentions suppressed. Never throws.
+   */
+  editMessage(
+    channelId: string,
+    messageId: string,
+    content: string,
+    components?: readonly unknown[],
+  ): Promise<void>;
 }
 
 /**
@@ -164,7 +188,34 @@ export function createNotifier(client: Client, db: Database): Notifier {
     }
   }
 
-  return { resolveAuditChannel, mirrorAudit, postEntryMessage, postAudit, postAnnouncement };
+  async function editMessage(
+    channelId: string,
+    messageId: string,
+    content: string,
+    components: readonly unknown[] = [],
+  ): Promise<void> {
+    try {
+      const channel = await client.channels.fetch(channelId);
+      if (channel && channel.isTextBased() && "messages" in channel) {
+        await (channel as unknown as EditableChannel).messages.edit(messageId, {
+          content,
+          components,
+          allowedMentions: { parse: [] },
+        });
+      }
+    } catch (err) {
+      console.error(`Failed to edit message ${messageId} in channel ${channelId}:`, err);
+    }
+  }
+
+  return {
+    resolveAuditChannel,
+    mirrorAudit,
+    postEntryMessage,
+    postAudit,
+    postAnnouncement,
+    editMessage,
+  };
 }
 
 /**

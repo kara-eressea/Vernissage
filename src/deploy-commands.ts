@@ -22,6 +22,7 @@ const noopNotifier: Notifier = {
   postEntryMessage: async () => undefined,
   postAudit: async () => undefined,
   postAnnouncement: async () => undefined,
+  editMessage: async () => undefined,
 };
 
 async function main(): Promise<void> {
