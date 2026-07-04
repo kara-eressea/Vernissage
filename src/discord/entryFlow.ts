@@ -55,7 +55,7 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
     default_cooldown_count: guild?.default_cooldown_count ?? null,
   });
 
-  const wins = getUserWins(db, userId);
+  const wins = getUserWins(db, raffle.guild_id, userId);
   const latestWonAt = wins.reduce<string | null>(
     (latest, w) => (latest === null || w.wonAt > latest ? w.wonAt : latest),
     null,

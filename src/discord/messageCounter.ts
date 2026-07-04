@@ -68,17 +68,18 @@ export function attachMessageCounter(
   client: Client,
   db: Database,
   counter: MessageCounter,
-  homeGuildId: string,
+  allowedGuildIds: readonly string[],
   flushIntervalMs: number = DEFAULT_FLUSH_INTERVAL_MS,
 ): MessageCounterHandle {
+  const allowed = new Set(allowedGuildIds);
   client.on(Events.MessageCreate, (message) => {
     if (!isCountableMessage(message)) {
       return;
     }
-    // Only the home guild's activity is ever counted. A foreign guild is left
-    // on join, but a message can arrive in the brief window before that
-    // completes; dropping it here keeps stray rows out of the activity table.
-    if (message.guildId !== homeGuildId) {
+    // Only count activity in allowlisted guilds. A foreign guild is left on
+    // join, but a message can arrive in the brief window before that completes;
+    // dropping it here keeps stray rows out of the activity table.
+    if (message.guildId === null || !allowed.has(message.guildId)) {
       return;
     }
     const guildId = message.guildId;

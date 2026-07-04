@@ -8,11 +8,13 @@ By the end you will have three values for your `.env` file:
 
 - `DISCORD_TOKEN`: the bot's secret token.
 - `DISCORD_APP_ID`: the application's ID.
-- `HOME_GUILD_ID`: the ID of your server.
+- `GUILD_IDS`: the ID of your server, or a comma-separated list of servers.
 
-Vernissage is a private bot for one server. It does not need any privileged
-intents, and it does not read the text of your messages. It only counts how many
-messages members send in the channels you choose.
+Vernissage is a private bot. It is usually run for one server, but it can serve
+several (for example a test server alongside your main one); each server's
+activity, raffles, and settings are kept separate. It does not need any
+privileged intents, and it does not read the text of your messages. It only
+counts how many messages members send in the channels you choose.
 
 ## 1. Create the application
 
@@ -83,7 +85,11 @@ role or permission, give the bot's role View Channel and Send Messages there.
 
 1. In Discord, open User Settings, then Advanced, and turn on Developer Mode.
 2. Right-click your server's icon or name and choose Copy Server ID. This is your
-   `HOME_GUILD_ID`.
+   `GUILD_IDS`.
+
+To run in more than one server, repeat the invite step (step 5) for each server,
+collect each server's ID here, and list them all in `GUILD_IDS` separated by
+commas.
 
 ## 7. Put the values in your .env file
 
@@ -92,8 +98,11 @@ Copy `.env.example` to `.env` and fill in the three values you collected:
 ```
 DISCORD_TOKEN=your-bot-token
 DISCORD_APP_ID=your-application-id
-HOME_GUILD_ID=your-server-id
+GUILD_IDS=your-server-id
 ```
+
+For several servers, separate the IDs with commas, for example
+`GUILD_IDS=111111111111111111,222222222222222222`.
 
 Do not commit `.env` to version control. It contains your secret token.
 
@@ -138,8 +147,8 @@ full list of commands.
 - The bot appears offline. Check that it is actually running and that
   `DISCORD_TOKEN` is correct. A wrong or reset token will prevent it from
   connecting. The bot logs an error on startup if the token is invalid.
-- The bot joined and then left immediately. That means the server it joined does
-  not match `HOME_GUILD_ID`. Confirm the ID is your server's ID and restart the
+- The bot joined and then left immediately. That means the server it joined is
+  not listed in `GUILD_IDS`. Confirm the server's ID is included and restart the
   bot.
 - The bot cannot post in a channel. Give the bot's role View Channel and Send
   Messages in that channel.

@@ -1,10 +1,12 @@
 # Vernissage
 
-Vernissage is a Discord bot for running free, activity-gated raffles in a single
-server. Entry costs nothing, but only members who have been active recently can
-enter, and winners are chosen in a way that anyone can independently verify was
-fair. It is a private bot: it serves one configured server and leaves any other
-server it is added to.
+Vernissage is a Discord bot for running free, activity-gated raffles. Entry costs
+nothing, but only members who have been active recently can enter, and winners
+are chosen in a way that anyone can independently verify was fair. It is a
+private bot: it serves only the servers you configure and leaves any other server
+it is added to. It is typically run for one server, but supports several (for
+example a test server alongside your main one); each server's activity, raffles,
+and settings are kept separate.
 
 ## What it does
 
@@ -54,10 +56,12 @@ server's ID. For a detailed, step-by-step walkthrough with troubleshooting, see
    your server.
 7. Get your server's ID. In Discord, enable Developer Mode (User Settings,
    Advanced), then right-click your server and choose Copy Server ID. This is
-   your `HOME_GUILD_ID`.
+   your `GUILD_IDS`. To run in more than one server (for example a test server),
+   list each ID separated by commas, and repeat this step and the invite step for
+   each server.
 
-The bot serves only this one server. If it is ever added to another server, it
-leaves on its own.
+The bot serves only the servers you list in `GUILD_IDS`. If it is ever added to
+any other server, it leaves on its own.
 
 ## Configuration
 
@@ -68,8 +72,11 @@ The bot reads its settings from environment variables. Copy `.env.example` to
 | ----------------- | -------- | ------------------------------------------------------------------ |
 | `DISCORD_TOKEN`   | Yes      | The bot token from the Developer Portal.                           |
 | `DISCORD_APP_ID`  | Yes      | The application ID, used to register slash commands.               |
-| `HOME_GUILD_ID`   | Yes      | The ID of the one server the bot is allowed to operate in.         |
+| `GUILD_IDS`       | Yes      | Comma-separated list of server IDs the bot may operate in. One ID for a single server, or several (for example a test server and your main server). The bot leaves any server not listed. |
 | `DATABASE_PATH`   | No       | Path to the SQLite database file. Defaults to `./vernissage.db`.   |
+
+The old single-server variable `HOME_GUILD_ID` still works as a fallback when
+`GUILD_IDS` is not set, so existing setups need no change.
 
 Everything else, such as the audit channel, the moderator role, and default
 raffle settings, is configured from inside Discord with the `/raffle config`

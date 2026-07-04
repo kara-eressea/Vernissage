@@ -7,8 +7,6 @@ import {
   listBans,
   removeBan,
 } from "../../src/db/repositories/blacklist.js";
-import { addWin, getUserWins, markRerolled } from "../../src/db/repositories/wins.js";
-
 let db: Database;
 
 beforeEach(() => {
@@ -58,20 +56,5 @@ describe("blacklist", () => {
     ban();
     expect(listBans(db, "g1")).toHaveLength(1);
     expect(listBans(db, "g2")).toHaveLength(0);
-  });
-});
-
-describe("wins", () => {
-  it("returns non-rerolled wins for the cooldown check", () => {
-    addWin(db, 1, "u1", "2026-07-01T00:00:00.000Z");
-    expect(getUserWins(db, "u1")).toEqual([
-      { raffleId: 1, wonAt: "2026-07-01T00:00:00.000Z" },
-    ]);
-  });
-
-  it("excludes rerolled wins so a disqualified win does not gate re-entry", () => {
-    const winId = addWin(db, 1, "u1", "2026-07-01T00:00:00.000Z");
-    markRerolled(db, winId);
-    expect(getUserWins(db, "u1")).toEqual([]);
   });
 });

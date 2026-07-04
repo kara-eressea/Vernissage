@@ -65,22 +65,20 @@ export function activeWinnerIds(db: Database, raffleId: number): string[] {
 }
 
 /**
- * A user's non-rerolled wins, as core WinRecords for the cooldown check.
- * Rerolled wins are excluded — a disqualified win should not gate re-entry.
- *
- * Note: `wins` has no `guild_id`, so this is not guild-scoped. That is correct
- * only under the single-home-guild constraint (the bot leaves any other guild);
- * the time-based win cooldown would need a guild filter here before any
- * multi-guild support. The count-based mode already scopes by guild via
- * countRafflesSince.
+ * A user's non-rerolled wins in a guild, as core WinRecords for the cooldown
+ * check. Rerolled wins are excluded — a disqualified win should not gate
+ * re-entry. Scoped to the guild by joining through the win's raffle, so a win in
+ * one server never gates entry in another (the count-based mode is likewise
+ * scoped via countRafflesSince).
  */
-export function getUserWins(db: Database, userId: string): WinRecord[] {
+export function getUserWins(db: Database, guildId: string, userId: string): WinRecord[] {
   const rows = db
     .prepare(
-      `SELECT raffle_id, won_at FROM wins
-       WHERE user_id = ? AND rerolled = 0 AND won_at IS NOT NULL
-       ORDER BY won_at ASC`,
+      `SELECT w.raffle_id, w.won_at FROM wins w
+       JOIN raffles r ON r.raffle_id = w.raffle_id
+       WHERE w.user_id = ? AND r.guild_id = ? AND w.rerolled = 0 AND w.won_at IS NOT NULL
+       ORDER BY w.won_at ASC`,
     )
-    .all(userId) as Array<{ raffle_id: number; won_at: string }>;
+    .all(userId, guildId) as Array<{ raffle_id: number; won_at: string }>;
   return rows.map((r) => ({ raffleId: r.raffle_id, wonAt: r.won_at }));
 }
