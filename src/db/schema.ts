@@ -5,15 +5,15 @@
  * types) so a later move to Postgres is straightforward. All timestamps are UTC
  * ISO strings; message content is never stored, only counts.
  *
- * This is a single flattened baseline. The schema evolved through incremental
- * migrations up to version 7; since no database exists below that version, the
- * incremental steps were collapsed into this one CREATE-everything baseline. The
- * version marker stays at 7 so any already-migrated database is left untouched
- * and any future change adds a `current < 8` step (see migrate.ts).
+ * This started as a single flattened baseline. The schema evolved through
+ * incremental migrations up to version 7; those were collapsed into this
+ * CREATE-everything baseline. Later changes add an incremental step in migrate.ts
+ * (v8 added raffles.draw_disqualified) and are also reflected here so a fresh
+ * database is created at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS raffles (
   entrants_hash   TEXT,
   draw_commitment TEXT,
   draw_secret     TEXT,
+  -- JSON array of entrant ids disqualified by the draw failsafe (left the guild
+  -- or blacklisted at draw). Frozen at draw so a later reroll excludes them and
+  -- reproduces the selection over the same committed entrant list. Null until a
+  -- draw disqualifies someone.
+  draw_disqualified TEXT,
   drand_round     INTEGER,
   created_by      TEXT,
   created_at      TEXT

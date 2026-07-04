@@ -37,9 +37,11 @@ import { isBlacklisted } from "../db/repositories/blacklist.js";
 import { listEntrants, removeEntry } from "../db/repositories/entries.js";
 import { getGuild } from "../db/repositories/guilds.js";
 import {
+  disqualifiedEntrants,
   getRaffle,
   listByStatusAllGuilds,
   setDrawCommitment,
+  setDrawDisqualified,
   setEntrantsHash,
   setStatus,
   type RaffleRow,
@@ -60,6 +62,9 @@ export interface DrawAnnouncer {
 
 /** Produces a fresh draw secret. Injectable so tests are deterministic. */
 export type SecretGenerator = () => string;
+
+/** A winner disqualified by the draw failsafe and why. */
+type Disqualification = { id: string; reason: "left_guild" | "blacklisted" };
 
 /**
  * Resolves which of `candidateIds` are still present in the guild. Returns the
@@ -180,15 +185,23 @@ export async function executeDraw(
   await commitOnClose(db, announcer, raffleId, now, generate);
 
   const raffle = getRaffle(db, raffleId);
-  if (!raffle || raffle.entrants_hash === null || raffle.draw_secret === null) {
+  if (
+    !raffle ||
+    raffle.entrants_hash === null ||
+    raffle.draw_secret === null ||
+    raffle.draw_commitment === null
+  ) {
     // Unreachable after a successful commit, but fail safe rather than throw.
     return { ok: false, reason: "not_closed" };
   }
   const entrantsHash = raffle.entrants_hash;
   const secret = raffle.draw_secret;
-  const commitment = raffle.draw_commitment ?? commitSecret(secret);
+  const commitment = raffle.draw_commitment;
 
   // The frozen entrant list is the one the published hash was computed over.
+  // Entries are not mutated between here and the transaction, and after the
+  // draw the only removals are the failsafe ones recorded in draw_disqualified,
+  // so this same committed list is reconstructable at reroll time.
   const entrants = listEntrants(db, raffleId);
   const seed = deriveSeed(entrantsHash, secret);
 
@@ -199,12 +212,12 @@ export async function executeDraw(
   // The loop is bounded: `excluded` strictly grows each pass, so it terminates
   // when the winner set is all valid or the eligible pool is exhausted.
   const excluded = new Set<string>();
-  const removals: Array<{ id: string; reason: "left_guild" | "blacklisted" }> = [];
+  const removals: Disqualification[] = [];
   let winners =
     entrants.length === 0 ? [] : selectWinners(entrants, seed, raffle.winner_count, excluded);
   while (winners.length > 0) {
     const present = resolveMembers ? await resolveMembers(raffle.guild_id, winners) : null;
-    const invalid: Array<{ id: string; reason: "left_guild" | "blacklisted" }> = [];
+    const invalid: Disqualification[] = [];
     for (const w of winners) {
       if (present && !present.has(w)) {
         invalid.push({ id: w, reason: "left_guild" });
@@ -242,6 +255,12 @@ export async function executeDraw(
         createdAt: now,
       });
     }
+    // Freeze the disqualified set so a later reroll reconstructs the committed
+    // entrant list (active entries + these) and excludes them, keeping every
+    // reroll reproducible over the same list the published hash covers.
+    if (removals.length > 0) {
+      setDrawDisqualified(db, raffleId, removals.map((r) => r.id));
+    }
     for (const winner of winners) {
       addWin(db, raffleId, winner, now);
     }
@@ -251,8 +270,14 @@ export async function executeDraw(
       raffleId,
       eventType: AUDIT_EVENTS.raffleDrawn,
       actorId: "system",
+      // Distinguish a genuinely empty raffle from one whose every eligible
+      // winner was disqualified by the failsafe (entrants existed, none valid).
       payload: winners.length === 0
-        ? { winners, reason: "no_entrants", excluded: [...excluded] }
+        ? {
+            winners,
+            reason: entrants.length === 0 ? "no_entrants" : "no_eligible_winners",
+            excluded: [...excluded],
+          }
         : { winners, seed, secret, entrantsHash, commitment, excluded: [...excluded] },
       createdAt: now,
     });
@@ -333,7 +358,13 @@ export async function rerollWinner(
   const entrantsHash = raffle.entrants_hash;
   const secret = raffle.draw_secret;
 
-  const entrants = listEntrants(db, raffleId);
+  // Reconstruct the frozen entrant list the commitment covers: the still-active
+  // entries plus the ids the draw failsafe removed (draw_disqualified). Sorting
+  // matches the order commit froze, so `selectWinners` reproduces the same
+  // indices — selecting over the current (shrunk) list instead would change the
+  // entrant count and break verifiability.
+  const disqualified = disqualifiedEntrants(raffle);
+  const committedEntrants = [...listEntrants(db, raffleId), ...disqualified].sort();
   const seed = deriveSeed(entrantsHash, secret);
   let replacement: string | null = null;
 
@@ -354,12 +385,16 @@ export async function rerollWinner(
       return;
     }
     markRerolled(db, winId);
-    const excluded = new Set(
-      listWinsForRaffle(db, raffleId)
+    // Exclude every rerolled winner and every id the draw failsafe disqualified,
+    // so the reroll never reselects a removed winner and stays a faithful
+    // continuation of the committed draw.
+    const excluded = new Set<string>([
+      ...disqualified,
+      ...listWinsForRaffle(db, raffleId)
         .filter((w) => w.rerolled === 1)
         .map((w) => w.user_id),
-    );
-    const selection = selectWinners(entrants, seed, raffle.winner_count, excluded);
+    ]);
+    const selection = selectWinners(committedEntrants, seed, raffle.winner_count, excluded);
     const active = new Set(activeWinnerIds(db, raffleId));
     const replacements = selection.filter((id) => !active.has(id));
     for (const id of replacements) {

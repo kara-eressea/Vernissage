@@ -153,6 +153,15 @@ set) and needs no per-win seed stored. The disqualifying reason is recorded in
 the audit_log row (mod-visible) but not published, mirroring the blacklist
 rule.
 
+Crucially, the reroll (and the draw failsafe below) re-run selection over the
+*frozen committed entrant list* — the exact list the published hash covers —
+not the current set of active entries. The draw failsafe soft-removes winners
+who left or were blacklisted, so the live entry list can be smaller than the
+committed one; those removed ids are frozen in `raffles.draw_disqualified` and
+added back (then excluded) when reconstructing the committed list, so the
+entrant count and therefore every selection index stay identical to the draw a
+verifier reproduces from public data.
+
 ## Auditability
 - A designated audit channel (read-only for members) receives:
   - Raffle created, edited, opened, closed, drawn, cancelled.
@@ -278,6 +287,7 @@ raffles (
   entrants_hash   TEXT,             -- set at close
   draw_commitment TEXT,             -- SHA-256(secret), published at close (commit-reveal)
   draw_secret     TEXT,             -- the secret, revealed at draw
+  draw_disqualified TEXT,           -- JSON array of ids the draw failsafe removed (frozen for reroll)
   drand_round     INTEGER,          -- committed at close (reserved for the drand path)
   created_by      TEXT,
   created_at      TEXT
@@ -355,11 +365,16 @@ wizard_state (
 - User leaves the server after entering: handled as a failsafe on the pulled
   winners, not the whole entrant list. At draw, each selected winner is checked
   against current guild membership and the blacklist; a winner who has left the
-  server or been blacklisted since entering has their entry removed (logged) and
-  is excluded, and the draw re-runs from the same base seed with them excluded
-  (verifiable exactly like a reroll — the excluded ids are published). Only
-  winners are checked, so this stays cheap regardless of entrant count. A
-  non-winning entrant who left is harmless and left untouched.
+  server or been blacklisted since entering has their entry removed (logged),
+  recorded in `raffles.draw_disqualified`, and excluded, and the draw re-runs
+  from the same base seed with them excluded (verifiable exactly like a reroll —
+  the excluded ids are published). Selection runs over the frozen committed
+  entrant list, so a later reroll reproduces the same indices even though the
+  live entry list shrank. If every eligible winner is disqualified the raffle is
+  drawn with no winner and logged as `no_eligible_winners` (distinct from the
+  genuinely empty `no_entrants`). Only winners are checked, so this stays cheap
+  regardless of entrant count. A non-winning entrant who left is harmless and
+  left untouched.
 - Ties between blacklist expiry and open raffles: expiry lifts the ban but
   does not restore removed entries.
 - Editing activity requirements after entries exist: disallow; only end-time
@@ -391,8 +406,9 @@ functions, and formats replies.
   exemption, duplicate entry) with passing and failing cases, including
   boundary values (exactly X messages, window edges at UTC midnight).
 - Draw tests: deterministic given a seed (fixed seed in, same winner out),
-  correct multi-winner iteration without duplicates, reroll uses the next
-  seed iteration, zero-entrant case.
+  correct multi-winner iteration without duplicates, reroll re-selecting over
+  the frozen committed list from the same base seed with disqualified ids
+  excluded (including after a draw-time failsafe removal), zero-entrant case.
 - Database tests against in-memory SQLite (better-sqlite3 `:memory:`),
   covering activity bucket writes and pruning, entry uniqueness, and audit
   log writes on every state change.

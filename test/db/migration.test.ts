@@ -62,6 +62,22 @@ describe("schema", () => {
     db.close();
   });
 
+  it("upgrades a pre-v8 database by adding raffles.draw_disqualified", () => {
+    const db = openDb(":memory:");
+    // Simulate a v7 database created before the column existed.
+    db.exec(`ALTER TABLE raffles DROP COLUMN draw_disqualified`);
+    db.prepare(`INSERT INTO raffles (guild_id, status) VALUES ('g1', 'closed')`).run();
+    db.pragma("user_version = 7");
+
+    migrate(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    expect(columnNames(db, "raffles")).toContain("draw_disqualified");
+    // The upgrade preserves existing rows.
+    expect(db.prepare(`SELECT guild_id FROM raffles`).get()).toEqual({ guild_id: "g1" });
+    db.close();
+  });
+
   it("is idempotent — running migrate again does not error or change the version", () => {
     const db = openDb(":memory:");
     expect(() => migrate(db)).not.toThrow();

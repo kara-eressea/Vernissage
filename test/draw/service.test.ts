@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
 import { commitSecret, verifyCommitment } from "../../src/core/commitReveal.js";
+import { deriveSeed, hashEntrants, selectWinners } from "../../src/core/draw.js";
 import { addBan } from "../../src/db/repositories/blacklist.js";
 import { addEntry } from "../../src/db/repositories/entries.js";
 import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import {
   createDraft,
+  disqualifiedEntrants,
   getRaffle,
   setStatus,
   updateRaffleFields,
@@ -79,6 +81,14 @@ function auditTypes(raffleId: number): string[] {
       .prepare(`SELECT event_type FROM audit_log WHERE raffle_id = ? ORDER BY event_id`)
       .all(raffleId) as Array<{ event_type: string }>
   ).map((r) => r.event_type);
+}
+
+/** The `reason` field of the raffle_drawn audit payload (present on a no-winner draw). */
+function drawnReason(raffleId: number): string | undefined {
+  const row = db
+    .prepare(`SELECT payload FROM audit_log WHERE raffle_id = ? AND event_type = 'raffle_drawn'`)
+    .get(raffleId) as { payload: string } | undefined;
+  return row ? (JSON.parse(row.payload).reason as string | undefined) : undefined;
 }
 
 describe("commitOnClose", () => {
@@ -228,6 +238,36 @@ describe("executeDraw winner failsafe", () => {
     expect(removedReason(raffleId, "d")).toBe("blacklisted");
     expect(auditTypes(raffleId)).toEqual(["draw_committed", "entry_removed", "raffle_drawn"]);
   });
+
+  it("freezes the disqualified set for reroll and publishes it", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    const resolveMembers = async (_g: string, ids: string[]) =>
+      new Set(ids.filter((id) => id !== "d"));
+
+    await executeDraw(db, announcer, raffleId, NOW, gen, resolveMembers);
+
+    // The removed winner is persisted so a later reroll can reconstruct the
+    // committed entrant list, and is published in the result post.
+    expect(disqualifiedEntrants(getRaffle(db, raffleId)!)).toEqual(["d"]);
+    expect(announcer.auditPosts.at(-1)).toContain("Excluded");
+  });
+
+  it("draws no winner (not 'no_entrants') when every eligible winner is disqualified", async () => {
+    const raffleId = seedClosedRaffle(["a", "b"]);
+    const announcer = fakeAnnouncer();
+    // Nobody is still present: the failsafe drains the pool to empty.
+    const resolveMembers = async () => new Set<string>();
+
+    const outcome = await executeDraw(db, announcer, raffleId, NOW, gen, resolveMembers);
+
+    expect(outcome).toEqual({ ok: true, winners: [] });
+    expect(getRaffle(db, raffleId)!.status).toBe("drawn");
+    // Entrants existed, so the reason distinguishes this from a truly empty raffle.
+    expect(drawnReason(raffleId)).toBe("no_eligible_winners");
+    expect(new Set(disqualifiedEntrants(getRaffle(db, raffleId)!))).toEqual(new Set(["a", "b"]));
+    expect(announcer.announcements.at(-1)).toContain("no eligible entrants");
+  });
 });
 
 describe("rerollWinner", () => {
@@ -269,6 +309,53 @@ describe("rerollWinner", () => {
     // "d" is rerolled once; a single replacement "c" is active; one reroll audit.
     expect(activeWinnerIds(db, raffleId)).toEqual(["c"]);
     expect(auditTypes(raffleId)).toEqual(["draw_committed", "raffle_drawn", "draw_reroll"]);
+  });
+
+  it("reproduces over the frozen committed list after a draw-time disqualification", async () => {
+    // Regression: the draw failsafe soft-removes a winner who left, shrinking the
+    // live entry list. A later reroll must still select over the *committed* list
+    // (all 5 entrants), not the shrunk one, or the result is unverifiable and the
+    // entrant count (and every index) shifts.
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    const announcer = fakeAnnouncer();
+    // "d" is the natural winner; report everyone present except "d" so the
+    // failsafe disqualifies "d" and draws "c" as the replacement.
+    const resolveMembers = async (_g: string, ids: string[]) =>
+      new Set(ids.filter((id) => id !== "d"));
+    await executeDraw(db, announcer, raffleId, NOW, gen, resolveMembers);
+    expect(activeWinnerIds(db, raffleId)).toEqual(["c"]); // "d" removed from entries
+    const cWinId = listWinsForRaffle(db, raffleId).find((w) => w.user_id === "c")!.win_id;
+
+    const outcome = await rerollWinner(db, announcer, raffleId, cWinId, "no show", NOW);
+
+    // Independently reproduce from public data: the committed list is all five
+    // entrants (the published hash covers them), excluding the disqualified "d"
+    // and the rerolled "c". The next eligible id is "a".
+    const committed = ["a", "b", "c", "d", "e"];
+    const seed = deriveSeed(hashEntrants(committed), SECRET);
+    const expected = selectWinners(committed, seed, 1, new Set(["c", "d"]))[0];
+    expect(expected).toBe("a");
+    expect(outcome).toEqual({ ok: true, disqualified: "c", replacement: "a" });
+
+    // Sanity: selecting over the shrunk live list (the bug) would not give "a",
+    // so this scenario genuinely discriminates the fix from the regression.
+    const shrunk = ["a", "b", "c", "e"];
+    expect(selectWinners(shrunk, seed, 1, new Set(["c"]))[0]).not.toBe("a");
+  });
+
+  it("returns no replacement when the eligible pool is exhausted", async () => {
+    const raffleId = seedClosedRaffle(["a"]);
+    const announcer = fakeAnnouncer();
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+    const winId = listWinsForRaffle(db, raffleId)[0]!.win_id; // the win for "a"
+    const before = announcer.announcements.length;
+
+    const outcome = await rerollWinner(db, announcer, raffleId, winId, "left", NOW);
+
+    // Only entrant is disqualified -> no replacement, no public announcement.
+    expect(outcome).toEqual({ ok: true, disqualified: "a", replacement: null });
+    expect(announcer.announcements.length).toBe(before);
+    expect(announcer.auditPosts.at(-1)).toContain("no replacement available");
   });
 
   it("rejects rerolling a non-winner or a raffle that is not drawn", async () => {

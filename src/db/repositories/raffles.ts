@@ -32,6 +32,7 @@ export interface RaffleRow {
   entrants_hash: string | null;
   draw_commitment: string | null;
   draw_secret: string | null;
+  draw_disqualified: string | null;
   drand_round: number | null;
   created_by: string | null;
   created_at: string | null;
@@ -213,6 +214,28 @@ export function setDrawCommitment(
   db.prepare(
     `UPDATE raffles SET draw_commitment = ?, draw_secret = ? WHERE raffle_id = ?`,
   ).run(commitment, secret, raffleId);
+}
+
+/**
+ * Persist the set of entrants disqualified by the draw failsafe (winners who
+ * left the guild or were blacklisted at draw). Frozen at draw so a later reroll
+ * excludes them and reselects over the same committed entrant list. Stored as a
+ * JSON array of ids; the list is read back with `disqualifiedEntrants`.
+ */
+export function setDrawDisqualified(
+  db: Database,
+  raffleId: number,
+  ids: string[],
+): void {
+  db.prepare(`UPDATE raffles SET draw_disqualified = ? WHERE raffle_id = ?`).run(
+    JSON.stringify(ids),
+    raffleId,
+  );
+}
+
+/** The draw-disqualified entrant ids for a raffle (empty when none/uncommitted). */
+export function disqualifiedEntrants(raffle: RaffleRow): string[] {
+  return raffle.draw_disqualified ? (JSON.parse(raffle.draw_disqualified) as string[]) : [];
 }
 
 /**

@@ -40,8 +40,10 @@ export function deriveSeed(entrantsHash: string, randomness: string): string {
 /**
  * The next seed in the iteration: seed_n = SHA-256(seed_{n-1}).
  *
- * Used both to select multiple winners and to reroll a disqualified winner, so
- * a reroll stays verifiable as "the next value the committed formula produces".
+ * Used to advance between picks when selecting multiple winners (and to skip an
+ * already-chosen or excluded index). A reroll does not use a fresh seed — it
+ * re-runs `selectWinners` from the same base seed with the disqualified ids
+ * excluded — so this is only the intra-selection iterator.
  */
 export function nextSeed(seed: string): string {
   return sha256Hex(seed);
