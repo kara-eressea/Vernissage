@@ -1,5 +1,4 @@
-import type { ChatInputCommandInteraction } from "discord.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../../src/config.js";
 import { openDb } from "../../../src/db/index.js";
@@ -11,23 +10,15 @@ import {
 import { getWizardState } from "../../../src/db/repositories/wizardState.js";
 import { handleCancel, handleCreate, handleEdit } from "../../../src/discord/commands/raffle/manage.js";
 import type { CommandContext } from "../../../src/discord/commands/index.js";
+import { makeFakeNotifier } from "../../helpers/fakeNotifier.js";
+import { fakeChatInput } from "../../helpers/fakeInteraction.js";
 
 let db: Database;
 let ctx: CommandContext;
 
 beforeEach(() => {
   db = openDb(":memory:");
-  ctx = {
-    db,
-    config: {} as BotConfig,
-    notifier: {
-      resolveAuditChannel: async () => undefined,
-      mirrorAudit: async () => undefined,
-      postEntryMessage: async () => undefined,
-      postAudit: async () => undefined,
-      postAnnouncement: async () => undefined,
-    },
-  };
+  ctx = { db, config: {} as BotConfig, notifier: makeFakeNotifier() };
 });
 
 afterEach(() => {
@@ -41,44 +32,13 @@ function auditRows(): Array<{ event_type: string; payload: string | null }> {
   }>;
 }
 
-interface FakeOpts {
-  manageGuild?: boolean;
+/** A mod (Manage Server) in g1, acting as "mod1", unless overridden. */
+function fakeInteraction(opts: {
   subcommand: string;
+  manageGuild?: boolean;
   values?: Record<string, unknown>;
-}
-
-function fakeInteraction(opts: FakeOpts): ChatInputCommandInteraction & {
-  reply: ReturnType<typeof vi.fn>;
-  showModal: ReturnType<typeof vi.fn>;
-} {
-  const values = opts.values ?? {};
-  const get = (name: string, required?: boolean): unknown => {
-    const v = values[name];
-    if (v === undefined) {
-      if (required) throw new Error(`missing required option ${name}`);
-      return null;
-    }
-    return v;
-  };
-  return {
-    guildId: "g1",
-    user: { id: "mod1" },
-    guild: { ownerId: "owner" },
-    member: { roles: { cache: new Map() } },
-    memberPermissions: { has: () => opts.manageGuild ?? true },
-    isChatInputCommand: () => true,
-    isModalSubmit: () => false,
-    options: {
-      getSubcommand: () => opts.subcommand,
-      getInteger: (name: string, required?: boolean) => get(name, required),
-      getString: (name: string, required?: boolean) => get(name, required),
-    },
-    reply: vi.fn().mockResolvedValue(undefined),
-    showModal: vi.fn().mockResolvedValue(undefined),
-  } as unknown as ChatInputCommandInteraction & {
-    reply: ReturnType<typeof vi.fn>;
-    showModal: ReturnType<typeof vi.fn>;
-  };
+}) {
+  return fakeChatInput({ userId: "mod1", manageGuild: opts.manageGuild ?? true, ...opts });
 }
 
 describe("handleCreate", () => {

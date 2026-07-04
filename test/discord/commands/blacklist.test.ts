@@ -1,4 +1,3 @@
-import type { ChatInputCommandInteraction } from "discord.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../../src/config.js";
@@ -13,63 +12,37 @@ import {
   handleUnban,
 } from "../../../src/discord/commands/raffle/blacklist.js";
 import type { CommandContext } from "../../../src/discord/commands/index.js";
+import { makeFakeNotifier } from "../../helpers/fakeNotifier.js";
+import { fakeChatInput } from "../../helpers/fakeInteraction.js";
 
 let db: Database;
 let ctx: CommandContext;
-let mirrored: Array<{ eventType: string; raffleId: number | null }>;
+let notifier: ReturnType<typeof makeFakeNotifier>;
 
 beforeEach(() => {
   db = openDb(":memory:");
-  mirrored = [];
-  ctx = {
-    db,
-    config: {} as BotConfig,
-    notifier: {
-      resolveAuditChannel: async () => undefined,
-      mirrorAudit: async (e) => {
-        mirrored.push({ eventType: e.eventType, raffleId: e.raffleId });
-      },
-      postEntryMessage: async () => undefined,
-      postAudit: async () => undefined,
-      postAnnouncement: async () => undefined,
-    },
-  };
+  notifier = makeFakeNotifier();
+  ctx = { db, config: {} as BotConfig, notifier };
 });
 
 afterEach(() => {
   db.close();
 });
 
-interface FakeOpts {
-  isMod?: boolean;
-  values?: Record<string, unknown>;
+/** The event types mirrored to the audit channel, in order. */
+function mirroredEventTypes(): string[] {
+  return notifier.mirrorAudit.mock.calls.map(([event]) => event.eventType);
 }
 
-function fakeInteraction(opts: FakeOpts): ChatInputCommandInteraction & {
-  reply: ReturnType<typeof vi.fn>;
-} {
-  const values = opts.values ?? {};
-  const get = (name: string, required?: boolean): unknown => {
-    const v = values[name];
-    if (v === undefined) {
-      if (required) throw new Error(`missing required option ${name}`);
-      return null;
-    }
-    return v;
-  };
+/** A moderator ("mod1") by default; `isMod: false` models a non-mod. */
+function fakeInteraction(opts: { isMod?: boolean; values?: Record<string, unknown> } = {}) {
   const isMod = opts.isMod ?? true;
-  return {
-    guildId: "g1",
-    user: { id: "mod1" },
-    guild: { ownerId: isMod ? "mod1" : "someone-else" },
-    member: { roles: { cache: new Map() } },
-    memberPermissions: { has: () => isMod },
-    options: {
-      getUser: (name: string, required?: boolean) => get(name, required),
-      getString: (name: string, required?: boolean) => get(name, required),
-    },
-    reply: vi.fn().mockResolvedValue(undefined),
-  } as unknown as ChatInputCommandInteraction & { reply: ReturnType<typeof vi.fn> };
+  return fakeChatInput({
+    userId: "mod1",
+    ownerId: isMod ? "mod1" : "someone-else",
+    manageGuild: isMod,
+    values: opts.values,
+  });
 }
 
 function replyText(interaction: { reply: ReturnType<typeof vi.fn> }): string {
@@ -97,7 +70,7 @@ describe("handleBan", () => {
     expect(isBlacklisted(db, "g1", "u1", new Date().toISOString())).toBe(true);
     expect(hasEntry(db, raffleId, "u1")).toBe(false);
     // Both a ban and the entry removal were mirrored to the audit channel.
-    expect(mirrored.map((m) => m.eventType)).toEqual(["blacklist_added", "entry_removed"]);
+    expect(mirroredEventTypes()).toEqual(["blacklist_added", "entry_removed"]);
     // The mod sees the reason in their ephemeral reply...
     expect(replyText(interaction)).toContain("spamming");
     // ...but it never enters the DB audit payload.

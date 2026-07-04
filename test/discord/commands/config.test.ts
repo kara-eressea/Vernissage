@@ -1,5 +1,4 @@
-import type { ChatInputCommandInteraction } from "discord.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../../src/config.js";
 import { openDb } from "../../../src/db/index.js";
@@ -14,23 +13,15 @@ import {
 } from "../../../src/db/repositories/guilds.js";
 import { handleConfig } from "../../../src/discord/commands/raffle/config.js";
 import type { CommandContext } from "../../../src/discord/commands/index.js";
+import { makeFakeNotifier } from "../../helpers/fakeNotifier.js";
+import { fakeChatInput, type FakeChatInputOpts } from "../../helpers/fakeInteraction.js";
 
 let db: Database;
 let ctx: CommandContext;
 
 beforeEach(() => {
   db = openDb(":memory:");
-  ctx = {
-    db,
-    config: {} as BotConfig,
-    notifier: {
-      resolveAuditChannel: async () => undefined,
-      mirrorAudit: async () => undefined,
-      postEntryMessage: async () => undefined,
-      postAudit: async () => undefined,
-      postAnnouncement: async () => undefined,
-    },
-  };
+  ctx = { db, config: {} as BotConfig, notifier: makeFakeNotifier() };
 });
 
 afterEach(() => {
@@ -45,45 +36,9 @@ function auditRows(): Array<{ event_type: string; actor_id: string | null }> {
   }>;
 }
 
-interface FakeOpts {
-  guildId?: string | null;
-  userId?: string;
-  ownerId?: string;
-  roleIds?: string[];
-  manageGuild?: boolean;
-  subcommand: string;
-  values?: Record<string, unknown>;
-}
-
-/** A fake ChatInputCommandInteraction covering only what the config handlers read. */
-function fakeInteraction(opts: FakeOpts): ChatInputCommandInteraction & {
-  reply: ReturnType<typeof vi.fn>;
-} {
-  const values = opts.values ?? {};
-  const get = (name: string, required?: boolean): unknown => {
-    const v = values[name];
-    if (v === undefined) {
-      if (required) throw new Error(`missing required option ${name}`);
-      return null;
-    }
-    return v;
-  };
-  return {
-    guildId: opts.guildId === undefined ? "g1" : opts.guildId,
-    user: { id: opts.userId ?? "u1" },
-    guild: { ownerId: opts.ownerId ?? "owner" },
-    member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
-    memberPermissions: { has: () => opts.manageGuild ?? false },
-    options: {
-      getSubcommand: () => opts.subcommand,
-      getChannel: (name: string, required?: boolean) => get(name, required),
-      getRole: (name: string) => get(name),
-      getInteger: (name: string) => get(name),
-      getString: (name: string, required?: boolean) => get(name, required),
-      getBoolean: (name: string) => get(name),
-    },
-    reply: vi.fn().mockResolvedValue(undefined),
-  } as unknown as ChatInputCommandInteraction & { reply: ReturnType<typeof vi.fn> };
+/** A non-privileged member by default (config's permission tests set the gate explicitly). */
+function fakeInteraction(opts: FakeChatInputOpts & { subcommand: string }) {
+  return fakeChatInput(opts);
 }
 
 describe("handleConfig — permission gate", () => {

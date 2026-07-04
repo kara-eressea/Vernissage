@@ -9,15 +9,10 @@ import {
 import { getWizardState, upsertWizardStep } from "../../src/db/repositories/wizardState.js";
 import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import { createWizard, type WizardInteraction } from "../../src/discord/wizard/index.js";
+import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
 let db: Database;
-const notifier = {
-  resolveAuditChannel: async () => undefined,
-  mirrorAudit: vi.fn().mockResolvedValue(undefined),
-  postEntryMessage: async () => undefined,
-  postAudit: async () => undefined,
-  postAnnouncement: async () => undefined,
-};
+const notifier = makeFakeNotifier();
 
 beforeEach(() => {
   db = openDb(":memory:");

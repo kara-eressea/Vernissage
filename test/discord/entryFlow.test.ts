@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
 import { incrementActivity } from "../../src/db/repositories/activity.js";
@@ -13,23 +13,17 @@ import {
   type RaffleFieldPatch,
 } from "../../src/db/repositories/raffles.js";
 import { attemptEntry } from "../../src/discord/entryFlow.js";
-import type { Notifier } from "../../src/discord/notifier.js";
+import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
 let db: Database;
-const notifier: Notifier = {
-  resolveAuditChannel: async () => undefined,
-  mirrorAudit: vi.fn().mockResolvedValue(undefined),
-  postEntryMessage: async () => undefined,
-  postAudit: async () => undefined,
-  postAnnouncement: async () => undefined,
-};
+const notifier = makeFakeNotifier();
 
 const NOW = "2026-07-15T12:00:00.000Z";
 const DAY = "2026-07-15";
 
 beforeEach(() => {
   db = openDb(":memory:");
-  (notifier.mirrorAudit as ReturnType<typeof vi.fn>).mockClear();
+  notifier.mirrorAudit.mockClear();
 });
 afterEach(() => db.close());
 
