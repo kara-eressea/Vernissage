@@ -35,7 +35,8 @@ rules, the draw scheme, and the data model, see [docs/design.md](docs/design.md)
 ## Discord setup
 
 You need three values from Discord: a bot token, an application ID, and your
-server's ID.
+server's ID. For a detailed, step-by-step walkthrough with troubleshooting, see
+[docs/discord-setup.md](docs/discord-setup.md). The short version is below.
 
 1. Open the Discord Developer Portal and create a new application.
 2. On the General Information page, copy the Application ID. This is your
@@ -99,6 +100,60 @@ This is the recommended way to run the bot around the clock.
 
 To stop the bot, run `docker compose down`. Your data is kept in a named volume
 and is not deleted.
+
+The steps above build the image locally from a clone of this repository. If you
+would rather not build it yourself, use the published image instead, as
+described next.
+
+### Using the published image
+
+Each tagged release is published as a container image to the GitHub Container
+Registry at `ghcr.io/mtaanquist/vernissage`. To run that image instead of
+building your own, you only need a `.env` file and a small `compose.yaml`; you do
+not need to clone the repository.
+
+1. Create a `.env` file with the three required values (see Configuration
+   above), in an empty directory.
+2. In the same directory, create a `compose.yaml`:
+
+   ```yaml
+   services:
+     bot:
+       image: ghcr.io/mtaanquist/vernissage:latest
+       restart: unless-stopped
+       init: true
+       env_file: .env
+       environment:
+         DATABASE_PATH: /data/vernissage.db
+       volumes:
+         - vernissage-data:/data
+
+   volumes:
+     vernissage-data:
+   ```
+
+3. Pull the image and start the bot:
+
+   ```
+   docker compose pull
+   docker compose up -d
+   ```
+
+4. Register the slash commands (a one-time step, and again when commands
+   change):
+
+   ```
+   docker compose run --rm bot node dist/src/deploy-commands.js
+   ```
+
+To update later, run `docker compose pull` followed by `docker compose up -d`.
+Pin to a specific version instead of `latest` (for example
+`ghcr.io/mtaanquist/vernissage:0.1.0`) if you prefer to control upgrades.
+
+The image is tied to this repository. If the package is private, either make it
+public in the repository's package settings, or log in to the registry first
+with `docker login ghcr.io` using a GitHub token that has the `read:packages`
+scope.
 
 ### Networking: no inbound ports needed
 
@@ -241,6 +296,24 @@ back up.
 - Build to `dist/`: `npm run build`
 
 The tests use an in-memory database and do not connect to Discord.
+
+### Cutting a release
+
+Releases are driven by version tags. Pushing a tag that looks like `v1.2.3`
+triggers the release workflow (`.github/workflows/release.yml`), which builds the
+container image for amd64 and arm64 and publishes it to
+`ghcr.io/mtaanquist/vernissage`.
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow tags the image with the full version and the major and minor
+versions (for example `0.1.0`, `0.1`, and `0`), and moves the `latest` tag for
+stable releases. Pre-release tags such as `v0.1.0-rc.1` are published but do not
+move `latest`. Use annotated, semantic version tags so the tags come out as
+expected.
 
 ## License
 
