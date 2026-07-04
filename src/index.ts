@@ -19,6 +19,7 @@ import { ENTER_PREFIX } from "./discord/components/enterButton.js";
 import { announceOpenRaffle, closeEntryMessage } from "./discord/entryFlow.js";
 import { makePresenceResolver } from "./discord/memberPresence.js";
 import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
+import { startClaimSweep } from "./scheduler/claims.js";
 import { startActivityPruning } from "./scheduler/pruning.js";
 import { attachGuildAllowlist } from "./discord/guildAllowlist.js";
 import {
@@ -75,6 +76,10 @@ async function main(): Promise<void> {
 
   // Prune activity rows older than the longest lookback in use, daily.
   const pruning = startActivityPruning(db);
+
+  // Reroll winners who let their claim window lapse, and reconcile any that
+  // expired while the bot was offline.
+  const claimSweep = startClaimSweep(db, notifier);
 
   client.once(Events.ClientReady, (ready) => {
     console.log(
@@ -154,6 +159,7 @@ async function main(): Promise<void> {
     scheduler.stop();
     counting.stop();
     pruning.stop();
+    claimSweep.stop();
     client.destroy();
     db.close();
     process.exit(0);

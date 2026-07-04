@@ -24,6 +24,7 @@ import { addConfigGroup, handleConfig } from "./config.js";
 import { addDrawSubcommands, handleDraw, handleReroll } from "./draw.js";
 import {
   addEntrySubcommands,
+  handleClaim,
   handleEnter,
   handleList,
   handleStatus,
@@ -78,6 +79,9 @@ async function dispatch(
       return;
     case "list":
       await handleList(interaction, ctx);
+      return;
+    case "claim":
+      await handleClaim(interaction, ctx);
       return;
     case "draw":
       await handleDraw(interaction, ctx);

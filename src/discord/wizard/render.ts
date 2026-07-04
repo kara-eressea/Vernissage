@@ -14,6 +14,7 @@ import {
   ChannelSelectMenuBuilder,
   ChannelType,
   ModalBuilder,
+  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -114,6 +115,10 @@ export function drawModal(raffle: RaffleRow): ModalBuilder {
       textInput("cooldown_count", "Winner cooldown in raffles (optional)", {
         value: raffle.cooldown_count,
       }),
+      textInput("claim_window_hours", "Claim window in hours (optional)", {
+        value: raffle.claim_window_hours,
+        placeholder: "24",
+      }),
     );
 }
 
@@ -168,6 +173,45 @@ function exemptSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuild
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
 
+function priorWinnersSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(buildWizardId("eligibility", "priorwin", raffle.raffle_id))
+    .setPlaceholder("Past winners")
+    .addOptions(
+      { label: "Anyone eligible may enter", value: "off", default: raffle.exclude_prior_winners !== 1 },
+      {
+        label: "Bar members who have won here before",
+        value: "on",
+        default: raffle.exclude_prior_winners === 1,
+      },
+    );
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+}
+
+function requiredRoleSelect(raffle: RaffleRow): ActionRowBuilder<RoleSelectMenuBuilder> {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId(buildWizardId("eligibility", "reqrole", raffle.raffle_id))
+    .setPlaceholder("Require a role to enter (optional)")
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (raffle.required_role_id) {
+    menu.setDefaultRoles(raffle.required_role_id);
+  }
+  return new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(menu);
+}
+
+function excludedRoleSelect(raffle: RaffleRow): ActionRowBuilder<RoleSelectMenuBuilder> {
+  const menu = new RoleSelectMenuBuilder()
+    .setCustomId(buildWizardId("eligibility", "exclrole", raffle.raffle_id))
+    .setPlaceholder("Bar a role from entering (optional)")
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (raffle.excluded_role_id) {
+    menu.setDefaultRoles(raffle.excluded_role_id);
+  }
+  return new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(menu);
+}
+
 function announceChannelSelect(raffle: RaffleRow): ActionRowBuilder<ChannelSelectMenuBuilder> {
   const menu = new ChannelSelectMenuBuilder()
     .setCustomId(buildWizardId("summary", "channel", raffle.raffle_id))
@@ -195,10 +239,34 @@ function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBui
 type MessageRow =
   | ActionRowBuilder<ButtonBuilder>
   | ActionRowBuilder<StringSelectMenuBuilder>
+  | ActionRowBuilder<RoleSelectMenuBuilder>
   | ActionRowBuilder<ChannelSelectMenuBuilder>;
 
 function rows(...builders: MessageRow[]): Row[] {
   return builders.map((b) => b.toJSON() as Row);
+}
+
+/**
+ * The eligibility step's "More restrictions…" sub-screen: optional gates that
+ * don't fit the main step's rows — bar past winners, and require or exclude a
+ * role. All default to off/unset. "Back" returns to the eligibility step.
+ */
+export function restrictionsScreen(raffle: RaffleRow): WizardMessage {
+  const id = raffle.raffle_id;
+  return {
+    content:
+      "**Extra restrictions** (all optional)\n" +
+      "Bar past winners, and require or exclude a role. The raffle's creator is always barred from their own raffle.",
+    components: rows(
+      priorWinnersSelect(raffle),
+      requiredRoleSelect(raffle),
+      excludedRoleSelect(raffle),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        button("eligibility", "back", id, "Back to eligibility", ButtonStyle.Primary),
+      ),
+      footerRow("eligibility", id),
+    ),
+  };
 }
 
 /**
@@ -237,6 +305,7 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("eligibility", "nums", id, "Set activity numbers", ButtonStyle.Primary),
             button("eligibility", "defaults", id, "Use defaults"),
+            button("eligibility", "more", id, "More restrictions…"),
             button("eligibility", "next", id, "Next: draw", ButtonStyle.Success),
           ),
           footerRow("eligibility", id),

@@ -121,7 +121,7 @@ export async function handleEdit(
       await wizard.start(interaction, raffleId);
       return;
     }
-    case "extend-end":
+    case "edit-end":
       // Only the end time may change on an open raffle; the modal submit is
       // validated and audited by the editend interaction handler.
       await interaction.showModal(editEndModal(raffle));

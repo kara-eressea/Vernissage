@@ -18,11 +18,17 @@ function baseInput(overrides: Partial<EligibilityInput> = {}): EligibilityInput 
   return {
     status: "open",
     blacklisted: false,
+    isCreator: false,
+    userRoleIds: [],
+    requiredRoleId: null,
+    excludedRoleId: null,
     userSnowflake: oldAccount(),
     minAccountAgeDays: null,
     cooldown: { cooldownDays: null, cooldownCount: null },
     wins: [],
     rafflesSinceLastWin: 0,
+    excludePriorWinners: false,
+    hasPriorWin: false,
     reqMessages: 10,
     reqDays: 14,
     windowAnchor: "start",
@@ -85,6 +91,83 @@ describe("checkEligibility - check order and failures", () => {
       ok: false,
       reason: "already_entered",
     });
+  });
+});
+
+describe("checkEligibility - creator self-exclusion", () => {
+  it("rejects the raffle's creator, after blacklist but before role/age checks", () => {
+    // Also fails activity; is_creator is reported because it is checked earlier.
+    const input = baseInput({ isCreator: true, dailyCounts: [] });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "is_creator" });
+  });
+
+  it("a blacklisted creator still reports blacklist first", () => {
+    const input = baseInput({ isCreator: true, blacklisted: true });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "blacklisted" });
+  });
+});
+
+describe("checkEligibility - role gates", () => {
+  it("rejects a member missing the required role", () => {
+    const input = baseInput({ requiredRoleId: "role-a", userRoleIds: ["role-b"] });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "missing_required_role" });
+  });
+
+  it("accepts a member holding the required role", () => {
+    const input = baseInput({ requiredRoleId: "role-a", userRoleIds: ["role-a", "role-b"] });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+
+  it("rejects a member holding an excluded role", () => {
+    const input = baseInput({ excludedRoleId: "staff", userRoleIds: ["staff"] });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "has_excluded_role" });
+  });
+
+  it("accepts a member without the excluded role", () => {
+    const input = baseInput({ excludedRoleId: "staff", userRoleIds: ["member"] });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+
+  it("required role is checked before excluded role", () => {
+    // Holds the excluded role but lacks the required one: missing-required wins,
+    // matching the documented order.
+    const input = baseInput({
+      requiredRoleId: "subscriber",
+      excludedRoleId: "staff",
+      userRoleIds: ["staff"],
+    });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "missing_required_role" });
+  });
+
+  it("no role gates when both role ids are null", () => {
+    expect(checkEligibility(baseInput({ userRoleIds: [] }))).toEqual({ ok: true });
+  });
+});
+
+describe("checkEligibility - prior-winner exclusion", () => {
+  it("rejects a prior winner when the raffle excludes them, after the cooldown check", () => {
+    const input = baseInput({ excludePriorWinners: true, hasPriorWin: true });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "prior_winner" });
+  });
+
+  it("accepts a prior winner when exclusion is off (the default)", () => {
+    const input = baseInput({ excludePriorWinners: false, hasPriorWin: true });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+
+  it("accepts a never-winner when exclusion is on", () => {
+    const input = baseInput({ excludePriorWinners: true, hasPriorWin: false });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+
+  it("reports the cooldown before prior-winner when both would fire", () => {
+    const input = baseInput({
+      excludePriorWinners: true,
+      hasPriorWin: true,
+      cooldown: { cooldownDays: 30, cooldownCount: null },
+      wins: [{ raffleId: 1, wonAt: "2026-07-10T00:00:00.000Z" }],
+    });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "in_cooldown" });
   });
 });
 

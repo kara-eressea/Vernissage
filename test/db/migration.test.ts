@@ -24,6 +24,19 @@ function indexNames(db: BetterSqlite3.Database, table: string): string[] {
   return (db.pragma(`index_list(${table})`) as Array<{ name: string }>).map((i) => i.name);
 }
 
+/** Strip the post-v9 columns (v10 entry gates, v11 claim window) to simulate an
+ * older database that predates them. */
+function dropPostV9Columns(db: BetterSqlite3.Database): void {
+  db.exec(
+    `ALTER TABLE raffles DROP COLUMN exclude_prior_winners;
+     ALTER TABLE raffles DROP COLUMN required_role_id;
+     ALTER TABLE raffles DROP COLUMN excluded_role_id;
+     ALTER TABLE raffles DROP COLUMN claim_window_hours;
+     ALTER TABLE wins DROP COLUMN claim_deadline;
+     ALTER TABLE wins DROP COLUMN claimed_at`,
+  );
+}
+
 describe("schema", () => {
   it("a fresh database has the full current schema at the current version", () => {
     const db = openDb(":memory:");
@@ -66,21 +79,26 @@ describe("schema", () => {
 
   it("upgrades a pre-v9 database by dropping the redundant idx_entries_raffle", () => {
     const db = openDb(":memory:");
-    // Recreate the index a pre-v9 database would still carry.
+    // Recreate the index a pre-v9 database would still carry, and drop the v10
+    // gate columns it would not yet have.
     db.exec(`CREATE INDEX idx_entries_raffle ON entries (raffle_id)`);
+    dropPostV9Columns(db);
     db.pragma("user_version = 8");
 
     migrate(db);
 
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     expect(indexNames(db, "entries")).not.toContain("idx_entries_raffle");
+    // The v10 step re-adds the gate columns.
+    expect(columnNames(db, "raffles")).toContain("exclude_prior_winners");
     db.close();
   });
 
   it("upgrades a pre-v8 database by adding raffles.draw_disqualified", () => {
     const db = openDb(":memory:");
-    // Simulate a v7 database created before the column existed.
+    // Simulate a v7 database created before these columns existed.
     db.exec(`ALTER TABLE raffles DROP COLUMN draw_disqualified`);
+    dropPostV9Columns(db);
     db.prepare(`INSERT INTO raffles (guild_id, status) VALUES ('g1', 'closed')`).run();
     db.pragma("user_version = 7");
 
@@ -88,6 +106,7 @@ describe("schema", () => {
 
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     expect(columnNames(db, "raffles")).toContain("draw_disqualified");
+    expect(columnNames(db, "raffles")).toContain("required_role_id");
     // The upgrade preserves existing rows.
     expect(db.prepare(`SELECT guild_id FROM raffles`).get()).toEqual({ guild_id: "g1" });
     db.close();

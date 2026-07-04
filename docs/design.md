@@ -76,9 +76,20 @@ automatic at close or manually triggered by a mod (configurable per raffle).
 2. Bot checks, in order:
    - Raffle is open.
    - User is not blacklisted.
+   - User is not the raffle's creator. A raffle's creator (the mod who made it,
+     stored in `raffles.created_by`) can never enter their own raffle. This is
+     always enforced and needs no configuration or extra storage.
+   - Role gates, if configured (both optional, off by default): the user holds
+     the raffle's `required_role_id`, and does not hold its `excluded_role_id`.
+     Roles are read live from the guild member object at check time, so gaining
+     or losing a role takes effect immediately; no membership is stored.
    - User's Discord account meets the minimum account age, if set (derived
      from the user id snowflake, no extra storage needed).
    - User is not within a win cooldown.
+   - If the raffle has `exclude_prior_winners` set, the user has no prior
+     non-rerolled win in this guild (a lifetime bar, distinct from the win
+     cooldown's time/count window; off by default). A rerolled/disqualified win
+     does not count, mirroring the cooldown rule.
    - User meets the activity requirement: X messages within the Y-day
      window. The window anchor is set per raffle: "anchored" measures the Y
      days before raffle start (default, prevents qualifying by spamming
@@ -88,6 +99,10 @@ automatic at close or manually triggered by a mod (configurable per raffle).
      server within the last J days (join date read from the guild member
      object at check time).
    - User has not already entered.
+
+All of these are evaluated at entry time and short-circuit on the first failure,
+so a rejected user is told exactly which gate they failed and is never recorded
+as entered — they cannot mistake ineligibility for a lost draw.
 3. On success: entry recorded, ephemeral confirmation to user, audit log
    entry written.
 4. On failure: ephemeral message explaining which check failed (mods may
@@ -103,6 +118,26 @@ automatic at close or manually triggered by a mod (configurable per raffle).
   draw has completed (status `drawn` or `completed`) and whose start time is
   after the user's most recent non-rerolled win. A rerolled (disqualified) win
   does not gate re-entry.
+
+### Winner claim window
+- Optional, per raffle (`claim_window_hours`), off by default. When set, a winner
+  must claim their prize before a per-win deadline or forfeit the slot.
+- At draw, each winner's `wins.claim_deadline` is set to the draw instant plus the
+  window; `wins.claimed_at` is null until they claim. A winner claims with
+  `/raffle claim` (the public winner announcement tells them to and shows the
+  deadline). Claiming is idempotent and guarded, so a double-click or a race with
+  the expiry sweep records at most one claim.
+- An in-process sweep (alongside the scheduler's other periodic tasks) finds wins
+  whose deadline has passed with no claim, on raffles still `drawn`, and rerolls
+  each lapsed slot via the normal reroll (reason `unclaimed`): the same base seed,
+  the disqualified/rerolled ids excluded, the next eligible entrant selected over
+  the frozen committed list — so it stays provably fair. The replacement starts
+  its own claim window from the reroll instant, and a still-unclaimed replacement
+  is caught on a later sweep. When the eligible pool is exhausted the reroll fills
+  no slot and logs it (`no_eligible_winners`, mirroring the draw failsafe). The
+  sweep also runs once at startup, catching deadlines that lapsed while offline.
+- A claim writes a `win_claimed` audit row; the reason on an `unclaimed` reroll
+  stays in the audit payload, not the public post, mirroring the blacklist rule.
 
 ### Blacklist
 - Mod-only commands: /raffle ban, /raffle unban, /raffle banlist.
@@ -184,12 +219,15 @@ verifier reproduces from public data.
 - /raffle status [raffle] - own eligibility: activity progress, cooldown,
   entry status. Ephemeral.
 - /raffle list - open and upcoming raffles.
+- /raffle claim [raffle] - claim a prize won under a raffle's claim window,
+  before the deadline. Ephemeral.
 
 ### Moderator (permission-gated by role)
 - /raffle create - opens a guided wizard (see below). Power users can pass
   options directly on the command to prefill steps.
-- /raffle edit - modify a draft or scheduled raffle. Open raffles allow only
-  end-time extension, and edits are audit-logged.
+- /raffle edit - modify a draft or scheduled raffle. On an open raffle only the
+  end time may change — corrected earlier or later, but not before the raffle's
+  start — and edits are audit-logged.
 - /raffle cancel <raffle> <reason>.
 - /raffle draw <raffle> - manual draw trigger if configured.
 - /raffle reroll <raffle> <winner> <reason> - if a winner is disqualified;
@@ -213,9 +251,13 @@ Flow (ephemeral message, driven by buttons, select menus, and modals):
    markup so the mod sees it in their own timezone before confirming.
 3. Eligibility step: select menus for window anchor and new-member
    exemption, plus a modal for X messages, Y days, minimum account age.
-   Each field shows the guild default and can be left as-is.
+   Each field shows the guild default and can be left as-is. A "More
+   restrictions" sub-screen (kept off the main step because Discord caps a
+   message at five component rows) holds the optional gates: bar prior winners
+   (toggle), and require/exclude a role (role select menus). All default to
+   off/unset; the creator self-exclusion is always on and needs no control.
 4. Draw step: winner count, draw mode (auto at close or manual), cooldown
-   override.
+   override, and an optional claim window in hours (blank/0 = off).
 5. Summary card showing every setting in plain language (for example "To
    enter, members must have sent at least 20 messages in the 14 days before
    the raffle starts"), with buttons: Confirm and schedule, Edit a step,
@@ -281,8 +323,12 @@ raffles (
   new_member_exempt INTEGER DEFAULT 0, -- 1 = exemption enabled
   new_member_days INTEGER,          -- J, joined within J days bypasses activity check
   min_account_age_days INTEGER,     -- null = guild default
+  exclude_prior_winners INTEGER DEFAULT 0, -- 1 = bar anyone who has won here before
+  required_role_id TEXT,            -- must hold this role to enter; null = no gate
+  excluded_role_id TEXT,            -- barred from entering if held; null = no gate
   cooldown_days   INTEGER,          -- null = guild default
   cooldown_count  INTEGER,
+  claim_window_hours INTEGER,       -- winners must claim within N hours; null/0 = off
   draw_mode       TEXT,             -- auto or manual
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the entry message; edited at close to remove the Enter button
@@ -309,7 +355,9 @@ wins (
   raffle_id  INTEGER,
   user_id    TEXT,
   won_at     TEXT,
-  rerolled   INTEGER DEFAULT 0      -- 1 if later disqualified
+  rerolled   INTEGER DEFAULT 0,     -- 1 if later disqualified
+  claim_deadline TEXT,              -- claim window: must claim by this instant; null = no claim
+  claimed_at     TEXT               -- when the winner claimed; null until claimed
 )
 
 blacklist (
@@ -347,8 +395,9 @@ wizard_state (
   and slash commands).
 - Database: SQLite via better-sqlite3 for v1. Schema kept portable so a move
   to Postgres is straightforward if multi-guild scale demands it.
-- Scheduler: in-process interval task checking raffle transitions. On startup,
-  reconcile any transitions missed while offline.
+- Scheduler: in-process interval tasks checking raffle transitions, expired
+  claim windows, and activity pruning. On startup, reconcile anything missed
+  while offline (transitions, pending draws, and lapsed claim windows).
 - Hosting: small VPS or always-on container. The bot must run continuously to
   count messages; serverless is unsuitable.
 - Private bot: "Public Bot" disabled in the developer portal so only the
@@ -383,8 +432,11 @@ wizard_state (
   left untouched.
 - Ties between blacklist expiry and open raffles: expiry lifts the ban but
   does not restore removed entries.
-- Editing activity requirements after entries exist: disallow; only end-time
-  extension is editable while open.
+- Editing activity requirements after entries exist: disallow; only the end time
+  is editable while open. It may be corrected earlier or later (to fix a
+  mis-scheduled close) but never before the raffle's start; entries already
+  placed are kept. An end moved to at/before "now" simply closes the raffle on
+  the scheduler's next tick.
 - Winner selection when entrant count is 0: raffle marked drawn with no
   winner, logged.
 - Multiple concurrent raffles per guild: supported; entry button binds to a
@@ -395,7 +447,6 @@ wizard_state (
 ## Out of scope for v1 (future ideas)
 - Web dashboard for configuration and public audit viewing.
 - drand integration if fallback commit-reveal is used first.
-- Role-based entry requirements (e.g. must have role R).
 - Server join age requirements beyond the new-member exemption logic.
 - Export of audit history as CSV/JSON via command.
 

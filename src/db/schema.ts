@@ -9,12 +9,13 @@
  * incremental migrations up to version 7; those were collapsed into this
  * CREATE-everything baseline. Later changes add an incremental step in migrate.ts
  * (v8 added raffles.draw_disqualified; v9 dropped the redundant
- * idx_entries_raffle) and are also reflected here so a fresh database is created
- * at the current version directly.
+ * idx_entries_raffle; v10 added the prior-winner and role entry gates; v11 added
+ * the winner claim window) and are also reflected here so a fresh database is
+ * created at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 11;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -73,8 +74,18 @@ CREATE TABLE IF NOT EXISTS raffles (
   new_member_exempt INTEGER NOT NULL DEFAULT 0,
   new_member_days INTEGER,
   min_account_age_days INTEGER,
+  -- Optional entry gates, all off/unset by default (design.md "Entry flow"):
+  -- bar anyone who has ever won here, and require/exclude a single role. The
+  -- creator self-exclusion needs no column (it reads created_by at entry time).
+  exclude_prior_winners INTEGER NOT NULL DEFAULT 0,
+  required_role_id TEXT,
+  excluded_role_id TEXT,
   cooldown_days   INTEGER,
   cooldown_count  INTEGER,
+  -- Winner claim window in hours; null/0 = off. When set, each winner must claim
+  -- before their per-win deadline or the scheduler rerolls the slot (design.md
+  -- "Winner claim window").
+  claim_window_hours INTEGER,
   draw_mode       TEXT,
   channel_id      TEXT,
   message_id      TEXT,
@@ -110,7 +121,9 @@ CREATE TABLE IF NOT EXISTS wins (
   raffle_id  INTEGER NOT NULL,
   user_id    TEXT NOT NULL,
   won_at     TEXT,
-  rerolled   INTEGER NOT NULL DEFAULT 0
+  rerolled   INTEGER NOT NULL DEFAULT 0,
+  claim_deadline TEXT,               -- claim window: deadline to claim by (null = no claim)
+  claimed_at     TEXT                -- when the winner claimed, null until claimed
 );
 
 CREATE INDEX IF NOT EXISTS idx_wins_user

@@ -27,8 +27,12 @@ export interface RaffleDraftFields {
   new_member_exempt: number | null;
   new_member_days: number | null;
   min_account_age_days: number | null;
+  exclude_prior_winners: number | null;
+  required_role_id: string | null;
+  excluded_role_id: string | null;
   cooldown_days: number | null;
   cooldown_count: number | null;
+  claim_window_hours: number | null;
   draw_mode: string | null;
 }
 
@@ -107,15 +111,20 @@ export function validateEligibility(
   return ok;
 }
 
-/** Step 4: winner count and draw mode. */
+/** Step 4: winner count, draw mode, and optional claim window. */
 export function validateDraw(
-  fields: Pick<RaffleDraftFields, "winner_count" | "draw_mode">,
+  fields: Pick<RaffleDraftFields, "winner_count" | "draw_mode"> & {
+    claim_window_hours?: number | null;
+  },
 ): Validation {
   if (fields.winner_count === null || fields.winner_count < 1) {
     return err("There must be at least 1 winner.");
   }
   if (fields.draw_mode === null || !(DRAW_MODES as readonly string[]).includes(fields.draw_mode)) {
     return err("The draw mode must be 'auto' or 'manual'.");
+  }
+  if (fields.claim_window_hours != null && fields.claim_window_hours < 1) {
+    return err("The claim window must be at least 1 hour (leave blank to disable).");
   }
   return ok;
 }
@@ -164,11 +173,11 @@ export function isCancellable(status: string): boolean {
 }
 
 /** How `/raffle edit` should treat a raffle, based on its status. */
-export type EditMode = "wizard" | "extend-end" | "rejected";
+export type EditMode = "wizard" | "edit-end" | "rejected";
 
 /**
  * Draft/scheduled raffles reopen the full wizard; open raffles allow only an
- * end-time extension; anything drawn or later cannot be edited (design.md edit
+ * end-time correction; anything drawn or later cannot be edited (design.md edit
  * constraint).
  */
 export function editModeForStatus(status: string): EditMode {
@@ -176,26 +185,28 @@ export function editModeForStatus(status: string): EditMode {
     return "wizard";
   }
   if (status === "open") {
-    return "extend-end";
+    return "edit-end";
   }
   return "rejected";
 }
 
 /**
- * Open raffles may only have their end time extended (design.md edit
- * constraint). Accepts a strictly-later end, rejects equal or earlier.
+ * While a raffle is open its end time may be corrected — moved earlier or later
+ * to fix a scheduling mistake — but never before the raffle's start (a raffle
+ * cannot end before it began). Setting an end at or before "now" simply lets the
+ * scheduler close it on its next tick; entries already placed are kept
+ * (design.md edit constraint).
  */
-export function validateOpenRaffleEdit(oldEndsAt: string | null, newEndsAt: string): Validation {
+export function validateOpenRaffleEdit(startsAt: string | null, newEndsAt: string): Validation {
   const next = Date.parse(newEndsAt);
   if (Number.isNaN(next)) {
     return err("The new end time is invalid.");
   }
-  if (oldEndsAt === null) {
-    return err("This raffle has no end time to extend.");
+  if (startsAt === null) {
+    return err("This raffle has no start time.");
   }
-  const prev = Date.parse(oldEndsAt);
-  if (next <= prev) {
-    return err("An open raffle's end time can only be extended, not shortened.");
+  if (next <= Date.parse(startsAt)) {
+    return err("The end time must be after the raffle started.");
   }
   return ok;
 }

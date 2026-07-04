@@ -121,12 +121,18 @@ export interface WinnerAnnouncement {
   raffleName: string | null;
   prize: string | null;
   winners: string[];
+  /**
+   * When the raffle has a claim window, the winners' claim deadline (UTC ISO).
+   * A note is appended telling winners to claim before it or forfeit the slot.
+   */
+  claimDeadline?: string | null;
 }
 
 /**
  * The public winner announcement for the raffle's announce channel. Winners are
  * mentioned (and pinged, unlike the quiet audit posts). Zero winners yields a
- * "no eligible entrants" note (design.md zero-entrant edge case).
+ * "no eligible entrants" note (design.md zero-entrant edge case). When a claim
+ * deadline is given, a line instructs winners to run `/raffle claim` before it.
  */
 export function formatWinnerAnnouncement(input: WinnerAnnouncement): string {
   const name = input.raffleName ?? "the raffle";
@@ -136,5 +142,12 @@ export function formatWinnerAnnouncement(input: WinnerAnnouncement): string {
   const winners = input.winners.map(userMention).join(", ");
   const prize = input.prize ? ` — ${input.prize}` : "";
   const label = input.winners.length === 1 ? "Winner" : "Winners";
-  return `🎉 **${name}** — congratulations to the ${label}: ${winners}${prize}!`;
+  const line = `🎉 **${name}** — congratulations to the ${label}: ${winners}${prize}!`;
+  if (input.claimDeadline) {
+    return (
+      `${line}\n⏳ Claim with \`/raffle claim\` by ${discordTimestamp(input.claimDeadline, "R")} ` +
+      `or the prize is rerolled to someone else.`
+    );
+  }
+  return line;
 }

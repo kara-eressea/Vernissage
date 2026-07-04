@@ -14,21 +14,81 @@ export interface WinRow {
   user_id: string;
   won_at: string | null;
   rerolled: number;
+  claim_deadline: string | null;
+  claimed_at: string | null;
 }
 
-/** Record a win. Returns the generated win_id. */
+/**
+ * Record a win. Returns the generated win_id. `claimDeadline` is set when the
+ * raffle has a claim window (the winner must claim before it); pass null when no
+ * claim is required (design.md "Winner claim window").
+ */
 export function addWin(
   db: Database,
   raffleId: number,
   userId: string,
   wonAt: string,
+  claimDeadline: string | null = null,
 ): number {
   const info = db
     .prepare(
-      `INSERT INTO wins (raffle_id, user_id, won_at) VALUES (?, ?, ?)`,
+      `INSERT INTO wins (raffle_id, user_id, won_at, claim_deadline) VALUES (?, ?, ?, ?)`,
     )
-    .run(raffleId, userId, wonAt);
+    .run(raffleId, userId, wonAt, claimDeadline);
   return Number(info.lastInsertRowid);
+}
+
+/**
+ * Mark a winner's prize as claimed, but only if the win is still live and
+ * unclaimed. Returns whether it was recorded (false if already claimed, already
+ * rerolled, or the id is unknown) — the atomic guard against a double-claim race.
+ */
+export function claimWin(db: Database, winId: number, claimedAt: string): boolean {
+  const info = db
+    .prepare(
+      `UPDATE wins SET claimed_at = ?
+       WHERE win_id = ? AND claimed_at IS NULL AND rerolled = 0`,
+    )
+    .run(claimedAt, winId);
+  return info.changes > 0;
+}
+
+/**
+ * A user's current (non-rerolled) win in a raffle, claimed or not, or undefined.
+ * The claim path reads this to tell "not a winner" from "already claimed".
+ */
+export function getActiveWinForUser(
+  db: Database,
+  raffleId: number,
+  userId: string,
+): WinRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM wins
+       WHERE raffle_id = ? AND user_id = ? AND rerolled = 0
+       ORDER BY win_id ASC LIMIT 1`,
+    )
+    .get(raffleId, userId) as WinRow | undefined;
+}
+
+/**
+ * Wins whose claim deadline has passed with no claim recorded, across all
+ * guilds, on raffles still `drawn`. These are the slots the scheduler sweep
+ * rerolls to the next eligible entrant (design.md "Winner claim window").
+ */
+export function listExpiredUnclaimedWins(db: Database, nowIso: string): WinRow[] {
+  return db
+    .prepare(
+      `SELECT w.* FROM wins w
+       JOIN raffles r ON r.raffle_id = w.raffle_id
+       WHERE r.status = 'drawn'
+         AND w.rerolled = 0
+         AND w.claimed_at IS NULL
+         AND w.claim_deadline IS NOT NULL
+         AND w.claim_deadline <= ?
+       ORDER BY w.win_id ASC`,
+    )
+    .all(nowIso) as WinRow[];
 }
 
 /** Mark a win as rerolled (the winner was disqualified). */

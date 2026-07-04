@@ -54,6 +54,16 @@ export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
     );
   }
 
+  if (settings.exclude_prior_winners === 1) {
+    lines.push("Members who have won a raffle here before cannot enter.");
+  }
+  if (settings.required_role_id) {
+    lines.push(`Only members with the <@&${settings.required_role_id}> role can enter.`);
+  }
+  if (settings.excluded_role_id) {
+    lines.push(`Members with the <@&${settings.excluded_role_id}> role cannot enter.`);
+  }
+
   const winnerCount = settings.winner_count ?? 1;
   const drawMode = settings.draw_mode === "manual" ? "drawn manually by a mod" : "drawn automatically at close";
   lines.push(`${plural(winnerCount, "winner")} will be ${drawMode}.`);
@@ -63,6 +73,12 @@ export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
     if (settings.cooldown_days) parts.push(`${plural(settings.cooldown_days, "day")}`);
     if (settings.cooldown_count) parts.push(`${plural(settings.cooldown_count, "raffle")}`);
     lines.push(`Winners must wait ${parts.join(" and ")} before entering again.`);
+  }
+
+  if (settings.claim_window_hours && settings.claim_window_hours > 0) {
+    lines.push(
+      `Winners must claim within ${plural(settings.claim_window_hours, "hour")} or their prize is rerolled to someone else.`,
+    );
   }
 
   return lines;

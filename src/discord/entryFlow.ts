@@ -41,6 +41,8 @@ export interface EntryContext {
   raffle: RaffleRow;
   guild: GuildRow | undefined;
   userId: string;
+  /** Role ids the member currently holds, for the role gates. */
+  userRoleIds: string[];
   /** When the user joined the guild (UTC ISO), or null if unknown. */
   joinedAt: string | null;
   now: string;
@@ -77,11 +79,17 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
   return {
     status: raffle.status as EligibilityInput["status"],
     blacklisted: isBlacklisted(db, raffle.guild_id, userId, now),
+    isCreator: raffle.created_by !== null && raffle.created_by === userId,
+    userRoleIds: ctx.userRoleIds,
+    requiredRoleId: raffle.required_role_id,
+    excludedRoleId: raffle.excluded_role_id,
     userSnowflake: userId,
     minAccountAgeDays: settings.minAccountAgeDays,
     cooldown: { cooldownDays: settings.cooldownDays, cooldownCount: settings.cooldownCount },
     wins,
     rafflesSinceLastWin,
+    excludePriorWinners: raffle.exclude_prior_winners === 1,
+    hasPriorWin: wins.length > 0,
     reqMessages,
     reqDays,
     windowAnchor,

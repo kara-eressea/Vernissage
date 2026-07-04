@@ -8,10 +8,13 @@
  * Order (design.md "Entry flow"):
  *   1. raffle is open
  *   2. user is not blacklisted
- *   3. account meets minimum age
- *   4. user is not within a win cooldown
- *   5. activity requirement (with new-member exemption)
- *   6. user has not already entered
+ *   3. user did not create this raffle
+ *   4. role gates: has the required role, lacks the excluded role
+ *   5. account meets minimum age
+ *   6. user is not within a win cooldown
+ *   7. user is not a barred prior winner
+ *   8. activity requirement (with new-member exemption)
+ *   9. user has not already entered
  */
 
 import { meetsMinAccountAge } from "./accountAge.js";
@@ -101,6 +104,18 @@ export function checkEligibility(input: EligibilityInput): EligibilityResult {
     return { ok: false, reason: "blacklisted" };
   }
 
+  if (input.isCreator) {
+    return { ok: false, reason: "is_creator" };
+  }
+
+  if (input.requiredRoleId !== null && !input.userRoleIds.includes(input.requiredRoleId)) {
+    return { ok: false, reason: "missing_required_role" };
+  }
+
+  if (input.excludedRoleId !== null && input.userRoleIds.includes(input.excludedRoleId)) {
+    return { ok: false, reason: "has_excluded_role" };
+  }
+
   if (!meetsMinAccountAge(input.userSnowflake, input.minAccountAgeDays, input.now)) {
     return { ok: false, reason: "account_too_new" };
   }
@@ -114,6 +129,10 @@ export function checkEligibility(input: EligibilityInput): EligibilityResult {
   });
   if (inCooldown) {
     return { ok: false, reason: "in_cooldown" };
+  }
+
+  if (input.excludePriorWinners && input.hasPriorWin) {
+    return { ok: false, reason: "prior_winner" };
   }
 
   if (!meetsActivityRequirement(input)) {

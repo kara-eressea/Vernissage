@@ -34,6 +34,16 @@ export function entryFailureMessage(
       return blacklistGeneric
         ? "You're not eligible to enter this raffle."
         : "You're blacklisted from raffles in this server.";
+    case "is_creator":
+      return "You can't enter a raffle you created.";
+    case "missing_required_role":
+      return input.requiredRoleId
+        ? `You need the <@&${input.requiredRoleId}> role to enter this raffle.`
+        : "You don't have the role required to enter this raffle.";
+    case "has_excluded_role":
+      return input.excludedRoleId
+        ? `Members with the <@&${input.excludedRoleId}> role can't enter this raffle.`
+        : "Your role makes you ineligible for this raffle.";
     case "account_too_new":
       return "Your Discord account is too new to enter this raffle.";
     case "in_cooldown": {
@@ -54,6 +64,8 @@ export function entryFailureMessage(
       const detail = parts.length ? ` (${parts.join(", ")})` : "";
       return `You're on a win cooldown${detail} and can't enter yet.`;
     }
+    case "prior_winner":
+      return "This raffle is only open to members who haven't won here before.";
     case "insufficient_activity": {
       const p = activityProgress(input);
       return `You need ${p.need} messages to enter — you have ${p.have}. Keep chatting!`;
@@ -77,6 +89,26 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
   const lines = [`**Your status for ${raffleName ?? "the raffle"}**`];
   if (input.blacklisted) {
     lines.push("- ⛔ You're blacklisted from raffles in this server.");
+  }
+  if (input.isCreator) {
+    lines.push("- ⛔ You created this raffle, so you can't enter it.");
+  }
+  if (input.requiredRoleId) {
+    lines.push(
+      input.userRoleIds.includes(input.requiredRoleId)
+        ? `- ✅ You have the required <@&${input.requiredRoleId}> role.`
+        : `- ⛔ Requires the <@&${input.requiredRoleId}> role.`,
+    );
+  }
+  if (input.excludedRoleId && input.userRoleIds.includes(input.excludedRoleId)) {
+    lines.push(`- ⛔ Your <@&${input.excludedRoleId}> role blocks entry.`);
+  }
+  if (input.excludePriorWinners) {
+    lines.push(
+      input.hasPriorWin
+        ? "- ⛔ Past winners can't enter this one."
+        : "- ✅ Limited to members who haven't won here before.",
+    );
   }
   lines.push(
     progress.exempt
