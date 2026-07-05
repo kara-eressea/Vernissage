@@ -10,12 +10,13 @@
  * CREATE-everything baseline. Later changes add an incremental step in migrate.ts
  * (v8 added raffles.draw_disqualified; v9 dropped the redundant
  * idx_entries_raffle; v10 added the prior-winner and role entry gates; v11 added
- * the winner claim window) and are also reflected here so a fresh database is
+ * the winner claim window; v12 added raffles.is_test; v13 added
+ * wins.cooldown_waived) and are also reflected here so a fresh database is
  * created at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 13;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -86,6 +87,11 @@ CREATE TABLE IF NOT EXISTS raffles (
   -- before their per-win deadline or the scheduler rerolls the slot (design.md
   -- "Winner claim window").
   claim_window_hours INTEGER,
+  -- Test raffle: badges the announcement as prize-free and keeps its result
+  -- eligibility-neutral — a test win never gates a member's future entries and a
+  -- drawn test raffle never advances a count-based cooldown (design.md "Test
+  -- raffles"). Off by default.
+  is_test         INTEGER NOT NULL DEFAULT 0,
   draw_mode       TEXT,
   channel_id      TEXT,
   message_id      TEXT,
@@ -123,7 +129,11 @@ CREATE TABLE IF NOT EXISTS wins (
   won_at     TEXT,
   rerolled   INTEGER NOT NULL DEFAULT 0,
   claim_deadline TEXT,               -- claim window: deadline to claim by (null = no claim)
-  claimed_at     TEXT                -- when the winner claimed, null until claimed
+  claimed_at     TEXT,               -- when the winner claimed, null until claimed
+  -- Set by /raffle reset to waive this win from gating re-entry: waived wins
+  -- drop out of getUserWins, lifting both the win cooldown and the prior-winner
+  -- bar for that member. The win record itself (winner, claim) is preserved.
+  cooldown_waived INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_wins_user

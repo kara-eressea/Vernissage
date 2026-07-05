@@ -7,8 +7,14 @@ blacklist, config) is scoped by guild_id and kept separate.
 
 ## Source of truth
 Read docs/design.md before making changes. It defines the raffle lifecycle,
-eligibility rules, data model, and the provably fair draw scheme. If a code
-change alters behavior described there, update the doc in the same commit.
+eligibility rules, data model, and the provably fair draw scheme — the "why". If
+a code change alters behavior described there, update the doc in the same commit.
+
+docs/commands.md is the command reference — the slash-command surface (every
+subcommand, its options, and examples), the "how to use". If a change adds,
+renames, or reworks a command or its options, update commands.md in the same
+commit. Keep the split clean: behavioral rules live in design.md and commands.md
+links to them; don't restate rules in both.
 
 ## Stack
 - TypeScript, discord.js, better-sqlite3, Vitest

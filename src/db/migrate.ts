@@ -23,7 +23,7 @@ export function migrate(db: Database): void {
     db.exec(SCHEMA_SQL);
   } else {
     // Existing database: apply only the steps it is missing. Each step upgrades
-    // one version; add the next as `if (current < 10) { ... }`.
+    // one version; add the next as `if (current < 14) { ... }`.
     if (current < 8) {
       db.exec(`ALTER TABLE raffles ADD COLUMN draw_disqualified TEXT`);
     }
@@ -46,6 +46,14 @@ export function migrate(db: Database): void {
          ALTER TABLE wins ADD COLUMN claim_deadline TEXT;
          ALTER TABLE wins ADD COLUMN claimed_at TEXT`,
       );
+    }
+    if (current < 12) {
+      // Test-raffle flag (default off): eligibility-neutral, no real prize.
+      db.exec(`ALTER TABLE raffles ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (current < 13) {
+      // `/raffle reset` waiver flag on wins (default off).
+      db.exec(`ALTER TABLE wins ADD COLUMN cooldown_waived INTEGER NOT NULL DEFAULT 0`);
     }
   }
 

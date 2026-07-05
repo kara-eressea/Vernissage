@@ -136,12 +136,12 @@ describe("handleConfig — writes", () => {
     expect(auditRows()).toHaveLength(0);
   });
 
-  it("channel with mode clear removes the rule and audits it", async () => {
+  it("channels clear removes the rule and audits it", async () => {
     setChannelRule(db, "g1", "c1", "include");
     const interaction = fakeInteraction({
-      subcommand: "channel",
+      subcommand: "channels",
       manageGuild: true,
-      values: { channel: { id: "c1" }, mode: "clear" },
+      values: { action: "clear", channel: { id: "c1" } },
     });
 
     await handleConfig(interaction, ctx);
@@ -152,16 +152,68 @@ describe("handleConfig — writes", () => {
     ]);
   });
 
-  it("channel with mode include stores the rule and audits it", async () => {
+  it("channels include stores the rule and audits it", async () => {
     const interaction = fakeInteraction({
-      subcommand: "channel",
+      subcommand: "channels",
       manageGuild: true,
-      values: { channel: { id: "c9" }, mode: "include" },
+      values: { action: "include", channel: { id: "c9" } },
     });
 
     await handleConfig(interaction, ctx);
 
     expect(listChannelRules(db, "g1")).toEqual([{ channelId: "c9", mode: "include" }]);
     expect(auditRows()).toEqual([{ event_type: "counted_channel_set", actor_id: "u1" }]);
+  });
+
+  it("channels include builds up a multi-channel allowlist across calls", async () => {
+    for (const id of ["c1", "c2", "c3"]) {
+      await handleConfig(
+        fakeInteraction({
+          subcommand: "channels",
+          manageGuild: true,
+          values: { action: "include", channel: { id } },
+        }),
+        ctx,
+      );
+    }
+
+    expect(listChannelRules(db, "g1")).toEqual([
+      { channelId: "c1", mode: "include" },
+      { channelId: "c2", mode: "include" },
+      { channelId: "c3", mode: "include" },
+    ]);
+  });
+
+  it("channels list is read-only: no channel needed, nothing written", async () => {
+    setChannelRule(db, "g1", "c1", "include");
+    setChannelRule(db, "g1", "c2", "exclude");
+    const interaction = fakeInteraction({
+      subcommand: "channels",
+      manageGuild: true,
+      values: { action: "list" },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    const reply = (interaction.reply.mock.calls[0]![0] as { content: string }).content;
+    expect(reply).toContain("<#c1>");
+    expect(reply).toContain("<#c2>");
+    expect(reply).toContain("Only included channels count");
+    // A read-only view writes no rules and no audit rows.
+    expect(auditRows()).toHaveLength(0);
+  });
+
+  it("channels include/exclude/clear require a channel", async () => {
+    const interaction = fakeInteraction({
+      subcommand: "channels",
+      manageGuild: true,
+      values: { action: "include" },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    expect(interaction.reply).toHaveBeenCalledOnce();
+    expect(listChannelRules(db, "g1")).toEqual([]);
+    expect(auditRows()).toHaveLength(0);
   });
 });

@@ -247,7 +247,8 @@ Server permission can run the moderator commands.
 
 ## Command reference
 
-All commands are subcommands of `/raffle`.
+All commands are subcommands of `/raffle`. This is a quick overview; for every
+option and worked examples, see [docs/commands.md](docs/commands.md).
 
 ### For everyone
 
@@ -270,9 +271,10 @@ All commands are subcommands of `/raffle`.
 | `/raffle ban <user> [duration] [reason]`    | Block a user from entering. Duration examples: `30m`, `24h`, `7d`, `2w`. Leave blank for a permanent block. |
 | `/raffle unban <user>`                      | Remove a user's block. Does not restore entries that were already removed. |
 | `/raffle banlist`                           | List currently blocked users. Only you see the reply.                    |
+| `/raffle reset <user> <scope>`              | Reset a member's standing: `cooldown`, `activity`, or `all`. Scoped to that one member. |
 | `/raffle config show`                       | Show the server settings.                                                |
 | `/raffle config set [options]`              | Change server settings.                                                  |
-| `/raffle config channel <channel> <mode>`   | Include or exclude a channel from message counting.                      |
+| `/raffle config channels <action> [channel]`| Include, exclude, or clear a counted channel, or `list` the rules. Run per channel to build a multi-channel set. |
 
 ## Raffle options
 
@@ -292,6 +294,9 @@ wizard pre-fills, so you only change what you want to differ for that raffle.
   for a number of days and/or for a number of future raffles.
 - **Winner count and draw mode** — how many winners to draw, and whether the draw
   runs automatically at close or is triggered by a moderator.
+- **Test mode** — mark a raffle as a test: it is badged as having no prize and its
+  result never affects anyone's eligibility (no cooldown, no prior-winner bar),
+  so you can rehearse the full flow in a live server safely.
 
 Under **More restrictions** in the wizard's eligibility step, these optional
 gates are all off by default:

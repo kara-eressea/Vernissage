@@ -27,6 +27,7 @@ export const AUDIT_EVENTS = {
   configSet: "config_set",
   countedChannelSet: "counted_channel_set",
   countedChannelCleared: "counted_channel_cleared",
+  eligibilityReset: "eligibility_reset",
 } as const;
 
 /** Every known audit event type string. */

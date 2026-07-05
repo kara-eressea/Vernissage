@@ -47,8 +47,12 @@ async function main(): Promise<void> {
   // The shared Discord-posting seam (audit-channel mirror + announcements).
   const notifier = createNotifier(client, db);
 
+  // The in-memory message counter is created up front so command handlers (e.g.
+  // `/raffle reset`) can reach it; attachMessageCounter below starts its flush.
+  const counter = new MessageCounter();
+
   // Build the command set with the dependencies handlers close over.
-  const commandCtx: CommandContext = { db, config, notifier };
+  const commandCtx: CommandContext = { db, config, notifier, counter };
   const commands = buildCommands(commandCtx);
 
   // Component/modal interactions are dispatched by custom-id namespace: the
@@ -67,7 +71,6 @@ async function main(): Promise<void> {
   );
 
   // Start counting messages toward activity, flushed to the DB on an interval.
-  const counter = new MessageCounter();
   const counting = attachMessageCounter(client, db, counter, config.guildIds);
 
   // The draw's left-guild / blacklist failsafe checks pulled winners against

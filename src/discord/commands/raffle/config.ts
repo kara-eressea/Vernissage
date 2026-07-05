@@ -3,9 +3,11 @@
  *
  * Subcommands:
  *   - show    : display the current guild config and counted-channel rules.
- *   - set     : write scalar defaults (audit channel, mod role, hourly cap,
+ *   - set      : write scalar defaults (audit channel, mod role, hourly cap,
  *               cooldowns, minimum account age); a `clear` option unsets one.
- *   - channel : include/exclude a channel from message counting, or clear it.
+ *   - channels : include/exclude a channel from message counting, clear a
+ *               channel's rule, or list every rule. Called once per channel to
+ *               build up a multi-channel include or exclude set.
  *
  * Handlers stay thin: they parse the interaction, run the pure moderator gate
  * and pure validation, call the repositories, write an audit_log row, and
@@ -135,21 +137,24 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
     )
     .addSubcommand((s) =>
       s
-        .setName("channel")
-        .setDescription("Include or exclude a channel from message counting.")
-        .addChannelOption((o) =>
-          o.setName("channel").setDescription("The channel.").setRequired(true),
-        )
+        .setName("channels")
+        .setDescription("Include/exclude channels from message counting, or list the rules.")
         .addStringOption((o) =>
           o
-            .setName("mode")
-            .setDescription("Whether to include, exclude, or clear the rule.")
+            .setName("action")
+            .setDescription("Include or exclude a channel, clear its rule, or list all rules.")
             .setRequired(true)
             .addChoices(
               { name: "include", value: "include" },
               { name: "exclude", value: "exclude" },
               { name: "clear", value: "clear" },
+              { name: "list", value: "list" },
             ),
+        )
+        .addChannelOption((o) =>
+          o
+            .setName("channel")
+            .setDescription("The channel (required for include, exclude, and clear)."),
         ),
     );
 }
@@ -157,6 +162,26 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
 /** Reply ephemerally; all config replies are private to the invoking mod. */
 function reply(interaction: ChatInputCommandInteraction, content: string): Promise<unknown> {
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
+}
+
+/**
+ * The counted-channel rules as display lines: the include set, the exclude set,
+ * and a note explaining the counting precedence (mirroring `isChannelCounted` —
+ * an exclude always wins; any includes form an allowlist; otherwise everything
+ * counts). Shared by `config show` and the `channels list` action so the two can
+ * never disagree.
+ */
+function channelRulesLines(
+  rules: ReturnType<typeof listChannelRules>,
+): { include: string[]; exclude: string[]; note: string } {
+  const include = rules.filter((r) => r.mode === "include").map((r) => `<#${r.channelId}>`);
+  const exclude = rules.filter((r) => r.mode === "exclude").map((r) => `<#${r.channelId}>`);
+  const note = include.length
+    ? "Only included channels count (excludes still removed)."
+    : exclude.length
+      ? "All channels count except the excluded ones."
+      : "All channels count (no rules set).";
+  return { include, exclude, note };
 }
 
 /**
@@ -178,8 +203,8 @@ export async function handleConfig(
     case "set":
       await handleConfigSet(interaction, ctx, guildId);
       return;
-    case "channel":
-      await handleConfigChannel(interaction, ctx, guildId);
+    case "channels":
+      await handleConfigChannels(interaction, ctx, guildId);
       return;
     default:
       await reply(interaction, "Unknown config subcommand.");
@@ -192,23 +217,14 @@ async function handleConfigShow(
   guildId: string,
 ): Promise<void> {
   const guild = getGuild(ctx.db, guildId);
-  const rules = listChannelRules(ctx.db, guildId);
-  const includes = rules.filter((r) => r.mode === "include").map((r) => `<#${r.channelId}>`);
-  const excludes = rules.filter((r) => r.mode === "exclude").map((r) => `<#${r.channelId}>`);
+  const { include: includes, exclude: excludes, note: countingNote } = channelRulesLines(
+    listChannelRules(ctx.db, guildId),
+  );
 
   const fmtChannel = (id: string | null | undefined) => (id ? `<#${id}>` : "not set");
   const fmtRole = (id: string | null | undefined) => (id ? `<@&${id}>` : "not set");
   const fmtNum = (n: number | null | undefined, unit = "") =>
     n === null || n === undefined ? "not set" : `${n}${unit}`;
-
-  // Explain counting precedence to match isChannelCounted: an exclude always
-  // wins; if any includes exist they form an allowlist; otherwise all
-  // non-excluded channels count.
-  const countingNote = includes.length
-    ? "Only included channels count (excludes still removed)."
-    : excludes.length
-      ? "All channels count except the excluded ones."
-      : "All channels count (no rules set).";
 
   const lines = [
     "**Server raffle configuration**",
@@ -329,16 +345,39 @@ async function handleConfigSet(
   await reply(interaction, `Updated ${Object.keys(patch).length} setting(s).`);
 }
 
-async function handleConfigChannel(
+async function handleConfigChannels(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
   guildId: string,
 ): Promise<void> {
-  const channel = interaction.options.getChannel("channel", true);
-  const mode = interaction.options.getString("mode", true);
+  const action = interaction.options.getString("action", true);
+
+  // `list` is read-only and takes no channel — show every rule, mirroring the
+  // channel section of `config show`.
+  if (action === "list") {
+    const { include, exclude, note } = channelRulesLines(listChannelRules(ctx.db, guildId));
+    await reply(
+      interaction,
+      [
+        "**Counted-channel rules**",
+        `- Include: ${include.length ? include.join(", ") : "none"}`,
+        `- Exclude: ${exclude.length ? exclude.join(", ") : "none"}`,
+        `_${note}_`,
+      ].join("\n"),
+    );
+    return;
+  }
+
+  // include/exclude/clear all act on one channel; Discord can't mark the option
+  // required for only some choices, so enforce it here.
+  const channel = interaction.options.getChannel("channel");
+  if (!channel) {
+    await reply(interaction, "Pick a channel to include, exclude, or clear.");
+    return;
+  }
   const now = new Date().toISOString();
 
-  if (mode === "clear") {
+  if (action === "clear") {
     removeChannelRule(ctx.db, guildId, channel.id);
     writeAudit(ctx.db, {
       guildId,
@@ -352,14 +391,14 @@ async function handleConfigChannel(
     return;
   }
 
-  setChannelRule(ctx.db, guildId, channel.id, mode as ChannelMode);
+  setChannelRule(ctx.db, guildId, channel.id, action as ChannelMode);
   writeAudit(ctx.db, {
     guildId,
     raffleId: null,
     eventType: AUDIT_EVENTS.countedChannelSet,
     actorId: interaction.user.id,
-    payload: { channelId: channel.id, mode },
+    payload: { channelId: channel.id, mode: action },
     createdAt: now,
   });
-  await reply(interaction, `Set <#${channel.id}> to **${mode}** for message counting.`);
+  await reply(interaction, `Set <#${channel.id}> to **${action}** for message counting.`);
 }

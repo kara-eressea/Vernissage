@@ -33,6 +33,8 @@ export interface RaffleDraftFields {
   cooldown_days: number | null;
   cooldown_count: number | null;
   claim_window_hours: number | null;
+  /** 1 = test raffle (badged prize-free, eligibility-neutral); 0/null = normal. */
+  is_test: number | null;
   draw_mode: string | null;
 }
 

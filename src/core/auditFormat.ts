@@ -96,6 +96,13 @@ export function formatAuditLine(event: AuditLineInput): string {
     }
     case AUDIT_EVENTS.winClaimed:
       return `🎁 ${subject} claimed their prize in ${raffle} — ${when}`;
+    case AUDIT_EVENTS.eligibilityReset: {
+      // Show what was reset (all/cooldown/activity) but never the counts, which
+      // are activity-derived and stay in the DB payload (mirrors the privacy rule).
+      const scope = str(event.payload, "scope");
+      const what = scope ? ` (${scope})` : "";
+      return `🧹 ${actor} reset ${subject}'s raffle eligibility${what} — ${when}`;
+    }
     default:
       // Unknown type: emit only the type, raffle id, and timestamp — never the
       // raw payload, which could contain private detail.

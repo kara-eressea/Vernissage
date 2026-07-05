@@ -75,6 +75,20 @@ describe("formatAuditLine", () => {
     expect(out).toMatch(/no eligible entrants/i);
   });
 
+  it("shows the reset scope and subject but never the counts", () => {
+    const out = line({
+      eventType: AUDIT_EVENTS.eligibilityReset,
+      actorId: "mod1",
+      payload: { userId: "u2", scope: "all", winsWaived: 4242, activityRowsDeleted: 7777 },
+    });
+    expect(out).toContain("<@mod1>");
+    expect(out).toContain("<@u2>");
+    expect(out).toContain("(all)");
+    // The activity-derived counts stay in the DB payload, never the public line.
+    expect(out).not.toContain("4242");
+    expect(out).not.toContain("7777");
+  });
+
   it("falls back to a safe generic line for an unknown event type", () => {
     const out = line({
       eventType: "mystery_event",

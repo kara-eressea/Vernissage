@@ -30,6 +30,7 @@ import {
   handleStatus,
 } from "./entry.js";
 import { addManageSubcommands, handleCancel, handleCreate, handleEdit } from "./manage.js";
+import { addResetSubcommand, handleReset } from "./reset.js";
 
 /** Build the `/raffle` command, wiring every subcommand (group) to `ctx`. */
 export function buildRaffleCommand(ctx: CommandContext): Command {
@@ -43,6 +44,7 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   addEntrySubcommands(data);
   addDrawSubcommands(data);
   addBanSubcommands(data);
+  addResetSubcommand(data);
   data.addSubcommandGroup(addConfigGroup);
 
   return {
@@ -97,6 +99,9 @@ async function dispatch(
       return;
     case "banlist":
       await handleBanlist(interaction, ctx);
+      return;
+    case "reset":
+      await handleReset(interaction, ctx);
       return;
     default:
       await interaction.reply({

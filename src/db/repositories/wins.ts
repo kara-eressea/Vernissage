@@ -16,6 +16,7 @@ export interface WinRow {
   rerolled: number;
   claim_deadline: string | null;
   claimed_at: string | null;
+  cooldown_waived: number;
 }
 
 /**
@@ -127,9 +128,13 @@ export function activeWinnerIds(db: Database, raffleId: number): string[] {
 /**
  * A user's non-rerolled wins in a guild, as core WinRecords for the cooldown
  * check. Rerolled wins are excluded — a disqualified win should not gate
- * re-entry. Scoped to the guild by joining through the win's raffle, so a win in
- * one server never gates entry in another (the count-based mode is likewise
- * scoped via countRafflesSince).
+ * re-entry. Test-raffle wins are excluded too, so a test win never gates a
+ * member's future entries or bars them as a prior winner (design.md "Test
+ * raffles"; the prior-winner check reads this same list). Wins waived by
+ * `/raffle reset` are excluded as well, so a mod can clear a member's cooldown
+ * and prior-winner bar (design.md "Resetting eligibility"). Scoped to the guild
+ * by joining through the win's raffle, so a win in one server never gates entry
+ * in another (the count-based mode is likewise scoped via countRafflesSince).
  */
 export function getUserWins(db: Database, guildId: string, userId: string): WinRecord[] {
   const rows = db
@@ -137,8 +142,28 @@ export function getUserWins(db: Database, guildId: string, userId: string): WinR
       `SELECT w.raffle_id, w.won_at FROM wins w
        JOIN raffles r ON r.raffle_id = w.raffle_id
        WHERE w.user_id = ? AND r.guild_id = ? AND w.rerolled = 0 AND w.won_at IS NOT NULL
+         AND r.is_test = 0 AND w.cooldown_waived = 0
        ORDER BY w.won_at ASC`,
     )
     .all(userId, guildId) as Array<{ raffle_id: number; won_at: string }>;
   return rows.map((r) => ({ raffleId: r.raffle_id, wonAt: r.won_at }));
+}
+
+/**
+ * Waive a member's still-gating wins in a guild (the `/raffle reset` cooldown
+ * scope): mark every non-rerolled, not-yet-waived win they hold in this guild as
+ * `cooldown_waived`, so it drops out of getUserWins and stops gating re-entry.
+ * Returns how many wins were waived. Idempotent — a second call waives nothing.
+ * The win rows are preserved (winner/claim history intact), only their gating
+ * effect is lifted (design.md "Resetting eligibility").
+ */
+export function waiveUserWins(db: Database, guildId: string, userId: string): number {
+  const info = db
+    .prepare(
+      `UPDATE wins SET cooldown_waived = 1
+       WHERE user_id = ? AND rerolled = 0 AND cooldown_waived = 0
+         AND raffle_id IN (SELECT raffle_id FROM raffles WHERE guild_id = ?)`,
+    )
+    .run(userId, guildId);
+  return info.changes;
 }

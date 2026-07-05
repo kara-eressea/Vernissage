@@ -31,6 +31,7 @@ const validDraft: RaffleDraftFields = {
   cooldown_days: null,
   cooldown_count: null,
   claim_window_hours: null,
+  is_test: 0,
   draw_mode: "auto",
 };
 

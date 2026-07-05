@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
-import { createDraft } from "../../src/db/repositories/raffles.js";
+import { createDraft, updateRaffleFields } from "../../src/db/repositories/raffles.js";
 import {
   activeWinnerIds,
   addWin,
@@ -9,6 +9,7 @@ import {
   getWin,
   listWinsForRaffle,
   markRerolled,
+  waiveUserWins,
 } from "../../src/db/repositories/wins.js";
 
 let db: Database;
@@ -62,6 +63,47 @@ describe("wins repository", () => {
       ["u1", 1],
       ["u2", 0],
     ]);
+  });
+
+  it("excludes wins from test raffles so a test win never gates re-entry", () => {
+    const real = raffleIn("g1");
+    const test = raffleIn("g1");
+    updateRaffleFields(db, test, { is_test: 1 });
+    addWin(db, real, "u1", "2026-07-01T00:00:00.000Z");
+    addWin(db, test, "u1", "2026-07-02T00:00:00.000Z");
+
+    // Only the real win counts toward the cooldown / prior-winner history.
+    expect(getUserWins(db, "g1", "u1")).toEqual([
+      { raffleId: real, wonAt: "2026-07-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("waiveUserWins lifts a user's wins from the gating history, scoped to the guild", () => {
+    const r1 = raffleIn("g1");
+    const r2 = raffleIn("g1");
+    const other = raffleIn("g2");
+    addWin(db, r1, "u1", "2026-07-01T00:00:00.000Z");
+    addWin(db, r2, "u1", "2026-07-02T00:00:00.000Z");
+    addWin(db, r1, "u2", "2026-07-01T00:00:00.000Z"); // another member, untouched
+    addWin(db, other, "u1", "2026-07-03T00:00:00.000Z"); // same user, other guild
+
+    const waived = waiveUserWins(db, "g1", "u1");
+    expect(waived).toBe(2);
+    // u1 no longer has gating wins in g1...
+    expect(getUserWins(db, "g1", "u1")).toEqual([]);
+    // ...but the other member and the other guild are unaffected.
+    expect(getUserWins(db, "g1", "u2").map((w) => w.raffleId)).toEqual([r1]);
+    expect(getUserWins(db, "g2", "u1").map((w) => w.raffleId)).toEqual([other]);
+  });
+
+  it("waiveUserWins is idempotent and reports how many it cleared", () => {
+    const r = raffleIn("g1");
+    addWin(db, r, "u1", "2026-07-01T00:00:00.000Z");
+    expect(waiveUserWins(db, "g1", "u1")).toBe(1);
+    // A second call finds nothing still gating.
+    expect(waiveUserWins(db, "g1", "u1")).toBe(0);
+    // No wins at all is a clean zero.
+    expect(waiveUserWins(db, "g1", "nobody")).toBe(0);
   });
 
   it("activeWinnerIds returns only non-rerolled winners, oldest first", () => {

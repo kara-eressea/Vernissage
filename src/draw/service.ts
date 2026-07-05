@@ -221,6 +221,7 @@ export async function commitOnClose(
       entrantIds: entrants,
       entrantsHash,
       commitment,
+      isTest: existing.is_test === 1,
       now,
     }),
   );
@@ -362,6 +363,7 @@ export async function executeDraw(
       secret,
       seed,
       excluded: [...excluded],
+      isTest: raffle.is_test === 1,
       now,
     }),
   );
@@ -374,6 +376,7 @@ export async function executeDraw(
         prize: raffle.prize,
         winners,
         claimDeadline: winnerDeadline(raffle, now),
+        isTest: raffle.is_test === 1,
       }),
     );
   }
@@ -492,6 +495,7 @@ export async function rerollWinner(
         prize: raffle.prize,
         winners: [replacement],
         claimDeadline: winnerDeadline(raffle, now),
+        isTest: raffle.is_test === 1,
       }),
     );
   }
