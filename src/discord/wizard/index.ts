@@ -96,6 +96,7 @@ function toDraftFields(r: RaffleRow): RaffleDraftFields {
     cooldown_days: r.cooldown_days,
     cooldown_count: r.cooldown_count,
     claim_window_hours: r.claim_window_hours,
+    is_test: r.is_test,
     draw_mode: r.draw_mode,
   };
 }
@@ -364,6 +365,10 @@ export function createWizard(deps: WizardDeps): Wizard {
     const id = raffle.raffle_id;
     if (action === "mode" && interaction.isStringSelectMenu()) {
       updateRaffleFields(db, id, { draw_mode: interaction.values[0] });
+      return rerender(interaction, id, "draw");
+    }
+    if (action === "test" && interaction.isStringSelectMenu()) {
+      updateRaffleFields(db, id, { is_test: interaction.values[0] === "on" ? 1 : 0 });
       return rerender(interaction, id, "draw");
     }
     if (action === "nums" && interaction.isButton()) {

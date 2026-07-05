@@ -24,16 +24,18 @@ function indexNames(db: BetterSqlite3.Database, table: string): string[] {
   return (db.pragma(`index_list(${table})`) as Array<{ name: string }>).map((i) => i.name);
 }
 
-/** Strip the post-v9 columns (v10 entry gates, v11 claim window) to simulate an
- * older database that predates them. */
+/** Strip the post-v9 columns (v10 entry gates, v11 claim window, v12 test flag,
+ * v13 reset waiver) to simulate an older database that predates them. */
 function dropPostV9Columns(db: BetterSqlite3.Database): void {
   db.exec(
     `ALTER TABLE raffles DROP COLUMN exclude_prior_winners;
      ALTER TABLE raffles DROP COLUMN required_role_id;
      ALTER TABLE raffles DROP COLUMN excluded_role_id;
      ALTER TABLE raffles DROP COLUMN claim_window_hours;
+     ALTER TABLE raffles DROP COLUMN is_test;
      ALTER TABLE wins DROP COLUMN claim_deadline;
-     ALTER TABLE wins DROP COLUMN claimed_at`,
+     ALTER TABLE wins DROP COLUMN claimed_at;
+     ALTER TABLE wins DROP COLUMN cooldown_waived`,
   );
 }
 
@@ -107,8 +109,14 @@ describe("schema", () => {
     expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     expect(columnNames(db, "raffles")).toContain("draw_disqualified");
     expect(columnNames(db, "raffles")).toContain("required_role_id");
-    // The upgrade preserves existing rows.
-    expect(db.prepare(`SELECT guild_id FROM raffles`).get()).toEqual({ guild_id: "g1" });
+    // The later steps re-add the v12 test flag and the v13 reset waiver, each
+    // backfilling the preserved row to its off default.
+    expect(columnNames(db, "raffles")).toContain("is_test");
+    expect(columnNames(db, "wins")).toContain("cooldown_waived");
+    expect(db.prepare(`SELECT guild_id, is_test FROM raffles`).get()).toEqual({
+      guild_id: "g1",
+      is_test: 0,
+    });
     db.close();
   });
 

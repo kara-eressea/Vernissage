@@ -22,6 +22,8 @@ export interface EntryMessageInput {
   minAccountAgeDays: number | null;
   startsAt: string | null;
   endsAt: string | null;
+  /** A test raffle: badge the message prize-free (design.md "Test raffles"). */
+  isTest?: boolean;
 }
 
 export interface EntryMessageContent {
@@ -43,9 +45,12 @@ export function resolveAnnounceChannelId(
 
 /** Build the entry message's title and body. */
 export function formatEntryMessage(raffle: EntryMessageInput): EntryMessageContent {
-  const title = `🎟️ ${raffle.name ?? "Raffle"}`;
+  const title = raffle.isTest ? `🧪 ${raffle.name ?? "Raffle"} (TEST)` : `🎟️ ${raffle.name ?? "Raffle"}`;
   const lines: string[] = [];
 
+  if (raffle.isTest) {
+    lines.push("**This is a test raffle — there is no prize.**");
+  }
   if (raffle.prize) {
     lines.push(`**Prize:** ${raffle.prize}`);
   }
@@ -89,9 +94,14 @@ export function formatEntryMessage(raffle: EntryMessageInput): EntryMessageConte
 export function formatClosedEntryMessage(raffle: {
   name: string | null;
   prize: string | null;
+  isTest?: boolean;
 }): EntryMessageContent {
-  const title = `🎟️ ${raffle.name ?? "Raffle"} (closed)`;
+  const badge = raffle.isTest ? "🧪" : "🎟️";
+  const title = `${badge} ${raffle.name ?? "Raffle"} (closed)`;
   const lines: string[] = [];
+  if (raffle.isTest) {
+    lines.push("**Test raffle — no prize.**");
+  }
   if (raffle.prize) {
     lines.push(`**Prize:** ${raffle.prize}`);
   }

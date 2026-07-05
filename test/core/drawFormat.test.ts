@@ -107,4 +107,17 @@ describe("formatWinnerAnnouncement", () => {
     const msg = formatWinnerAnnouncement({ raffleName: "Big One", prize: null, winners: [] });
     expect(msg).toContain("no eligible entrants");
   });
+
+  it("states a test raffle awards no prize and never quotes the prize text", () => {
+    const msg = formatWinnerAnnouncement({
+      raffleName: "Trial",
+      prize: "A shirt",
+      winners: ["a"],
+      isTest: true,
+    });
+    expect(msg).toContain("🧪");
+    expect(msg).toContain("<@a>");
+    expect(msg).toMatch(/no prize is awarded/i);
+    expect(msg).not.toContain("A shirt");
+  });
 });

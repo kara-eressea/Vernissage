@@ -31,6 +31,7 @@ export interface RaffleRow {
   cooldown_days: number | null;
   cooldown_count: number | null;
   claim_window_hours: number | null;
+  is_test: number;
   draw_mode: string | null;
   channel_id: string | null;
   message_id: string | null;
@@ -102,6 +103,7 @@ export type RaffleFieldPatch = Partial<
     | "cooldown_days"
     | "cooldown_count"
     | "claim_window_hours"
+    | "is_test"
     | "draw_mode"
     | "channel_id"
     | "message_id"
@@ -128,6 +130,7 @@ const PATCHABLE_COLUMNS = new Set<keyof RaffleFieldPatch>([
   "cooldown_days",
   "cooldown_count",
   "claim_window_hours",
+  "is_test",
   "draw_mode",
   "channel_id",
   "message_id",
@@ -150,8 +153,8 @@ export function updateRaffleFields(
  * How many raffles in the guild have completed their draw since `sinceIso` —
  * i.e. raffles the user had the chance to enter after their last win. Counts
  * raffles whose draw is done (`drawn`/`completed`) and whose start is strictly
- * after `sinceIso`. Drives the count-based win cooldown (design.md "Win
- * cooldown").
+ * after `sinceIso`. Test raffles are excluded so a test draw never advances a
+ * real count-based cooldown (design.md "Test raffles", "Win cooldown").
  */
 export function countRafflesSince(db: Database, guildId: string, sinceIso: string): number {
   const row = db
@@ -159,6 +162,7 @@ export function countRafflesSince(db: Database, guildId: string, sinceIso: strin
       `SELECT count(*) AS n FROM raffles
        WHERE guild_id = ?
          AND status IN ('drawn', 'completed')
+         AND is_test = 0
          AND starts_at > ?`,
     )
     .get(guildId, sinceIso) as { n: number };

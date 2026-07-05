@@ -21,6 +21,7 @@ const base: ResolvedRaffleSettings = {
   cooldown_days: null,
   cooldown_count: null,
   claim_window_hours: null,
+  is_test: 0,
   draw_mode: "auto",
 };
 
@@ -62,6 +63,17 @@ describe("describeRaffle", () => {
   it("mentions cooldowns when set", () => {
     const text = joined({ ...base, cooldown_days: 7, cooldown_count: 2 });
     expect(text).toContain("7 days and 2 raffles");
+  });
+
+  it("badges a test raffle and states it awards no prize", () => {
+    const text = joined({ ...base, is_test: 1 });
+    expect(text).toContain("Test raffle");
+    expect(text).toMatch(/no prize/i);
+    expect(text).toMatch(/does not affect/i);
+  });
+
+  it("omits the test badge for a normal raffle", () => {
+    expect(joined(base)).not.toContain("Test raffle");
   });
 
   it("singularizes a one-winner, one-day raffle", () => {

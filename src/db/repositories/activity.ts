@@ -55,3 +55,17 @@ export function pruneActivityBefore(db: Database, cutoffDay: string): number {
   const info = db.prepare(`DELETE FROM activity WHERE day < ?`).run(cutoffDay);
   return info.changes;
 }
+
+/**
+ * Delete a single member's counted-activity rows in a guild (the `/raffle reset`
+ * activity scope). Returns the number of daily buckets removed. Scoped to the
+ * one user and guild, so no one else's counts are touched. Any counts still
+ * buffered in memory must be dropped separately via MessageCounter.forgetUser,
+ * or the next flush would re-create rows (design.md "Resetting eligibility").
+ */
+export function deleteUserActivity(db: Database, guildId: string, userId: string): number {
+  const info = db
+    .prepare(`DELETE FROM activity WHERE guild_id = ? AND user_id = ?`)
+    .run(guildId, userId);
+  return info.changes;
+}

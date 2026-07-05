@@ -74,6 +74,26 @@ export class MessageCounter {
   }
 
   /**
+   * Drop a single member's not-yet-flushed counts in a guild, so an activity
+   * reset (`/raffle reset`) isn't partially undone by the next flush re-creating
+   * rows from buffered messages. Only that member's buckets and hourly tallies
+   * are removed; everyone else's pending counts are untouched.
+   */
+  forgetUser(guildId: string, userId: string): void {
+    const prefix = `${guildId}${SEP}${userId}${SEP}`;
+    for (const key of this.pendingDays.keys()) {
+      if (key.startsWith(prefix)) {
+        this.pendingDays.delete(key);
+      }
+    }
+    for (const key of this.hourly.keys()) {
+      if (key.startsWith(prefix)) {
+        this.hourly.delete(key);
+      }
+    }
+  }
+
+  /**
    * Write all pending day buckets to the database in a single transaction and
    * clear them. Returns the number of buckets written. Stale hourly tallies
    * (from an hour older than the latest) are pruned to bound memory.

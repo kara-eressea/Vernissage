@@ -20,6 +20,8 @@ export interface CommitmentPost {
   entrantIds: string[];
   entrantsHash: string;
   commitment: string;
+  /** A test raffle: tag the audit post so the trail records it as prize-free. */
+  isTest?: boolean;
   now: string;
 }
 
@@ -31,6 +33,7 @@ export interface CommitmentPost {
 export function formatCommitmentPost(input: CommitmentPost): string {
   const name = input.raffleName ?? `Raffle #${input.raffleId}`;
   const lines = [
+    ...(input.isTest ? ["🧪 _Test raffle — no prize._"] : []),
     `🎲 **Draw commitment — ${name}** (#${input.raffleId})`,
     `Entries are frozen (${input.entrantIds.length}). At draw time the secret is`,
     `revealed and anyone can recompute the winner. — ${discordTimestamp(input.now, "f")}`,
@@ -57,6 +60,8 @@ export interface ResultPost {
   seed: string;
   /** Ids excluded from selection (left the guild or blacklisted at draw). */
   excluded?: string[];
+  /** A test raffle: tag the audit post so the trail records it as prize-free. */
+  isTest?: boolean;
   now: string;
 }
 
@@ -72,6 +77,7 @@ export function formatResultPost(input: ResultPost): string {
       ? input.winners.map(userMention).join(", ")
       : "no eligible entrants";
   const lines = [
+    ...(input.isTest ? ["🧪 _Test raffle — no prize._"] : []),
     `🏆 **Draw result — ${name}** (#${input.raffleId})`,
     `**Winner(s):** ${who} — ${discordTimestamp(input.now, "f")}`,
     ``,
@@ -126,6 +132,8 @@ export interface WinnerAnnouncement {
    * A note is appended telling winners to claim before it or forfeit the slot.
    */
   claimDeadline?: string | null;
+  /** A test raffle: state plainly that no prize is awarded (design.md "Test raffles"). */
+  isTest?: boolean;
 }
 
 /**
@@ -140,8 +148,12 @@ export function formatWinnerAnnouncement(input: WinnerAnnouncement): string {
     return `🎗️ **${name}** has been drawn, but there were no eligible entrants.`;
   }
   const winners = input.winners.map(userMention).join(", ");
-  const prize = input.prize ? ` — ${input.prize}` : "";
   const label = input.winners.length === 1 ? "Winner" : "Winners";
+  // A test raffle awards nothing, so it never quotes a prize — it says so.
+  if (input.isTest) {
+    return `🧪 **${name}** (test raffle) — drawn ${label.toLowerCase()}: ${winners}. This was a test; no prize is awarded.`;
+  }
+  const prize = input.prize ? ` — ${input.prize}` : "";
   const line = `🎉 **${name}** — congratulations to the ${label}: ${winners}${prize}!`;
   if (input.claimDeadline) {
     return (

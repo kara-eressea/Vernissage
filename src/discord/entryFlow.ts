@@ -189,6 +189,7 @@ export async function announceOpenRaffle(
     minAccountAgeDays: settings.minAccountAgeDays,
     startsAt: raffle.starts_at,
     endsAt: raffle.ends_at,
+    isTest: raffle.is_test === 1,
   });
 
   const messageId = await notifier.postEntryMessage(channelId, content, [
@@ -219,7 +220,11 @@ export async function closeEntryMessage(
   if (!channelId) {
     return;
   }
-  const content = formatClosedEntryMessage({ name: raffle.name, prize: raffle.prize });
+  const content = formatClosedEntryMessage({
+    name: raffle.name,
+    prize: raffle.prize,
+    isTest: raffle.is_test === 1,
+  });
   // Empty components remove the Enter button.
   await notifier.editMessage(channelId, raffle.message_id, `**${content.title}**\n${content.body}`, []);
 }

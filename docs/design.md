@@ -139,6 +139,49 @@ as entered — they cannot mistake ineligibility for a lost draw.
 - A claim writes a `win_claimed` audit row; the reason on an `unclaimed` reroll
   stays in the audit payload, not the public post, mirroring the blacklist rule.
 
+### Test raffles
+- Optional, per raffle (`is_test`), off by default. A test raffle lets mods
+  rehearse the full flow in a live server without awarding a prize or disturbing
+  anyone's standing.
+- It runs through every normal stage (schedule, open, entry, close, draw) and
+  applies every eligibility gate exactly as a real raffle would, so what mods
+  see is representative. Only two things change:
+  - **Prize-free badge.** The entry message, summary, public winner
+    announcement, and audit commitment/result posts are all marked as a test
+    with no prize.
+  - **Eligibility-neutral result.** A test win never gates the winner's future
+    entries: it is excluded from the win-cooldown history and the prior-winner
+    bar (both read the same win history via `getUserWins`, which skips
+    `is_test` raffles). A drawn test raffle is likewise excluded from
+    `countRafflesSince`, so it never advances anyone's count-based cooldown. The
+    win row is still written (so the claim flow can be tested), just ignored by
+    the eligibility checks.
+- Nothing else is special-cased: activity counting, the provably-fair draw, and
+  the audit trail all behave normally, so a test raffle is a faithful dry run.
+
+### Resetting eligibility
+- Mod-only command: /raffle reset <user> <scope>. A maintenance tool for when a
+  raffle goes wrong (a mis-scheduled test that awarded a real cooldown, a spam
+  wave that inflated someone's counts, a win that should not have gated re-entry).
+  It is always scoped to one member in one guild and never touches anyone else.
+- Scopes:
+  - **cooldown**: waive the member's still-gating wins in this guild
+    (`wins.cooldown_waived = 1`), which lifts both the win cooldown and the
+    prior-winner bar (both read `getUserWins`). The win rows are preserved —
+    winner and claim history stay intact — only their re-entry-gating effect is
+    removed. Idempotent.
+  - **activity**: delete the member's counted-message history in this guild
+    (their `activity` rows) *and* drop any counts still buffered in memory
+    (`MessageCounter.forgetUser`), so the next flush can't re-create what was
+    just deleted.
+  - **all**: both of the above.
+- Every reset writes an `eligibility_reset` audit_log row (with the scope and the
+  affected counts) and mirrors a count-free line to the audit channel — the audit
+  formatter shows the scope but never the numbers, mirroring the activity-privacy
+  rule. A reset that finds nothing to clear still runs and is still logged.
+- Not in scope: it does not lift a blacklist (use /raffle unban) and does not
+  remove active entries.
+
 ### Blacklist
 - Mod-only commands: /raffle ban, /raffle unban, /raffle banlist.
 - Fields: user, banned by, timestamp, optional reason, optional expiry.
@@ -205,6 +248,7 @@ verifier reproduces from public data.
   - Entry accepted (user, raffle, timestamp).
   - Entry removed (blacklist or withdrawal).
   - Blacklist additions and removals (without private reasons).
+  - Eligibility resets (the scope, without the activity counts involved).
   - Draw commitment data and draw results with verification data.
 - All events also stored in the database with timestamps for export.
 - Optional: /raffle audit <raffle_id> command that outputs the full event
@@ -214,64 +258,39 @@ verifier reproduces from public data.
 
 ## Commands (slash commands)
 
-### User
-- /raffle enter [raffle] - enter an open raffle (also available as a button).
-- /raffle status [raffle] - own eligibility: activity progress, cooldown,
-  entry status. Ephemeral.
-- /raffle list - open and upcoming raffles.
-- /raffle claim [raffle] - claim a prize won under a raffle's claim window,
-  before the deadline. Ephemeral.
+The full command surface — every subcommand, its options, and worked examples —
+is documented in [commands.md](commands.md). This section records only the
+*design intent* behind that surface; the behavioral rules each command enforces
+live in the sections above (entry flow, cooldowns, the draw scheme, test raffles,
+resetting eligibility), and commands.md links back to them.
 
-### Moderator (permission-gated by role)
-- /raffle create - opens a guided wizard (see below). Power users can pass
-  options directly on the command to prefill steps.
-- /raffle edit - modify a draft or scheduled raffle. On an open raffle only the
-  end time may change — corrected earlier or later, but not before the raffle's
-  start — and edits are audit-logged.
-- /raffle cancel <raffle> <reason>.
-- /raffle draw <raffle> - manual draw trigger if configured.
-- /raffle reroll <raffle> <winner> <reason> - if a winner is disqualified;
-  must be logged with reason. The replacement is re-selected from the same base
-  seed with the disqualified winner excluded, so it stays verifiable from
-  public data (see "Provably fair draw").
-- /raffle ban <user> [duration] [reason], /raffle unban <user>,
-  /raffle banlist.
-- /raffle config - guild defaults: audit channel, counted channels, hourly
-  count cap, default cooldown, default minimum account age, mod role.
+- All functionality is one `/raffle` command with subcommands, so the bot
+  registers exactly one command.
+- User commands (enter, status, list, claim) are open to everyone; moderator
+  commands are hidden behind Manage Server and additionally gated at run time by
+  the configured mod role.
+- Command-surface changes must be reflected in commands.md in the same commit
+  (see CLAUDE.md's source-of-truth rule).
 
-### Raffle creation wizard
-The primary way mods create raffles. Designed for non-technical users: no
-options to memorize, sensible defaults from guild config, plain-language
-labels, and nothing is published until the final confirmation.
+### Raffle creation wizard (design)
+The primary way mods create raffles, and the reason a raffle row is filled
+incrementally rather than in one shot. Designed for non-technical users: no
+options to memorize, sensible defaults from guild config, plain-language labels,
+and nothing is published until the final confirmation. The step-by-step
+walkthrough lives in [commands.md](commands.md#the-creation-wizard); the design
+decisions that shape it:
 
-Flow (ephemeral message, driven by buttons, select menus, and modals):
-1. Basics modal: name, description, prize text.
-2. Schedule modal: start and end time. Accept friendly input ("tomorrow
-   20:00", "in 3 days") parsed to UTC, and echo back using Discord timestamp
-   markup so the mod sees it in their own timezone before confirming.
-3. Eligibility step: select menus for window anchor and new-member
-   exemption, plus a modal for X messages, Y days, minimum account age.
-   Each field shows the guild default and can be left as-is. A "More
-   restrictions" sub-screen (kept off the main step because Discord caps a
-   message at five component rows) holds the optional gates: bar prior winners
-   (toggle), and require/exclude a role (role select menus). All default to
-   off/unset; the creator self-exclusion is always on and needs no control.
-4. Draw step: winner count, draw mode (auto at close or manual), cooldown
-   override, and an optional claim window in hours (blank/0 = off).
-5. Summary card showing every setting in plain language (for example "To
-   enter, members must have sent at least 20 messages in the 14 days before
-   the raffle starts"), with buttons: Confirm and schedule, Edit a step,
-   Save as draft, Cancel.
-
-Details:
-- The raffle exists in draft status from step 1, so an abandoned wizard
-  loses nothing; /raffle edit reopens the wizard on a draft.
-- Every raffle-level setting has a guild default so steps 3 and 4 can be
-  skipped entirely with a "Use defaults" button.
-- Validation happens per step with friendly error messages (for example end
-  time before start time, X of 0).
+- The raffle exists in draft status from step 1, so an abandoned wizard loses
+  nothing; /raffle edit reopens the wizard on a draft.
+- Every raffle-level setting has a guild default, so the eligibility and draw
+  steps can each be skipped with a "Use defaults" button.
+- The optional entry gates (bar prior winners, require/exclude a role) live on a
+  "More restrictions" sub-screen because Discord caps a message at five component
+  rows; the creator self-exclusion is always on and needs no control.
+- Validation happens per step with friendly error messages (for example end time
+  before start time, or X of 0).
 - Wizard state is keyed to the draft raffle id in the database, not held in
-  memory, so a bot restart mid-wizard does not lose progress.
+  memory, so a bot restart mid-wizard does not lose progress (see wizard_state).
 
 ## Data model (SQLite to start)
 
@@ -329,6 +348,7 @@ raffles (
   cooldown_days   INTEGER,          -- null = guild default
   cooldown_count  INTEGER,
   claim_window_hours INTEGER,       -- winners must claim within N hours; null/0 = off
+  is_test         INTEGER DEFAULT 0, -- 1 = test raffle: prize-free, eligibility-neutral
   draw_mode       TEXT,             -- auto or manual
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the entry message; edited at close to remove the Enter button
@@ -357,7 +377,8 @@ wins (
   won_at     TEXT,
   rerolled   INTEGER DEFAULT 0,     -- 1 if later disqualified
   claim_deadline TEXT,              -- claim window: must claim by this instant; null = no claim
-  claimed_at     TEXT               -- when the winner claimed; null until claimed
+  claimed_at     TEXT,              -- when the winner claimed; null until claimed
+  cooldown_waived INTEGER DEFAULT 0 -- 1 if /raffle reset waived this win from gating re-entry
 )
 
 blacklist (

@@ -225,6 +225,21 @@ function announceChannelSelect(raffle: RaffleRow): ActionRowBuilder<ChannelSelec
   return new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(menu);
 }
 
+function testSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(buildWizardId("draw", "test", raffle.raffle_id))
+    .setPlaceholder("Prize mode")
+    .addOptions(
+      { label: "Real raffle — a prize is awarded", value: "off", default: raffle.is_test !== 1 },
+      {
+        label: "Test raffle — no prize, does not affect eligibility",
+        value: "on",
+        default: raffle.is_test === 1,
+      },
+    );
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+}
+
 function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildWizardId("draw", "mode", raffle.raffle_id))
@@ -313,9 +328,11 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
       };
     case "draw":
       return {
-        content: "**Step 4 of 5 — Draw**\nWinner count, draw mode, and optional cooldown.",
+        content:
+          "**Step 4 of 5 — Draw**\nWinner count, draw mode, optional cooldown, and whether this is a test raffle.",
         components: rows(
           drawModeSelect(raffle),
+          testSelect(raffle),
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("draw", "nums", id, "Set winners & cooldown", ButtonStyle.Primary),
             button("draw", "defaults", id, "Use defaults"),

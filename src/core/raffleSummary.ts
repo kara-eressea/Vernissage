@@ -17,6 +17,9 @@ export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
   const lines: string[] = [];
 
   lines.push(`**${settings.name ?? "Untitled raffle"}**`);
+  if (settings.is_test === 1) {
+    lines.push("🧪 **Test raffle** — no prize is awarded and it does not affect anyone's eligibility.");
+  }
   if (settings.prize) {
     lines.push(`Prize: ${settings.prize}`);
   }

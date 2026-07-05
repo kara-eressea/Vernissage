@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
 import {
+  deleteUserActivity,
   getCountsInWindow,
   incrementActivity,
   pruneActivityBefore,
@@ -54,6 +55,23 @@ describe("activity buckets", () => {
     expect(removed).toBe(2);
     expect(getCountsInWindow(db, "g1", "u1", "2026-01-01", "2026-12-31")).toEqual([
       { day: "2026-07-01", count: 1 },
+    ]);
+  });
+
+  it("deleteUserActivity removes one member's rows, scoped to the guild", () => {
+    incrementActivity(db, "g1", "u1", "2026-07-03", 5);
+    incrementActivity(db, "g1", "u1", "2026-07-04", 2);
+    incrementActivity(db, "g1", "u2", "2026-07-03", 9); // other member, kept
+    incrementActivity(db, "g2", "u1", "2026-07-03", 4); // other guild, kept
+
+    const removed = deleteUserActivity(db, "g1", "u1");
+    expect(removed).toBe(2);
+    expect(getCountsInWindow(db, "g1", "u1", "2026-01-01", "2026-12-31")).toEqual([]);
+    expect(getCountsInWindow(db, "g1", "u2", "2026-01-01", "2026-12-31")).toEqual([
+      { day: "2026-07-03", count: 9 },
+    ]);
+    expect(getCountsInWindow(db, "g2", "u1", "2026-01-01", "2026-12-31")).toEqual([
+      { day: "2026-07-03", count: 4 },
     ]);
   });
 });

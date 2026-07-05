@@ -53,6 +53,19 @@ describe("formatEntryMessage", () => {
     expect(body).toContain(discordTimestamp(base.endsAt!));
   });
 
+  it("badges a test raffle prize-free in the title and body", () => {
+    const { title, body } = formatEntryMessage({ ...base, isTest: true });
+    expect(title).toContain("🧪");
+    expect(title).toContain("TEST");
+    expect(body).toMatch(/no prize/i);
+  });
+
+  it("shows the normal ticket badge for a non-test raffle", () => {
+    const { title } = formatEntryMessage({ ...base, isTest: false });
+    expect(title).toContain("🎟️");
+    expect(title).not.toContain("TEST");
+  });
+
   it("invites everyone when there are no requirements", () => {
     const { body } = formatEntryMessage({
       ...base,
@@ -77,6 +90,12 @@ describe("formatClosedEntryMessage", () => {
     const { title, body } = formatClosedEntryMessage({ name: null, prize: null });
     expect(title).toContain("Raffle");
     expect(body).not.toMatch(/prize/i);
+  });
+
+  it("badges a closed test raffle prize-free", () => {
+    const { title, body } = formatClosedEntryMessage({ name: "Trial", prize: null, isTest: true });
+    expect(title).toContain("🧪");
+    expect(body).toMatch(/test raffle/i);
   });
 });
 

@@ -103,4 +103,43 @@ describe("MessageCounter", () => {
     const counter = new MessageCounter();
     expect(counter.flush(db)).toBe(0);
   });
+
+  it("forgetUser drops one member's pending counts so a flush can't re-add them", () => {
+    const counter = new MessageCounter();
+    counter.record("g1", "u1", t("2026-07-03T10:00:00.000Z"), null);
+    counter.record("g1", "u2", t("2026-07-03T10:00:00.000Z"), null);
+
+    counter.forgetUser("g1", "u1");
+
+    // Only u2's bucket remains to flush.
+    expect(counter.pendingWrites).toBe(1);
+    counter.flush(db);
+    expect(getCountsInWindow(db, "g1", "u1", "2026-07-03", "2026-07-03")).toEqual([]);
+    expect(getCountsInWindow(db, "g1", "u2", "2026-07-03", "2026-07-03")).toEqual([
+      { day: "2026-07-03", count: 1 },
+    ]);
+  });
+
+  it("forgetUser also clears the hour tally so the cap starts fresh", () => {
+    const counter = new MessageCounter();
+    const cap = 1;
+    expect(counter.record("g1", "u1", t("2026-07-03T10:00:00.000Z"), cap)).toBe(true);
+    expect(counter.record("g1", "u1", t("2026-07-03T10:30:00.000Z"), cap)).toBe(false);
+    counter.forgetUser("g1", "u1");
+    // With the tally cleared, the same hour accepts a message again.
+    expect(counter.record("g1", "u1", t("2026-07-03T10:45:00.000Z"), cap)).toBe(true);
+  });
+
+  it("forgetUser leaves a member whose id is a prefix of another untouched", () => {
+    const counter = new MessageCounter();
+    counter.record("g1", "u1", t("2026-07-03T10:00:00.000Z"), null);
+    counter.record("g1", "u12", t("2026-07-03T10:00:00.000Z"), null);
+    counter.forgetUser("g1", "u1");
+    // The separator after the id means "u1" never matches "u12".
+    expect(counter.pendingWrites).toBe(1);
+    counter.flush(db);
+    expect(getCountsInWindow(db, "g1", "u12", "2026-07-03", "2026-07-03")).toEqual([
+      { day: "2026-07-03", count: 1 },
+    ]);
+  });
 });
