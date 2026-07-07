@@ -89,6 +89,19 @@ async function main(): Promise<void> {
     console.log(
       `Logged in as ${ready.user.tag}; serving ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
     );
+    // Reconcile command registration at startup: a guild the bot was added to
+    // while offline never fired GuildCreate, so register in every allowlisted
+    // guild it is in now. Idempotent (a bulk overwrite of the same set is a
+    // no-op in effect), and it makes deploy-commands a manual escape hatch
+    // rather than a required step after moving the bot.
+    for (const guild of ready.guilds.cache.values()) {
+      if (!config.guildIds.includes(guild.id)) {
+        continue; // attachGuildAllowlist is already leaving this one
+      }
+      void registerCommandsInGuild(config, commands, guild.id).catch((err) =>
+        console.error(`Failed to register commands in guild ${guild.id} at startup:`, err),
+      );
+    }
   });
 
   // The allowlist can be provisioned ahead of the bot actually joining a guild

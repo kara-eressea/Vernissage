@@ -428,10 +428,12 @@ wizard_state (
   guild not on the allowlist. The allowlist may be provisioned ahead of time:
   the deploy-commands script registers slash commands only in allowlisted
   guilds the bot is a member of (skipping the rest), and the running bot
-  registers them itself the moment it joins an allowlisted guild, so moving it
-  to a pre-listed server needs no redeploy. Per-guild data is scoped by
-  `guild_id`; a member's
-  activity and win cooldown in one guild never affect another.
+  registers them itself the moment it joins an allowlisted guild and, to catch
+  joins that happened while it was offline, in every allowlisted guild it is in
+  at startup — so moving it to a pre-listed server needs no redeploy, and
+  deploy-commands is a manual escape hatch. Per-guild data is scoped by
+  `guild_id`; a member's activity and win cooldown in one guild never affect
+  another.
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
   this automatically per viewer). Friendly schedule input in the wizard is
