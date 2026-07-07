@@ -267,3 +267,57 @@ Useful behaviors:
   fields from the server config.
 - A bot restart mid-wizard does not lose progress; the wizard resumes at the
   right step.
+
+## Recipes
+
+Worked setups for common situations. All values are starting points — watch a
+raffle or two and adjust.
+
+### First-time setup for a small server
+
+For a server of ~200 members with ~40 active in a week, running monthly
+raffles, where the goal is keeping out lurkers and members who only join for
+raffles:
+
+```
+/raffle config set audit-channel:#raffle-log announce-channel:#raffles mod-role:@Mods
+/raffle config set req-messages:10 req-days:14 min-account-age-days:30 hourly-cap:10 cooldown-count:1
+/raffle config channels action:exclude channel:#bot-spam
+```
+
+- **Activity 10 messages / 14 days**: a low bar on purpose — it filters, it
+  doesn't rank. A casual-but-real member chatting a few times a week passes;
+  pure lurkers and prize tourists don't. If it excludes people you consider
+  active, lower `req-messages` before widening `req-days`.
+- **Account age 30 days**: blocks throwaway/alt accounts; inconveniences nobody
+  legitimate.
+- **New-member exemption: leave off** (the default). "Joined last week" is the
+  raffle-tourist profile; a genuine newcomer becomes eligible after two weeks
+  of normal participation.
+- **Hourly cap 10**: no real member sustains 10 counted messages an hour; it
+  makes farming the (unpublished) activity bar slow.
+- **Cooldown: sit out 1 raffle** rather than a day count — self-adjusting for a
+  monthly cadence, and with a small eligible pool a longer cooldown thins the
+  field fast.
+- **Exclude bot/spam channels** from counting so measured activity is real
+  conversation.
+
+With ~40 weekly actives, expect roughly 20–35 eligible entrants; far fewer
+means the bar is too high for your crowd.
+
+### A special raffle: no recent winners
+
+For a bigger prize where anyone who has won in the last six months should sit
+out, override the cooldown on that one raffle in the wizard's **Draw** step
+("Set winners & cooldown" → Winner cooldown in days: `180`). The raffle-level
+value replaces the server default for that raffle only — it does not stack —
+and your regular raffles are unaffected. Notes:
+
+- Test-raffle wins and wins waived via `/raffle reset` don't count against the
+  cooldown.
+- The entry message states the cooldown plainly (it is not gameable, unlike
+  the activity numbers, which are never published — see
+  [design.md](design.md#raffle-lifecycle)).
+- For the harder rule — never won here, ever — use **More restrictions… →
+  Past winners: barred** (`exclude_prior_winners`) instead; it ignores time
+  entirely.
