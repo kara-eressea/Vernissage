@@ -69,6 +69,14 @@ export function parseFriendlyTime(
   }
   const tzMs = tzOffsetMinutes * MS_PER.minute;
 
+  // "now" — this instant. As a start time it means "open as soon as the
+  // raffle is scheduled" (the scheduler opens anything whose start has
+  // passed); validateSchedule's grace window keeps it valid while the mod
+  // finishes the remaining wizard steps.
+  if (/^now$/i.test(text)) {
+    return fromEpoch(nowMs);
+  }
+
   // "in N minutes/hours/days/weeks" — relative to now.
   const rel = REL.exec(text);
   if (rel) {
@@ -129,7 +137,7 @@ export function parseFriendlyTime(
   return {
     ok: false,
     error:
-      'Sorry, I couldn\'t read that time. Try "tomorrow 20:00", "in 3 days", or "2026-08-01 20:00".',
+      'Sorry, I couldn\'t read that time. Try "now", "tomorrow 20:00", "in 3 days", or "2026-08-01 20:00".',
   };
 }
 

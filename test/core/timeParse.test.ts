@@ -24,6 +24,18 @@ describe("parseFriendlyTime — relative", () => {
   });
 });
 
+describe("parseFriendlyTime — now", () => {
+  it("parses 'now' (any case) as the current instant, in any timezone", () => {
+    const now = "2026-07-15T12:00:00.000Z";
+    expect(parseFriendlyTime("now", now)).toEqual({ ok: true, utcIso: now });
+    expect(parseFriendlyTime(" NOW ", now, 120)).toEqual({ ok: true, utcIso: now });
+    expect(parseFriendlyTimeInZone("now", now, "Europe/Copenhagen")).toEqual({
+      ok: true,
+      utcIso: now,
+    });
+  });
+});
+
 describe("parseFriendlyTime — day-relative", () => {
   it("parses 'today HH:MM' in UTC", () => {
     expect(iso("today 18:30")).toBe("2026-07-03T18:30:00.000Z");

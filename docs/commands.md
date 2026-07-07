@@ -231,10 +231,11 @@ rationale (drafts, restart safety) is in
 The flow (all on one ephemeral message that updates in place):
 
 1. **Basics** — name, prize, and an optional description.
-2. **Schedule** — start and end time. Friendly input like `tomorrow 20:00` or
-   `in 3 days` is parsed to UTC and echoed back as Discord timestamp markup, so
-   you see it in your own timezone before confirming (interpreted in the server's
-   configured `timezone`).
+2. **Schedule** — start and end time. Friendly input like `now`, `tomorrow
+   20:00`, or `in 3 days` is parsed to UTC and echoed back as Discord timestamp
+   markup, so you see it in your own timezone before confirming (interpreted in
+   the server's configured `timezone`). A start of `now` opens the raffle on
+   the first scheduler sweep after you confirm.
 3. **Eligibility** — window anchor and new-member exemption via menus, plus a
    modal for X messages / Y days / minimum account age. Each field shows the
    server default and can be left as-is. A **More restrictions…** sub-screen holds

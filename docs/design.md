@@ -437,7 +437,10 @@ wizard_state (
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
   this automatically per viewer). Friendly schedule input in the wizard is
-  interpreted in the guild's configured `timezone` (an IANA name); the offset is
+  interpreted in the guild's configured `timezone` (an IANA name); "now" means
+  the current instant — as a start time the raffle opens on the first scheduler
+  sweep after confirmation, and schedule validation allows a start up to 15
+  minutes past so a typed "now" survives the remaining wizard steps. The offset is
   resolved for the *target* instant so a raffle scheduled across a DST boundary
   lands on the intended wall clock. With no timezone set, input is read as UTC.
 

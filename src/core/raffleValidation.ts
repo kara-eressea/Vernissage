@@ -60,6 +60,14 @@ export function validateBasics(fields: Pick<RaffleDraftFields, "name" | "prize">
 }
 
 /** Step 2: valid, future-dated window with end strictly after start. */
+/**
+ * How far in the past a start time may lie and still validate. A mod who types
+ * "now" (or a near-future time) on the schedule step re-validates at confirm,
+ * minutes later — without a grace window that start would already be "in the
+ * past". Kept short so a genuinely mistyped date still errors.
+ */
+export const START_GRACE_MS = 15 * 60_000;
+
 export function validateSchedule(
   startsAt: string | null,
   endsAt: string | null,
@@ -74,7 +82,7 @@ export function validateSchedule(
   if (Number.isNaN(start) || Number.isNaN(end)) {
     return err("The schedule has an invalid time.");
   }
-  if (start < now) {
+  if (start < now - START_GRACE_MS) {
     return err("The start time is in the past.");
   }
   if (end <= start) {

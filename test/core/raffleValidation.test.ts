@@ -6,6 +6,7 @@ import {
   validateDraw,
   validateEligibility,
   validateOpenRaffleEdit,
+  START_GRACE_MS,
   validateSchedule,
   type RaffleDraftFields,
 } from "../../src/core/raffleValidation.js";
@@ -50,6 +51,14 @@ describe("validateSchedule", () => {
 
   it("rejects a start in the past", () => {
     expect(validateSchedule("2026-07-01T00:00:00.000Z", validDraft.ends_at, NOW).ok).toBe(false);
+  });
+
+  it("accepts a start within the grace window, so a typed 'now' survives to confirm", () => {
+    const now = Date.parse(NOW);
+    const justInside = new Date(now - START_GRACE_MS + 60_000).toISOString();
+    const justOutside = new Date(now - START_GRACE_MS - 60_000).toISOString();
+    expect(validateSchedule(justInside, validDraft.ends_at, NOW).ok).toBe(true);
+    expect(validateSchedule(justOutside, validDraft.ends_at, NOW).ok).toBe(false);
   });
 
   it("rejects end before or equal to start", () => {
