@@ -69,9 +69,11 @@ draft -> scheduled -> open -> closed -> drawn -> completed
   Hosted by / Entries — re-edited in place as entries arrive so the count stays
   live. The eligibility line is rendered as subtext and deliberately vague
   ("you must have been active in the X days …", no message count) so the
-  activity bar cannot be gamed by a burst of filler messages; exact numbers
-  appear only in the member's private entry-failure and status replies. The
-  account-age requirement is stated exactly (it cannot be farmed).
+  activity bar cannot be gamed by a burst of filler messages. The private
+  entry-failure and status replies are equally vague about activity (a pass or
+  a "not enough yet", never have/need counts, which would let a member farm
+  precisely to the bar); non-gameable numbers — account age, cooldown
+  remaining — are stated exactly.
 - **closed**: end time reached, entries frozen, awaiting draw. The entry
   card is edited to drop the Enter button (via the stored `message_id`) and
   state that entries are closed.

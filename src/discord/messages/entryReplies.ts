@@ -1,10 +1,12 @@
 /**
  * Entry reply copy (pure).
  *
- * Maps an eligibility outcome to the ephemeral message a member sees, quoting
- * the concrete numbers (activity have/need, cooldown remaining) so the reply is
- * actionable (design.md "Entry flow"). Blacklist rejections honor the guild's
- * generic-message toggle. No discord.js/database import.
+ * Maps an eligibility outcome to the ephemeral message a member sees. Replies
+ * quote concrete numbers only for the non-gameable gates (cooldown remaining,
+ * account age): the activity gate stays vague even privately, since exact
+ * have/need numbers would let a member farm precisely to the bar (design.md
+ * "Entry flow"). Blacklist rejections honor the guild's generic-message
+ * toggle. No discord.js/database import.
  */
 
 import { activityProgress } from "../../core/eligibility.js";
@@ -66,10 +68,10 @@ export function entryFailureMessage(
     }
     case "prior_winner":
       return "This raffle is only open to members who haven't won here before.";
-    case "insufficient_activity": {
-      const p = activityProgress(input);
-      return `You need ${p.need} messages to enter — you have ${p.have}. Keep chatting!`;
-    }
+    case "insufficient_activity":
+      // Deliberately no have/need numbers, mirroring the public card: exact
+      // figures would let members farm precisely to the bar.
+      return "You haven't been active enough in this server recently to enter. Keep participating!";
     case "already_entered":
       return "You're already entered into this raffle. Changed your mind? Use `/raffle withdraw`.";
   }
@@ -113,7 +115,9 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
   lines.push(
     progress.exempt
       ? "- ✅ Activity: exempt (new member)"
-      : `- ${progress.have >= progress.need ? "✅" : "⬜"} Activity: ${progress.have}/${progress.need} messages`,
+      : progress.have >= progress.need
+        ? "- ✅ Activity: you've been active enough recently."
+        : "- ⬜ Activity: not enough recent activity yet — keep participating!",
   );
   lines.push(
     cooldown.active

@@ -50,10 +50,11 @@ describe("entryFailureMessage", () => {
     expect(generic.toLowerCase()).not.toContain("blacklisted");
   });
 
-  it("quotes have/need for an activity shortfall", () => {
+  it("keeps the activity shortfall vague — no have/need numbers to farm to", () => {
     const msg = entryFailureMessage("insufficient_activity", input(), false);
-    expect(msg).toContain("20");
-    expect(msg).toContain("8");
+    expect(msg.toLowerCase()).toContain("active enough");
+    expect(msg).not.toContain("20");
+    expect(msg).not.toContain("8");
   });
 
   it("describes the win cooldown", () => {
@@ -73,11 +74,12 @@ describe("entryFailureMessage", () => {
 });
 
 describe("statusMessage", () => {
-  it("shows activity progress, cooldown, and entry state", () => {
+  it("shows activity standing (pass/fail only), cooldown, and entry state", () => {
     // 8 messages in-window against a 20 requirement, an active cooldown, entered.
     const msg = statusMessage("Big One", input({ alreadyEntered: true }));
     expect(msg).toContain("Big One");
-    expect(msg).toContain("8/20");
+    expect(msg).toContain("not enough recent activity");
+    expect(msg).not.toContain("8/20"); // exact counts stay private to the system
     expect(msg.toLowerCase()).toContain("cooldown");
     expect(msg).toContain("already entered");
   });
