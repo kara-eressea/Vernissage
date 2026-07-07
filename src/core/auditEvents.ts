@@ -18,6 +18,7 @@ export const AUDIT_EVENTS = {
   raffleCancelled: "raffle_cancelled",
   entryAccepted: "entry_accepted",
   entryRemoved: "entry_removed",
+  entryWithdrawn: "entry_withdrawn",
   blacklistAdded: "blacklist_added",
   blacklistRemoved: "blacklist_removed",
   drawCommitted: "draw_committed",

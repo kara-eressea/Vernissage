@@ -71,6 +71,8 @@ export function formatAuditLine(event: AuditLineInput): string {
       return `🚫 ${actor} cancelled ${raffle} — ${when}`;
     case AUDIT_EVENTS.entryAccepted:
       return `✅ ${subject} entered ${raffle} — ${when}`;
+    case AUDIT_EVENTS.entryWithdrawn:
+      return `↩️ ${subject} withdrew from ${raffle} — ${when}`;
     case AUDIT_EVENTS.entryRemoved:
       // Deliberately no reason: the audit channel shows that a removal happened,
       // not why (design.md "Blacklist").

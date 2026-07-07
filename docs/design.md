@@ -60,7 +60,11 @@ draft -> scheduled -> open -> closed -> drawn -> completed
 ```
 - **draft**: created by a mod, editable, not visible to users.
 - **scheduled**: has start/end times, announced or silent until start.
-- **open**: entries accepted between start and end time. The entry message is
+- **open**: entries accepted between start and end time. A member may withdraw
+  their own entry (`/raffle withdraw`) while the raffle is open: the entry is
+  soft-removed with reason "withdrawn" and an `entry_withdrawn` audit row, and
+  the member may re-enter freely while it stays open — re-entry reinstates the
+  removed row and runs the full eligibility checks again. The entry message is
   one blockquote card — heading, description, then Prize / Starts / Ends /
   Hosted by / Entries — re-edited in place as entries arrive so the count stays
   live. The eligibility line is rendered as subtext and deliberately vague
