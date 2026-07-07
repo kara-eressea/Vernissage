@@ -16,6 +16,10 @@ const base: EntryMessageInput = {
   minAccountAgeDays: null,
   startsAt: "2026-07-10T12:00:00.000Z",
   endsAt: "2026-07-17T12:00:00.000Z",
+  cooldownDays: null,
+  cooldownCount: null,
+  excludePriorWinners: false,
+  newMemberExemptDays: null,
   hostId: "host-1",
   entryCount: 7,
 };
@@ -76,6 +80,31 @@ describe("formatEntryMessage — open card", () => {
     const content = formatEntryMessage({ ...base, description: null, hostId: null });
     expect(content).not.toContain("Hosted by");
     expect(content).not.toContain("community giveaway");
+  });
+
+  it("states the winner cooldown exactly (non-gameable)", () => {
+    expect(formatEntryMessage({ ...base, cooldownDays: 30 })).toContain(
+      "-# Recent winners must wait 30 days before entering again.",
+    );
+    expect(formatEntryMessage({ ...base, cooldownDays: 30, cooldownCount: 2 })).toContain(
+      "wait 30 days and sit out the next 2 raffles",
+    );
+  });
+
+  it("states the prior-winner bar, which overrides the cooldown line", () => {
+    const content = formatEntryMessage({
+      ...base,
+      excludePriorWinners: true,
+      cooldownDays: 30,
+    });
+    expect(content).toContain("-# Members who have won a raffle here before cannot enter");
+    expect(content).not.toContain("Recent winners");
+  });
+
+  it("states the new-member exemption's join window", () => {
+    expect(formatEntryMessage({ ...base, newMemberExemptDays: 10 })).toContain(
+      "-# Joined the server within the last 10 days? The activity requirement doesn't apply to you.",
+    );
   });
 
   it("badges a test raffle prize-free", () => {

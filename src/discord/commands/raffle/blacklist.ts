@@ -19,6 +19,7 @@ import { parseBanDuration } from "../../../core/duration.js";
 import { userMention } from "../../../core/format.js";
 import { discordTimestamp } from "../../../core/time.js";
 import { removeEntriesForBan } from "../../../blacklist/entryRemoval.js";
+import { refreshEntryMessage } from "../../entryFlow.js";
 import { writeAudit } from "../../../db/repositories/audit.js";
 import { addBan, listBans, removeBan } from "../../../db/repositories/blacklist.js";
 import type { CommandContext } from "../index.js";
@@ -115,6 +116,11 @@ export async function handleBan(
       payload: { userId: user.id },
       createdAt: now,
     });
+    // The public card's Entries count includes the removed entry until edited;
+    // refresh it so removals show as promptly as new entries do.
+    void refreshEntryMessage(ctx.db, ctx.notifier, raffleId).catch((err) =>
+      console.error(`Failed to refresh entry message for raffle ${raffleId}:`, err),
+    );
   }
 
   const until = expiresAt ? `until ${discordTimestamp(expiresAt)}` : "permanently";
