@@ -30,6 +30,24 @@ describe("entries", () => {
     expect(() => addEntry(db, 1, "u1", "2026-07-03T01:00:00.000Z")).toThrow();
   });
 
+  it("reinstates a removed entry on re-entry, clearing the removal fields", () => {
+    addEntry(db, 1, "u1", "2026-07-03T00:00:00.000Z");
+    removeEntry(db, 1, "u1", "2026-07-04T00:00:00.000Z", "withdrawn");
+    expect(hasEntry(db, 1, "u1")).toBe(false);
+
+    addEntry(db, 1, "u1", "2026-07-05T00:00:00.000Z");
+
+    expect(hasEntry(db, 1, "u1")).toBe(true);
+    const row = db
+      .prepare(`SELECT entered_at, removed_at, removed_reason FROM entries WHERE raffle_id = 1 AND user_id = 'u1'`)
+      .get() as { entered_at: string; removed_at: string | null; removed_reason: string | null };
+    expect(row).toEqual({
+      entered_at: "2026-07-05T00:00:00.000Z",
+      removed_at: null,
+      removed_reason: null,
+    });
+  });
+
   it("allows the same user to enter different raffles", () => {
     addEntry(db, 1, "u1", "2026-07-03T00:00:00.000Z");
     addEntry(db, 2, "u1", "2026-07-03T00:00:00.000Z");

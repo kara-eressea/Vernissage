@@ -71,7 +71,7 @@ export function entryFailureMessage(
       return `You need ${p.need} messages to enter — you have ${p.have}. Keep chatting!`;
     }
     case "already_entered":
-      return "You're already entered into this raffle.";
+      return "You're already entered into this raffle. Changed your mind? Use `/raffle withdraw`.";
   }
 }
 

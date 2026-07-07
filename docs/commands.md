@@ -34,6 +34,18 @@ reply tells you exactly which gate you missed (see
 /raffle enter raffle:42
 ```
 
+### `/raffle withdraw [raffle]`
+Withdraw your own entry from an open raffle. The withdrawal is logged, the
+raffle's entry count updates, and you can re-enter at any time while the raffle
+is still open (re-entry is re-checked against all
+[eligibility rules](design.md#entry-flow)). `raffle` is only needed when more
+than one raffle is open. Ephemeral.
+
+```
+/raffle withdraw
+/raffle withdraw raffle:42
+```
+
 ### `/raffle status [raffle]`
 Show your own standing for a raffle: activity progress toward the requirement,
 any win cooldown, and whether you have entered. Ephemeral.

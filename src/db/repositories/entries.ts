@@ -9,8 +9,11 @@
 import type { Database } from "better-sqlite3";
 
 /**
- * Record an entry. Throws on the unique constraint if the user already has a
- * row for this raffle (callers check eligibility first).
+ * Record an entry. A previously removed row (withdrawal, or a lifted ban) is
+ * reinstated in place — re-entry runs the full eligibility gauntlet first, so
+ * reinstating is safe regardless of why the entry was removed. Throws if the
+ * user already holds an *active* entry (callers check eligibility first; the
+ * throw is the guard against a concurrent double-entry race).
  */
 export function addEntry(
   db: Database,
@@ -18,10 +21,18 @@ export function addEntry(
   userId: string,
   enteredAt: string,
 ): void {
-  db.prepare(
-    `INSERT INTO entries (raffle_id, user_id, entered_at)
-     VALUES (?, ?, ?)`,
-  ).run(raffleId, userId, enteredAt);
+  const info = db
+    .prepare(
+      `INSERT INTO entries (raffle_id, user_id, entered_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (raffle_id, user_id) DO UPDATE
+         SET entered_at = excluded.entered_at, removed_at = NULL, removed_reason = NULL
+         WHERE entries.removed_at IS NOT NULL`,
+    )
+    .run(raffleId, userId, enteredAt);
+  if (info.changes === 0) {
+    throw new Error(`User ${userId} already has an active entry in raffle ${raffleId}`);
+  }
 }
 
 /** Soft-remove an entry (e.g. on blacklist), recording when and optionally why. */

@@ -171,17 +171,19 @@ describe("attemptEntry", () => {
     });
   });
 
-  it("treats a duplicate-insert race (soft-removed row) as already_entered", () => {
+  it("reinstates a soft-removed row on re-entry (withdrawal, lifted ban)", () => {
     const id = seedOpenRaffle();
     incrementActivity(db, "g1", "u1", DAY, 5);
-    // A prior removed entry leaves a row; hasEntry is false but the PK still collides.
+    // A prior removed entry leaves a row; the eligible member re-enters and the
+    // row is reinstated in place (design.md "open": withdrawal allows re-entry).
     addEntry(db, id, "u1", "2026-07-15T10:00:00.000Z");
-    removeEntry(db, id, "u1", "2026-07-15T11:00:00.000Z", "left server");
+    removeEntry(db, id, "u1", "2026-07-15T11:00:00.000Z", "withdrawn");
     expect(hasEntry(db, id, "u1")).toBe(false);
 
     const { result } = attemptEntry(db, notifier, ctxFor(id));
-    expect(result).toEqual({ ok: false, reason: "already_entered" });
-    expect(auditCount("entry_accepted")).toBe(0);
+    expect(result).toEqual({ ok: true });
+    expect(hasEntry(db, id, "u1")).toBe(true);
+    expect(auditCount("entry_accepted")).toBe(1);
   });
 
   it("binds an entry to the specific raffle when several are open", () => {

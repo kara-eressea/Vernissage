@@ -26,6 +26,7 @@ import {
   addEntrySubcommands,
   handleClaim,
   handleEnter,
+  handleWithdraw,
   handleList,
   handleStatus,
 } from "./entry.js";
@@ -75,6 +76,9 @@ async function dispatch(
       return;
     case "enter":
       await handleEnter(interaction, ctx);
+      return;
+    case "withdraw":
+      await handleWithdraw(interaction, ctx);
       return;
     case "status":
       await handleStatus(interaction, ctx);
