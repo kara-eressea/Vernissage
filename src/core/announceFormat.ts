@@ -166,7 +166,8 @@ export function formatEntryMessage(
     }
   }
 
-  // "> " on content lines, bare ">" on blank ones, so Discord renders a single
-  // unbroken quote block.
-  return lines.map((line) => (line === "" ? ">" : `> ${line}`)).join("\n");
+  // ">>> " quotes the entire rest of the message, blank lines included, so the
+  // card renders as one unbroken block. (Per-line "> " breaks on blank lines:
+  // a bare ">" renders as a literal ">" instead of an empty quoted line.)
+  return `>>> ${lines.join("\n")}`;
 }
