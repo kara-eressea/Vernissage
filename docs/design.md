@@ -60,10 +60,19 @@ draft -> scheduled -> open -> closed -> drawn -> completed
 ```
 - **draft**: created by a mod, editable, not visible to users.
 - **scheduled**: has start/end times, announced or silent until start.
-- **open**: entries accepted between start and end time.
+- **open**: entries accepted between start and end time. The entry message is
+  one blockquote card — heading, description, then Prize / Starts / Ends /
+  Hosted by / Entries — re-edited in place as entries arrive so the count stays
+  live. The eligibility line is rendered as subtext and deliberately vague
+  ("you must have been active in the X days …", no message count) so the
+  activity bar cannot be gamed by a burst of filler messages; exact numbers
+  appear only in the member's private entry-failure and status replies. The
+  account-age requirement is stated exactly (it cannot be farmed).
 - **closed**: end time reached, entries frozen, awaiting draw. The entry
-  message is edited to drop the Enter button (via the stored `message_id`).
-- **drawn**: winner(s) selected and announced.
+  card is edited to drop the Enter button (via the stored `message_id`) and
+  state that entries are closed.
+- **drawn**: winner(s) selected and announced; the entry card's closed notice
+  is replaced by the winner line (kept current across rerolls).
 - **completed**: prize handled, raffle archived.
 - **cancelled**: aborted by a mod; logged with reason.
 

@@ -28,6 +28,7 @@ function noopAnnouncer() {
   return {
     postAudit: async (): Promise<void> => {},
     postAnnouncement: async (): Promise<string | undefined> => "m",
+    editMessage: async (): Promise<void> => {},
   };
 }
 

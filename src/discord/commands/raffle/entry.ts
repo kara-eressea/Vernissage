@@ -28,6 +28,7 @@ import { recordClaim } from "../../../draw/service.js";
 import { parseEnterButtonId } from "../../components/enterButton.js";
 import {
   attemptEntry,
+  refreshEntryMessage,
   gatherEligibilityInput,
   type EntryContext,
 } from "../../entryFlow.js";
@@ -186,6 +187,11 @@ async function runEntry(
   };
   const { input, result } = attemptEntry(ctx.db, ctx.notifier, entryCtx);
   if (result.ok) {
+    // Bump the Entries count on the public card; fire-and-forget so a slow or
+    // failed edit never delays the member's confirmation.
+    void refreshEntryMessage(ctx.db, ctx.notifier, raffle.raffle_id).catch((err) =>
+      console.error(`Failed to refresh entry message for raffle ${raffle.raffle_id}:`, err),
+    );
     await ephemeral(interaction, entrySuccessMessage(raffle.name));
     return;
   }

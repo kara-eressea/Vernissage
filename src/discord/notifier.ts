@@ -15,7 +15,6 @@
 import type { Client } from "discord.js";
 import type { Database } from "better-sqlite3";
 import { formatAuditLine } from "../core/auditFormat.js";
-import type { EntryMessageContent } from "../core/announceFormat.js";
 import { writeAudit, type AuditEvent } from "../db/repositories/audit.js";
 import { getGuild } from "../db/repositories/guilds.js";
 
@@ -53,7 +52,7 @@ export interface Notifier {
    */
   postEntryMessage(
     channelId: string,
-    content: EntryMessageContent,
+    content: string,
     components?: readonly unknown[],
   ): Promise<string | undefined>;
   /**
@@ -158,7 +157,7 @@ export function createNotifier(client: Client, db: Database): Notifier {
 
   async function postEntryMessage(
     channelId: string,
-    content: EntryMessageContent,
+    content: string,
     components?: readonly unknown[],
   ): Promise<string | undefined> {
     const channel = await fetchSendable(client, channelId);
@@ -167,7 +166,7 @@ export function createNotifier(client: Client, db: Database): Notifier {
     }
     try {
       const message = await channel.send({
-        content: `**${content.title}**\n${content.body}`,
+        content,
         allowedMentions: { parse: [] },
         components,
       });

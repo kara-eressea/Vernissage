@@ -159,7 +159,7 @@ describe("postEntryMessage", () => {
     const send = vi.fn().mockResolvedValue({ id: "msg-42" });
     const notifier = createNotifier(fakeClient(() => stubChannel(send)), db);
 
-    const id = await notifier.postEntryMessage("c9", { title: "T", body: "B" });
+    const id = await notifier.postEntryMessage("c9", "> ### T\n> B");
 
     expect(id).toBe("msg-42");
     expect(send.mock.calls[0]![0].content).toContain("T");
@@ -171,7 +171,7 @@ describe("postEntryMessage", () => {
     const notifier = createNotifier(fakeClient(() => stubChannel(send)), db);
     const components = [{ type: 1 }];
 
-    await notifier.postEntryMessage("c9", { title: "T", body: "B" }, components);
+    await notifier.postEntryMessage("c9", "content", components);
 
     expect(send.mock.calls[0]![0].components).toBe(components);
   });
@@ -181,7 +181,7 @@ describe("postEntryMessage", () => {
       fakeClient(() => Promise.reject(new Error("gone"))),
       db,
     );
-    expect(await notifier.postEntryMessage("c9", { title: "T", body: "B" })).toBeUndefined();
+    expect(await notifier.postEntryMessage("c9", "content")).toBeUndefined();
   });
 });
 

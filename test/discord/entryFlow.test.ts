@@ -13,7 +13,7 @@ import {
   type RaffleFieldPatch,
 } from "../../src/db/repositories/raffles.js";
 import { addWin } from "../../src/db/repositories/wins.js";
-import { announceOpenRaffle, attemptEntry, closeEntryMessage } from "../../src/discord/entryFlow.js";
+import { announceOpenRaffle, attemptEntry, closeEntryMessage, refreshEntryMessage } from "../../src/discord/entryFlow.js";
 import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
 let db: Database;
@@ -274,5 +274,48 @@ describe("announceOpenRaffle — failure surfacing", () => {
 
     expect(notifier.postAudit).not.toHaveBeenCalled();
     expect(getRaffle(db, id)?.message_id).toBe("msg-1");
+  });
+});
+
+describe("entry-message card lifecycle", () => {
+  it("posts the open card with host, entry count, and vague requirements", async () => {
+    const id = seedOpenRaffle({ channel_id: "chan-1", description: "Come one, come all" });
+    addEntry(db, id, "u1", NOW);
+    notifier.postEntryMessage.mockResolvedValue("msg-1");
+
+    await announceOpenRaffle(db, notifier, id);
+
+    const content = notifier.postEntryMessage.mock.calls[0]![1] as string;
+    expect(content).toContain("> ### 🎟️ R");
+    expect(content).toContain("> Come one, come all");
+    expect(content).toContain("**Hosted by:** <@mod1>");
+    expect(content).toContain("**Entries:** 1");
+    expect(content).toContain("-# To enter, you must have been active");
+    expect(content).not.toContain("5 messages"); // count stays private
+  });
+
+  it("refresh re-edits the card with the new count and keeps the Enter button", async () => {
+    const id = seedOpenRaffle({ channel_id: "chan-1", message_id: "msg-1" });
+    addEntry(db, id, "u1", NOW);
+    addEntry(db, id, "u2", NOW);
+
+    await refreshEntryMessage(db, notifier, id);
+
+    const [channelId, messageId, content, components] = notifier.editMessage.mock.calls[0]!;
+    expect(channelId).toBe("chan-1");
+    expect(messageId).toBe("msg-1");
+    expect(content).toContain("**Entries:** 2");
+    expect(components).toHaveLength(1); // Enter button retained while open
+  });
+
+  it("close rewrites the card closed and drops the button", async () => {
+    const id = seedOpenRaffle({ channel_id: "chan-1", message_id: "msg-1" });
+
+    await closeEntryMessage(db, notifier, id);
+
+    const [, , content, components] = notifier.editMessage.mock.calls[0]!;
+    expect(content).toContain("(closed)");
+    expect(content).toContain("Entries are now closed");
+    expect(components).toHaveLength(0);
   });
 });

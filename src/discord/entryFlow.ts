@@ -14,7 +14,8 @@ import { AUDIT_EVENTS } from "../core/auditEvents.js";
 import {
   resolveAnnounceChannelId,
   formatEntryMessage,
-  formatClosedEntryMessage,
+  type EntryMessageInput,
+  type EntryMessagePhase,
 } from "../core/announceFormat.js";
 import { checkEligibility } from "../core/eligibility.js";
 import { resolveEntrySettings } from "../core/settings.js";
@@ -23,7 +24,7 @@ import type { EligibilityInput, EligibilityResult, WindowAnchor } from "../core/
 import { writeAudit } from "../db/repositories/audit.js";
 import { getCountsInWindow } from "../db/repositories/activity.js";
 import { isBlacklisted } from "../db/repositories/blacklist.js";
-import { addEntry, hasEntry } from "../db/repositories/entries.js";
+import { addEntry, hasEntry, listEntrants } from "../db/repositories/entries.js";
 import type { GuildRow } from "../db/repositories/guilds.js";
 import { getGuild } from "../db/repositories/guilds.js";
 import {
@@ -160,6 +161,59 @@ export function attemptEntry(
  * when it opens, storing the message id. No-ops if the raffle is not open or no
  * announce channel is configured.
  */
+/**
+ * Project a raffle row (plus its guild's defaults) into the entry-message
+ * card's input. Shared by every phase of the card — open, per-entry refresh,
+ * close, and the draw's winner edit — so they can never disagree.
+ */
+export function buildEntryMessageInput(db: Database, raffle: RaffleRow): EntryMessageInput {
+  const guild = getGuild(db, raffle.guild_id);
+  const settings = resolveEntrySettings(raffle, {
+    default_min_account_age_days: guild?.default_min_account_age_days ?? null,
+    default_cooldown_days: guild?.default_cooldown_days ?? null,
+    default_cooldown_count: guild?.default_cooldown_count ?? null,
+  });
+  return {
+    name: raffle.name,
+    prize: raffle.prize,
+    description: raffle.description,
+    reqMessages: raffle.req_messages,
+    reqDays: raffle.req_days,
+    windowAnchor: raffle.window_anchor,
+    minAccountAgeDays: settings.minAccountAgeDays,
+    startsAt: raffle.starts_at,
+    endsAt: raffle.ends_at,
+    hostId: raffle.created_by,
+    entryCount: listEntrants(db, raffle.raffle_id).length,
+    isTest: raffle.is_test === 1,
+  };
+}
+
+/**
+ * Re-edit a raffle's entry message in place (e.g. after an accepted entry, to
+ * bump the Entries count). Best-effort: a no-op without a stored message id or
+ * resolvable channel. Keeps the Enter button while the raffle is open.
+ */
+export async function refreshEntryMessage(
+  db: Database,
+  notifier: Pick<Notifier, "editMessage">,
+  raffleId: number,
+  phase: EntryMessagePhase = { phase: "open" },
+): Promise<void> {
+  const raffle = getRaffle(db, raffleId);
+  if (!raffle || !raffle.message_id) {
+    return;
+  }
+  const guild = getGuild(db, raffle.guild_id);
+  const channelId = resolveAnnounceChannelId(raffle.channel_id, guild?.announce_channel ?? null);
+  if (!channelId) {
+    return;
+  }
+  const content = formatEntryMessage(buildEntryMessageInput(db, raffle), phase);
+  const components = phase.phase === "open" ? [buildEnterRow(raffleId).toJSON()] : [];
+  await notifier.editMessage(channelId, raffle.message_id, content, components);
+}
+
 export async function announceOpenRaffle(
   db: Database,
   notifier: Notifier,
@@ -182,22 +236,7 @@ export async function announceOpenRaffle(
     return;
   }
 
-  const settings = resolveEntrySettings(raffle, {
-    default_min_account_age_days: guild?.default_min_account_age_days ?? null,
-    default_cooldown_days: guild?.default_cooldown_days ?? null,
-    default_cooldown_count: guild?.default_cooldown_count ?? null,
-  });
-  const content = formatEntryMessage({
-    name: raffle.name,
-    prize: raffle.prize,
-    reqMessages: raffle.req_messages,
-    reqDays: raffle.req_days,
-    windowAnchor: raffle.window_anchor,
-    minAccountAgeDays: settings.minAccountAgeDays,
-    startsAt: raffle.starts_at,
-    endsAt: raffle.ends_at,
-    isTest: raffle.is_test === 1,
-  });
+  const content = formatEntryMessage(buildEntryMessageInput(db, raffle));
 
   const messageId = await notifier.postEntryMessage(channelId, content, [
     buildEnterRow(raffleId).toJSON(),
@@ -223,20 +262,6 @@ export async function closeEntryMessage(
   notifier: Notifier,
   raffleId: number,
 ): Promise<void> {
-  const raffle = getRaffle(db, raffleId);
-  if (!raffle || !raffle.message_id) {
-    return;
-  }
-  const guild = getGuild(db, raffle.guild_id);
-  const channelId = resolveAnnounceChannelId(raffle.channel_id, guild?.announce_channel ?? null);
-  if (!channelId) {
-    return;
-  }
-  const content = formatClosedEntryMessage({
-    name: raffle.name,
-    prize: raffle.prize,
-    isTest: raffle.is_test === 1,
-  });
-  // Empty components remove the Enter button.
-  await notifier.editMessage(channelId, raffle.message_id, `**${content.title}**\n${content.body}`, []);
+  // The closed phase drops the Enter button (empty components).
+  await refreshEntryMessage(db, notifier, raffleId, { phase: "closed" });
 }
