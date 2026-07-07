@@ -1,6 +1,9 @@
 # Vernissage
 
-Vernissage is a Discord bot for running free, activity-gated raffles. Entry costs
+Vernissage (presented to users as **Tombola**) is a Discord bot for running
+free, activity-gated raffles. Vernissage is the project's codename; the Discord
+application, its profile, and anything members see use the product name
+Tombola. Entry costs
 nothing, but only members who have been active recently can enter, and winners
 are chosen in a way that anyone can independently verify was fair. It is a
 private bot: it serves only the servers you configure and leaves any other server
@@ -28,6 +31,23 @@ and settings are kept separate.
 
 For the full design, including the raffle lifecycle, eligibility rules, cooldown
 rules, the draw scheme, and the data model, see [docs/design.md](docs/design.md).
+
+## Naming and presentation
+
+The Discord application is named **Tombola**. Individual servers can override
+it with a nickname as usual. Copy-paste material for the application page
+(General Information in the [Developer Portal](https://discord.com/developers/applications);
+all of it can be added or changed at any time):
+
+**Description** (max 400 characters):
+
+> Tombola runs free, provably fair raffles for your community. Entry is
+> activity-gated — members earn their ticket by being active, not by spamming —
+> with account-age checks, winner cooldowns, and claim windows. Every entry,
+> draw, and reroll is audit-logged, and winners are drawn from a published
+> commitment so results are verifiable.
+
+**Tags** (max 5): `raffle`, `giveaway`, `community`, `events`, `moderation`.
 
 ## Requirements
 

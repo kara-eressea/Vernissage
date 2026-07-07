@@ -20,10 +20,14 @@ counts how many messages members send in the channels you choose.
 
 1. Open the Discord Developer Portal at https://discord.com/developers/applications
    and sign in with your Discord account.
-2. Click New Application, give it a name (for example "Vernissage"), accept the
-   terms, and click Create.
-3. You are now on the General Information page. Find Application ID and click
-   Copy. Save it somewhere safe. This is your `DISCORD_APP_ID`.
+2. Click New Application and give it the bot's user-facing name, "Tombola"
+   (the project codename "Vernissage" stays out of anything members see).
+   Accept the terms and click Create.
+3. Optional, can be done any time later: on General Information, add an icon,
+   a description, and up to five tags. Suggested description and tags live in
+   the README's "Naming and presentation" section.
+4. Still on General Information, find Application ID and click Copy. Save it
+   somewhere safe. This is your `DISCORD_APP_ID`.
 
 ## 2. Add the bot and copy the token
 

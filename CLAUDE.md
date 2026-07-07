@@ -1,7 +1,9 @@
 # Vernissage
 
 Discord bot for running auditable, activity-gated free raffles, primarily for
-the Musicorum server. Private bot: an allowlist of one or more guilds (GUILD_IDS,
+the Musicorum server. "Vernissage" is the project codename; the bot presents to
+users as "Tombola" — user-facing copy that names the bot must say Tombola,
+never Vernissage. Private bot: an allowlist of one or more guilds (GUILD_IDS,
 usually just one), not distributed. Per-guild data (activity, raffles, wins,
 blacklist, config) is scoped by guild_id and kept separate.
 
