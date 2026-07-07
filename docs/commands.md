@@ -8,7 +8,9 @@ semantics — live there, and each command below links to the relevant section.
 All functionality hangs off a single `/raffle` command as subcommands, so the bot
 registers exactly one command. Options are shown as `<required>` and
 `[optional]`. After changing the command surface, run `npm run deploy-commands`
-to re-register (guild commands update instantly).
+to re-register (guild commands update instantly). Moving the bot between
+allowlisted servers needs no re-run: it registers its commands itself when it
+joins an allowlisted guild and reconciles at startup.
 
 **Permissions.** User commands are open to everyone. Moderator commands are
 hidden from ordinary members (they require the Manage Server permission) and are
@@ -158,7 +160,9 @@ replies are ephemeral.
 Show the current configuration: audit and announce channels, mod role, hourly
 cap, default cooldown, default minimum account age, default activity
 requirement, timezone, blacklist-message style, and the counted-channel rules
-with their resulting precedence.
+with their resulting precedence. If audit-channel posts have been failing (e.g.
+the bot's access was revoked after the channel was set), the audit-channel line
+carries a warning with the time the failures started.
 
 ### `/raffle config set …`
 Set one or more server defaults in a single call. All options are optional; pass

@@ -43,6 +43,8 @@ import {
   upsertWizardStep,
   type WizardStep,
 } from "../../db/repositories/wizardState.js";
+import { resolveAnnounceChannelId } from "../../core/announceFormat.js";
+import { channelAccessError } from "../channelAccess.js";
 import { auditAndMirror, type Notifier } from "../notifier.js";
 import { parseWizardId } from "./customId.js";
 import {
@@ -422,8 +424,19 @@ export function createWizard(deps: WizardDeps): Wizard {
   ): Promise<void> {
     const id = raffle.raffle_id;
     if (action === "channel" && interaction.isChannelSelectMenu()) {
-      // Empty selection clears the per-raffle override (falls back to the guild
-      // default announce channel at post time).
+      // Reject a channel the bot cannot post in up front — otherwise the
+      // failure surfaces only when the raffle opens invisibly (issue #3's
+      // pattern). Empty selection clears the per-raffle override (falls back
+      // to the guild default announce channel at post time).
+      const error = channelAccessError(
+        interaction.guild?.members?.me,
+        interaction.channels.first(),
+        "announce",
+      );
+      if (error) {
+        await respond(interaction, withError("summary", raffle, error));
+        return;
+      }
       updateRaffleFields(db, id, { channel_id: interaction.values[0] ?? null });
       return rerender(interaction, id, "summary");
     }
@@ -437,6 +450,34 @@ export function createWizard(deps: WizardDeps): Wizard {
       const check = validateDraft(toDraftFields(fresh), now);
       if (!check.ok) {
         await respond(interaction, withError("summary", fresh, check.error));
+        return;
+      }
+      // The raffle needs somewhere to announce itself, and the bot must be
+      // able to post there — otherwise it opens with no entry message and
+      // nobody can enter. Checked here (not in the pure validator) because it
+      // reads guild config and live channel permissions.
+      const announceChannelId = resolveAnnounceChannelId(
+        fresh.channel_id,
+        getGuild(db, fresh.guild_id)?.announce_channel ?? null,
+      );
+      if (!announceChannelId) {
+        await respond(
+          interaction,
+          withError(
+            "summary",
+            fresh,
+            "There is no channel to announce this raffle in. Pick one below, or set a server default with /raffle config set announce-channel.",
+          ),
+        );
+        return;
+      }
+      const accessError = channelAccessError(
+        interaction.guild?.members?.me,
+        interaction.guild?.channels?.cache?.get(announceChannelId),
+        "announce",
+      );
+      if (accessError) {
+        await respond(interaction, withError("summary", fresh, accessError));
         return;
       }
       setStatus(db, id, "scheduled");

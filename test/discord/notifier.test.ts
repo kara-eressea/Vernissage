@@ -184,3 +184,26 @@ describe("postEntryMessage", () => {
     expect(await notifier.postEntryMessage("c9", { title: "T", body: "B" })).toBeUndefined();
   });
 });
+
+describe("auditFailingSince", () => {
+  it("records the first failure and clears on the next success", async () => {
+    setAuditChannel("g1", "chan-1");
+    const send = vi.fn().mockRejectedValueOnce(new Error("Missing Access"));
+    const notifier = createNotifier(fakeClient(() => stubChannel(send)), db);
+
+    expect(notifier.auditFailingSince("g1")).toBeNull();
+
+    await notifier.mirrorAudit(openEvent);
+    const since = notifier.auditFailingSince("g1");
+    expect(since).not.toBeNull();
+
+    // A second failure keeps the original timestamp; a success clears it.
+    send.mockRejectedValueOnce(new Error("Missing Access"));
+    await notifier.postAudit("g1", "hello");
+    expect(notifier.auditFailingSince("g1")).toBe(since);
+
+    send.mockResolvedValue({ id: "msg1" });
+    await notifier.mirrorAudit(openEvent);
+    expect(notifier.auditFailingSince("g1")).toBeNull();
+  });
+});

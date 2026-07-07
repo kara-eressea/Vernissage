@@ -128,11 +128,21 @@ describe("wizard basics step", () => {
 function fakeChannelSelect(
   customId: string,
   values: string[],
+  opts: { botCanPost?: boolean } = {},
 ): WizardInteraction & { update: ReturnType<typeof vi.fn> } {
+  // When botCanPost is set, model a resolvable bot member + channel permissions
+  // so the access check runs; otherwise leave them unresolvable (check skipped).
+  const withPerms = opts.botCanPost !== undefined;
+  const channel = {
+    id: values[0],
+    permissionsFor: withPerms ? () => ({ has: () => opts.botCanPost }) : undefined,
+  };
   return {
     customId,
     user: { id: "mod1" },
     values,
+    channels: { first: () => (values.length ? channel : undefined) },
+    guild: withPerms ? { members: { me: { id: "bot" } } } : undefined,
     isChatInputCommand: () => false,
     isModalSubmit: () => false,
     isButton: () => false,
@@ -174,9 +184,47 @@ describe("wizard announce channel override", () => {
     await wizard().handle(fakeChannelSelect(`wiz:summary:channel:${id}`, []));
     expect(getRaffle(db, id)?.channel_id).toBeNull();
   });
+
+  it("rejects a channel the bot cannot post in and keeps the previous value", async () => {
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "summary", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeChannelSelect(`wiz:summary:channel:${id}`, ["private-1"], {
+      botCanPost: false,
+    });
+    await wizard().handle(interaction);
+
+    const payload = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(payload.content).toMatch(/can't post in <#private-1>/);
+    expect(getRaffle(db, id)?.channel_id).toBeNull(); // not saved
+
+    const ok = fakeChannelSelect(`wiz:summary:channel:${id}`, ["open-1"], { botCanPost: true });
+    await wizard().handle(ok);
+    expect(getRaffle(db, id)?.channel_id).toBe("open-1");
+  });
 });
 
 describe("wizard confirm", () => {
+  it("refuses to schedule when no announce channel is configured anywhere", async () => {
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, {
+      name: "Valid",
+      prize: "Prize",
+      starts_at: "2099-01-01T00:00:00.000Z",
+      ends_at: "2099-01-08T00:00:00.000Z",
+      req_messages: 20,
+      req_days: 14,
+    });
+    upsertWizardStep(db, id, "summary", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeButton(`wiz:summary:confirm:${id}`);
+    await wizard().handle(interaction);
+
+    const payload = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(payload.content).toMatch(/no channel to announce/);
+    expect(getRaffle(db, id)?.status).toBe("draft"); // not scheduled
+  });
+
   it("schedules a fully valid draft, audits it, and clears wizard state", async () => {
     const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
     updateRaffleFields(db, id, {
@@ -191,6 +239,7 @@ describe("wizard confirm", () => {
       draw_mode: "auto",
     });
     upsertWizardStep(db, id, "summary", "2026-07-01T00:00:00.000Z");
+    setGuildConfig(db, "g1", { announce_channel: "chan-1" }, "2026-07-01T00:00:00.000Z");
 
     await wizard().handle(fakeButton(`wiz:summary:confirm:${id}`));
 

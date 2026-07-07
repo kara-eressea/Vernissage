@@ -172,6 +172,13 @@ export async function announceOpenRaffle(
   const guild = getGuild(db, raffle.guild_id);
   const channelId = resolveAnnounceChannelId(raffle.channel_id, guild?.announce_channel ?? null);
   if (!channelId) {
+    // Without an entry message there is no Enter button and no announcement —
+    // the raffle is open but invisible. Failures here are non-fatal by design,
+    // so surface them to the mods on the audit channel instead of only a log.
+    await notifier.postAudit(
+      raffle.guild_id,
+      `⚠️ Raffle #${raffleId} (**${raffle.name ?? "unnamed"}**) opened, but no announce channel is configured — its entry message was not posted. Set one with /raffle config set announce-channel.`,
+    );
     return;
   }
 
@@ -197,6 +204,11 @@ export async function announceOpenRaffle(
   ]);
   if (messageId) {
     updateRaffleFields(db, raffleId, { message_id: messageId });
+  } else {
+    await notifier.postAudit(
+      raffle.guild_id,
+      `⚠️ Raffle #${raffleId} (**${raffle.name ?? "unnamed"}**) opened, but its entry message could not be posted to <#${channelId}> — members cannot see or enter it. Check my View Channel and Send Messages permissions there.`,
+    );
   }
 }
 

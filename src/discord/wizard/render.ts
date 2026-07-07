@@ -19,6 +19,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import { discordTimestamp } from "../../core/time.js";
 import type { RaffleRow } from "../../db/repositories/raffles.js";
 import type { WizardStep } from "../../db/repositories/wizardState.js";
 import { buildWizardId } from "./customId.js";
@@ -362,7 +363,13 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
       };
     case "schedule":
       return {
-        content: "**Step 2 of 5 — Schedule**\nWhen the raffle opens and closes.",
+        // Echo any saved times as Discord timestamps (rendered in each
+        // viewer's local time) so a timezone mistake is visible at a glance.
+        content:
+          "**Step 2 of 5 — Schedule**\nWhen the raffle opens and closes." +
+          (raffle.starts_at && raffle.ends_at
+            ? `\nCurrently: opens ${discordTimestamp(raffle.starts_at)}, closes ${discordTimestamp(raffle.ends_at)}.`
+            : ""),
         components: rows(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("schedule", "open", id, "Set schedule", ButtonStyle.Primary),

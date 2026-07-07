@@ -17,10 +17,10 @@
 
 import {
   MessageFlags,
-  PermissionFlagsBits,
   SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { channelAccessError } from "../../channelAccess.js";
 import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
 import {
   CLEARABLE_FIELDS,
@@ -227,9 +227,16 @@ async function handleConfigShow(
   const fmtNum = (n: number | null | undefined, unit = "") =>
     n === null || n === undefined ? "not set" : `${n}${unit}`;
 
+  // Mirror failures are swallowed at post time by design; surface any ongoing
+  // breakage (e.g. permissions revoked after the channel was validated) here.
+  const failingSince = ctx.notifier.auditFailingSince(guildId);
+  const auditHealth = failingSince
+    ? ` ⚠️ posts have been failing since <t:${Math.floor(Date.parse(failingSince) / 1000)}:f> — check my access`
+    : "";
+
   const lines = [
     "**Server raffle configuration**",
-    `- Audit channel: ${fmtChannel(guild?.audit_channel)}`,
+    `- Audit channel: ${fmtChannel(guild?.audit_channel)}${auditHealth}`,
     `- Announce channel: ${fmtChannel(guild?.announce_channel)}`,
     `- Mod role: ${fmtRole(guild?.mod_role)}`,
     `- Hourly message cap: ${fmtNum(guild?.hourly_cap)}`,
@@ -245,30 +252,6 @@ async function handleConfigShow(
   await reply(interaction, lines.join("\n"));
 }
 
-/**
- * If the bot cannot both see and post in `channel`, return a human-readable
- * error naming the channel's role (issue #3: a private audit channel the bot
- * couldn't access was accepted silently, and every mirror post then failed with
- * Missing Access). Returns undefined when the channel is postable — or when the
- * bot member / channel permissions aren't resolvable, so an unusual interaction
- * shape degrades to the old accept-anything behavior rather than a false error.
- */
-function channelAccessError(
-  interaction: ChatInputCommandInteraction,
-  channel: NonNullable<ReturnType<ChatInputCommandInteraction["options"]["getChannel"]>>,
-  purpose: string,
-): string | undefined {
-  const me = interaction.guild?.members?.me;
-  if (!me || !("permissionsFor" in channel) || typeof channel.permissionsFor !== "function") {
-    return undefined;
-  }
-  const perms = channel.permissionsFor(me);
-  if (perms && !perms.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
-    return `I can't post in <#${channel.id}>, so it won't work as the ${purpose} channel. Grant me **View Channel** and **Send Messages** there (or pick another channel) and try again.`;
-  }
-  return undefined;
-}
-
 async function handleConfigSet(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -277,9 +260,10 @@ async function handleConfigSet(
   const patch: GuildConfigPatch = {};
   const errors: string[] = [];
 
+  const me = interaction.guild?.members?.me;
   const auditChannel = interaction.options.getChannel("audit-channel");
   if (auditChannel) {
-    const error = channelAccessError(interaction, auditChannel, "audit");
+    const error = channelAccessError(me, auditChannel, "audit");
     if (error) {
       errors.push(error);
     } else {
@@ -288,7 +272,7 @@ async function handleConfigSet(
   }
   const announceChannel = interaction.options.getChannel("announce-channel");
   if (announceChannel) {
-    const error = channelAccessError(interaction, announceChannel, "announce");
+    const error = channelAccessError(me, announceChannel, "announce");
     if (error) {
       errors.push(error);
     } else {
