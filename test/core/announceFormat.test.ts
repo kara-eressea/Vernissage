@@ -27,15 +27,14 @@ const base: EntryMessageInput = {
 describe("formatEntryMessage — open card", () => {
   it("renders the heading, description, and detail stanza inside one blockquote", () => {
     const content = formatEntryMessage(base);
-    expect(content).toContain("> ### 🎟️ Summer Giveaway");
-    expect(content).toContain("> Our yearly community giveaway.");
-    expect(content).toContain("> **Prize:** A vinyl record");
-    expect(content).toContain("> **Hosted by:** <@host-1>");
-    expect(content).toContain("> **Entries:** 7");
-    // Every line stays quoted so the card renders unbroken.
-    for (const line of content.split("\n")) {
-      expect(line.startsWith(">")).toBe(true);
-    }
+    // ">>> " quotes the whole message as one block — including blank separator
+    // lines, which per-line "> " cannot do (a bare ">" renders literally).
+    expect(content.startsWith(">>> ### 🎟️ Summer Giveaway")).toBe(true);
+    expect(content).toContain("Our yearly community giveaway.");
+    expect(content).toContain("**Prize:** A vinyl record");
+    expect(content).toContain("**Hosted by:** <@host-1>");
+    expect(content).toContain("**Entries:** 7");
+    expect(content.split("\n")).not.toContain(">"); // no literal '>' lines
   });
 
   it("shows the start absolute and the end as relative plus absolute", () => {
@@ -47,7 +46,7 @@ describe("formatEntryMessage — open card", () => {
 
   it("renders the requirements as subtext without the exact message count", () => {
     const content = formatEntryMessage({ ...base, windowAnchor: "start" });
-    expect(content).toContain("> -# To enter, you must have been active");
+    expect(content).toContain("-# To enter, you must have been active");
     expect(content).toContain("in the 14 days before the raffle starts");
     // The exact count stays private so it cannot be gamed.
     expect(content).not.toContain("20");

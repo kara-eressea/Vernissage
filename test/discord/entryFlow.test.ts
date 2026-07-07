@@ -288,8 +288,8 @@ describe("entry-message card lifecycle", () => {
     await announceOpenRaffle(db, notifier, id);
 
     const content = notifier.postEntryMessage.mock.calls[0]![1] as string;
-    expect(content).toContain("> ### 🎟️ R");
-    expect(content).toContain("> Come one, come all");
+    expect(content).toContain(">>> ### 🎟️ R");
+    expect(content).toContain("Come one, come all");
     expect(content).toContain("**Hosted by:** <@mod1>");
     expect(content).toContain("**Entries:** 1");
     expect(content).toContain("-# To enter, you must have been active");
