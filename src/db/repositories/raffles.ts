@@ -53,8 +53,11 @@ export function createDraft(
 ): number {
   const info = db
     .prepare(
-      `INSERT INTO raffles (guild_id, status, created_by, created_at)
-       VALUES (?, 'draft', ?, ?)`,
+      // draw_mode starts at 'auto', not NULL: the wizard's draw-mode select
+      // pre-renders 'auto' when nothing is stored, and validation requires a
+      // concrete mode — the stored value must match what the mod is shown.
+      `INSERT INTO raffles (guild_id, status, draw_mode, created_by, created_at)
+       VALUES (?, 'draft', 'auto', ?, ?)`,
     )
     .run(guildId, createdBy, createdAt);
   return Number(info.lastInsertRowid);

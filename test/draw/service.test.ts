@@ -48,9 +48,18 @@ afterEach(() => {
 function fakeAnnouncer() {
   const auditPosts: string[] = [];
   const announcements: string[] = [];
+  const edits: string[] = [];
   return {
     auditPosts,
     announcements,
+    edits,
+    editMessage: async (
+      _channelId: string,
+      _messageId: string,
+      content: string,
+    ): Promise<void> => {
+      edits.push(content);
+    },
     postAudit: async (_guildId: string, content: string): Promise<void> => {
       auditPosts.push(content);
     },
@@ -148,6 +157,17 @@ describe("executeDraw", () => {
     expect(verifyCommitment(SECRET, getRaffle(db, raffleId)!.draw_commitment!)).toBe(true);
     // A public winner announcement was posted mentioning the winner.
     expect(announcer.announcements.at(-1)).toContain("<@d>");
+  });
+
+  it("edits the entry card's closed notice into the winner line", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    updateRaffleFields(db, raffleId, { message_id: "msg-1" });
+    const announcer = fakeAnnouncer();
+
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+
+    expect(announcer.edits.at(-1)).toContain("**Winner:** <@d>");
+    expect(announcer.edits.at(-1)).not.toContain("announced shortly");
   });
 
   it("draws a multi-winner raffle with distinct winners", async () => {

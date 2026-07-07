@@ -15,7 +15,6 @@
 import type { Client } from "discord.js";
 import type { Database } from "better-sqlite3";
 import { formatAuditLine } from "../core/auditFormat.js";
-import type { EntryMessageContent } from "../core/announceFormat.js";
 import { writeAudit, type AuditEvent } from "../db/repositories/audit.js";
 import { getGuild } from "../db/repositories/guilds.js";
 
@@ -53,7 +52,7 @@ export interface Notifier {
    */
   postEntryMessage(
     channelId: string,
-    content: EntryMessageContent,
+    content: string,
     components?: readonly unknown[],
   ): Promise<string | undefined>;
   /**
@@ -77,6 +76,14 @@ export interface Notifier {
     content: string,
     components?: readonly unknown[],
   ): Promise<void>;
+  /**
+   * When this guild's audit-channel posts have been failing, the UTC ISO time
+   * of the first failure since the last success; null while healthy. Failures
+   * are swallowed by design (a broken audit channel must never break a raffle),
+   * so this is how they surface to mods — `/raffle config show` reads it.
+   * In-memory only: it resets on restart and re-arms on the next failure.
+   */
+  auditFailingSince(guildId: string): string | null;
 }
 
 /**
@@ -100,6 +107,15 @@ async function fetchSendable(
 
 /** Build the notifier bound to a Discord client and the database. */
 export function createNotifier(client: Client, db: Database): Notifier {
+  // guildId -> UTC ISO of the first audit-post failure since the last success.
+  const auditFailures = new Map<string, string>();
+
+  function recordAuditFailure(guildId: string): void {
+    if (!auditFailures.has(guildId)) {
+      auditFailures.set(guildId, new Date().toISOString());
+    }
+  }
+
   async function resolveAuditChannel(
     guildId: string,
   ): Promise<SendableChannel | undefined> {
@@ -114,7 +130,8 @@ export function createNotifier(client: Client, db: Database): Notifier {
     if (!event.guildId) {
       return;
     }
-    const channel = await resolveAuditChannel(event.guildId);
+    const guildId = event.guildId;
+    const channel = await resolveAuditChannel(guildId);
     if (!channel) {
       return;
     }
@@ -131,14 +148,16 @@ export function createNotifier(client: Client, db: Database): Notifier {
         // mention still renders as a name, it just doesn't notify anyone.
         allowedMentions: { parse: [] },
       });
+      auditFailures.delete(guildId);
     } catch (err) {
+      recordAuditFailure(guildId);
       console.error("Failed to mirror audit event to channel:", err);
     }
   }
 
   async function postEntryMessage(
     channelId: string,
-    content: EntryMessageContent,
+    content: string,
     components?: readonly unknown[],
   ): Promise<string | undefined> {
     const channel = await fetchSendable(client, channelId);
@@ -147,7 +166,7 @@ export function createNotifier(client: Client, db: Database): Notifier {
     }
     try {
       const message = await channel.send({
-        content: `**${content.title}**\n${content.body}`,
+        content,
         allowedMentions: { parse: [] },
         components,
       });
@@ -165,7 +184,9 @@ export function createNotifier(client: Client, db: Database): Notifier {
     }
     try {
       await channel.send({ content, allowedMentions: { parse: [] } });
+      auditFailures.delete(guildId);
     } catch (err) {
+      recordAuditFailure(guildId);
       console.error("Failed to post to audit channel:", err);
     }
   }
@@ -215,6 +236,7 @@ export function createNotifier(client: Client, db: Database): Notifier {
     postAudit,
     postAnnouncement,
     editMessage,
+    auditFailingSince: (guildId) => auditFailures.get(guildId) ?? null,
   };
 }
 

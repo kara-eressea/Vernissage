@@ -21,6 +21,7 @@
 import { randomBytes } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import { resolveAnnounceChannelId } from "../core/announceFormat.js";
+import { refreshEntryMessage } from "../discord/entryFlow.js";
 import { AUDIT_EVENTS } from "../core/auditEvents.js";
 import { formatAuditLine } from "../core/auditFormat.js";
 import { claimDeadline, claimWindowEnabled } from "../core/claim.js";
@@ -62,6 +63,12 @@ import {
 export interface DrawAnnouncer {
   postAudit(guildId: string, content: string): Promise<void>;
   postAnnouncement(channelId: string, content: string): Promise<string | undefined>;
+  editMessage(
+    channelId: string,
+    messageId: string,
+    content: string,
+    components?: readonly unknown[],
+  ): Promise<void>;
 }
 
 /** Produces a fresh draw secret. Injectable so tests are deterministic. */
@@ -380,6 +387,9 @@ export async function executeDraw(
       }),
     );
   }
+  // Rewrite the entry card's closed notice into the winner line, so the
+  // original announcement message tells the whole story.
+  await refreshEntryMessage(db, announcer, raffleId, { phase: "drawn", winnerIds: winners });
 
   return { ok: true, winners };
 }
@@ -499,6 +509,15 @@ export async function rerollWinner(
       }),
     );
   }
+
+  // Keep the entry card's winner line current: the live (non-rerolled) wins
+  // are the raffle's standing winners after the replacement.
+  await refreshEntryMessage(db, announcer, raffleId, {
+    phase: "drawn",
+    winnerIds: listWinsForRaffle(db, raffleId)
+      .filter((w) => w.rerolled === 0)
+      .map((w) => w.user_id),
+  });
 
   return { ok: true, disqualified: win.user_id, replacement };
 }

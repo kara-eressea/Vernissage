@@ -19,6 +19,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
+import { discordTimestamp } from "../../core/time.js";
 import type { RaffleRow } from "../../db/repositories/raffles.js";
 import type { WizardStep } from "../../db/repositories/wizardState.js";
 import { buildWizardId } from "./customId.js";
@@ -65,13 +66,30 @@ export function basicsModal(raffle: RaffleRow): ModalBuilder {
     );
 }
 
-export function scheduleModal(raffle: RaffleRow): ModalBuilder {
+/**
+ * The schedule modal. `prefill` carries any already-saved times rendered as
+ * guild-local "YYYY-MM-DD HH:MM" wall-clock text (see formatWallClockInZone),
+ * so revisiting the step shows the stored schedule instead of blank required
+ * fields that read as forgotten.
+ */
+export function scheduleModal(
+  raffle: RaffleRow,
+  prefill: { start: string | null; end: string | null } = { start: null, end: null },
+): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(buildWizardId("schedule", "submit", raffle.raffle_id))
     .setTitle("Schedule")
     .addComponents(
-      textInput("start", "Starts", { required: true, placeholder: "tomorrow 20:00" }),
-      textInput("end", "Ends", { required: true, placeholder: "in 7 days, or 2026-08-01 20:00" }),
+      textInput("start", "Starts", {
+        required: true,
+        value: prefill.start,
+        placeholder: "tomorrow 20:00",
+      }),
+      textInput("end", "Ends", {
+        required: true,
+        value: prefill.end,
+        placeholder: "in 7 days, or 2026-08-01 20:00",
+      }),
     );
 }
 
@@ -144,18 +162,27 @@ function footerRow(step: WizardStep, raffleId: number): ActionRowBuilder<ButtonB
   );
 }
 
+// These select menus arrive with the raffle's current value pre-selected, and
+// Discord then shows only the chosen option's label — the placeholder naming
+// the setting is never visible. So every option label leads with its topic
+// ("Activity window: …") to stay self-describing, and the description (shown in
+// the open dropdown) explains what picking it means. Labels and descriptions
+// cap at 100 characters.
+
 function anchorSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildWizardId("eligibility", "anchor", raffle.raffle_id))
     .setPlaceholder("Activity window anchor")
     .addOptions(
       {
-        label: "Before the raffle starts (recommended)",
+        label: "Activity window: before the raffle starts",
+        description: "Recommended — everyone is judged on the same window; activity after opening doesn't count.",
         value: "start",
         default: raffle.window_anchor === "start",
       },
       {
-        label: "Rolling — before each entry",
+        label: "Activity window: rolling, before each entry",
+        description: "The window is measured back from the moment each member enters.",
         value: "rolling",
         default: raffle.window_anchor === "rolling",
       },
@@ -168,8 +195,18 @@ function exemptSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuild
     .setCustomId(buildWizardId("eligibility", "exempt", raffle.raffle_id))
     .setPlaceholder("New-member exemption")
     .addOptions(
-      { label: "Off", value: "off", default: raffle.new_member_exempt !== 1 },
-      { label: "On", value: "on", default: raffle.new_member_exempt === 1 },
+      {
+        label: "New-member exemption: off",
+        description: "Everyone must meet the activity requirement.",
+        value: "off",
+        default: raffle.new_member_exempt !== 1,
+      },
+      {
+        label: "New-member exemption: on",
+        description: "Members who joined within the exemption window skip the activity requirement.",
+        value: "on",
+        default: raffle.new_member_exempt === 1,
+      },
     );
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
@@ -179,9 +216,15 @@ function priorWinnersSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMen
     .setCustomId(buildWizardId("eligibility", "priorwin", raffle.raffle_id))
     .setPlaceholder("Past winners")
     .addOptions(
-      { label: "Anyone eligible may enter", value: "off", default: raffle.exclude_prior_winners !== 1 },
       {
-        label: "Bar members who have won here before",
+        label: "Past winners: may enter",
+        description: "Anyone eligible may enter, even if they have won here before.",
+        value: "off",
+        default: raffle.exclude_prior_winners !== 1,
+      },
+      {
+        label: "Past winners: barred",
+        description: "Members who have ever won a raffle here cannot enter this one.",
         value: "on",
         default: raffle.exclude_prior_winners === 1,
       },
@@ -231,9 +274,15 @@ function testSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder
     .setCustomId(buildWizardId("draw", "test", raffle.raffle_id))
     .setPlaceholder("Prize mode")
     .addOptions(
-      { label: "Real raffle — a prize is awarded", value: "off", default: raffle.is_test !== 1 },
       {
-        label: "Test raffle — no prize, does not affect eligibility",
+        label: "Prize mode: real raffle",
+        description: "A prize is awarded; the win counts toward cooldowns and the prior-winner bar.",
+        value: "off",
+        default: raffle.is_test !== 1,
+      },
+      {
+        label: "Prize mode: test raffle",
+        description: "No prize; the result does not affect anyone's future eligibility.",
         value: "on",
         default: raffle.is_test === 1,
       },
@@ -246,8 +295,18 @@ function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBui
     .setCustomId(buildWizardId("draw", "mode", raffle.raffle_id))
     .setPlaceholder("How the draw runs")
     .addOptions(
-      { label: "Automatic at close", value: "auto", default: raffle.draw_mode !== "manual" },
-      { label: "Manual (a mod triggers it)", value: "manual", default: raffle.draw_mode === "manual" },
+      {
+        label: "Draw: automatic at close",
+        description: "Winners are drawn the moment the raffle's end time passes.",
+        value: "auto",
+        default: raffle.draw_mode !== "manual",
+      },
+      {
+        label: "Draw: manual",
+        description: "The raffle closes, then waits for a mod to run /raffle draw.",
+        value: "manual",
+        default: raffle.draw_mode === "manual",
+      },
     );
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
@@ -304,7 +363,13 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
       };
     case "schedule":
       return {
-        content: "**Step 2 of 5 — Schedule**\nWhen the raffle opens and closes.",
+        // Echo any saved times as Discord timestamps (rendered in each
+        // viewer's local time) so a timezone mistake is visible at a glance.
+        content:
+          "**Step 2 of 5 — Schedule**\nWhen the raffle opens and closes." +
+          (raffle.starts_at && raffle.ends_at
+            ? `\nCurrently: opens ${discordTimestamp(raffle.starts_at)}, closes ${discordTimestamp(raffle.ends_at)}.`
+            : ""),
         components: rows(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("schedule", "open", id, "Set schedule", ButtonStyle.Primary),

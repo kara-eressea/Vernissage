@@ -11,12 +11,13 @@
  * (v8 added raffles.draw_disqualified; v9 dropped the redundant
  * idx_entries_raffle; v10 added the prior-winner and role entry gates; v11 added
  * the winner claim window; v12 added raffles.is_test; v13 added
- * wins.cooldown_waived) and are also reflected here so a fresh database is
- * created at the current version directly.
+ * wins.cooldown_waived; v14 backfilled null raffles.draw_mode to 'auto') and are
+ * also reflected here so a fresh database is created at the current version
+ * directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -92,6 +93,8 @@ CREATE TABLE IF NOT EXISTS raffles (
   -- drawn test raffle never advances a count-based cooldown (design.md "Test
   -- raffles"). Off by default.
   is_test         INTEGER NOT NULL DEFAULT 0,
+  -- 'auto' or 'manual'. Set to 'auto' at draft creation (and backfilled by
+  -- v14) so the stored value always matches the wizard's pre-selected default.
   draw_mode       TEXT,
   channel_id      TEXT,
   message_id      TEXT,

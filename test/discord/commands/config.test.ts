@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../../src/config.js";
 import { openDb } from "../../../src/db/index.js";
@@ -84,6 +84,21 @@ describe("handleConfig — permission gate", () => {
     await handleConfig(interaction, ctx);
 
     expect(getGuild(db, "g1")?.default_cooldown_days).toBe(3);
+  });
+});
+
+describe("handleConfig — show", () => {
+  it("flags an audit channel whose posts have been failing", async () => {
+    setGuildConfig(db, "g1", { audit_channel: "chan-1" }, "2026-07-01T00:00:00.000Z");
+    (ctx.notifier.auditFailingSince as ReturnType<typeof vi.fn>).mockReturnValue(
+      "2026-07-05T10:00:00.000Z",
+    );
+    const interaction = fakeInteraction({ subcommand: "show", manageGuild: true });
+
+    await handleConfig(interaction, ctx);
+
+    const { content } = interaction.reply.mock.calls[0]![0] as { content: string };
+    expect(content).toMatch(/posts have been failing since <t:\d+:f>/);
   });
 });
 

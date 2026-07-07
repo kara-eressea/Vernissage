@@ -60,10 +60,19 @@ draft -> scheduled -> open -> closed -> drawn -> completed
 ```
 - **draft**: created by a mod, editable, not visible to users.
 - **scheduled**: has start/end times, announced or silent until start.
-- **open**: entries accepted between start and end time.
+- **open**: entries accepted between start and end time. The entry message is
+  one blockquote card — heading, description, then Prize / Starts / Ends /
+  Hosted by / Entries — re-edited in place as entries arrive so the count stays
+  live. The eligibility line is rendered as subtext and deliberately vague
+  ("you must have been active in the X days …", no message count) so the
+  activity bar cannot be gamed by a burst of filler messages; exact numbers
+  appear only in the member's private entry-failure and status replies. The
+  account-age requirement is stated exactly (it cannot be farmed).
 - **closed**: end time reached, entries frozen, awaiting draw. The entry
-  message is edited to drop the Enter button (via the stored `message_id`).
-- **drawn**: winner(s) selected and announced.
+  card is edited to drop the Enter button (via the stored `message_id`) and
+  state that entries are closed.
+- **drawn**: winner(s) selected and announced; the entry card's closed notice
+  is replaced by the winner line (kept current across rerolls).
 - **completed**: prize handled, raffle archived.
 - **cancelled**: aborted by a mod; logged with reason.
 
@@ -349,7 +358,7 @@ raffles (
   cooldown_count  INTEGER,
   claim_window_hours INTEGER,       -- winners must claim within N hours; null/0 = off
   is_test         INTEGER DEFAULT 0, -- 1 = test raffle: prize-free, eligibility-neutral
-  draw_mode       TEXT,             -- auto or manual
+  draw_mode       TEXT,             -- auto or manual; 'auto' from draft creation
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the entry message; edited at close to remove the Enter button
   entrants_hash   TEXT,             -- set at close
@@ -437,7 +446,10 @@ wizard_state (
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
   this automatically per viewer). Friendly schedule input in the wizard is
-  interpreted in the guild's configured `timezone` (an IANA name); the offset is
+  interpreted in the guild's configured `timezone` (an IANA name); "now" means
+  the current instant — as a start time the raffle opens on the first scheduler
+  sweep after confirmation, and schedule validation allows a start up to 15
+  minutes past so a typed "now" survives the remaining wizard steps. The offset is
   resolved for the *target* instant so a raffle scheduled across a DST boundary
   lands on the intended wall clock. With no timezone set, input is read as UTC.
 
