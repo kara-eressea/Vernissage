@@ -29,6 +29,7 @@ import {
 } from "./discord/interactions.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { createNotifier } from "./discord/notifier.js";
+import { registerCommandsInGuild } from "./discord/register.js";
 import { routeInteraction } from "./discord/router.js";
 import { createWizard, type WizardInteraction } from "./discord/wizard/index.js";
 import { WIZARD_PREFIX } from "./discord/wizard/customId.js";
@@ -88,6 +89,37 @@ async function main(): Promise<void> {
     console.log(
       `Logged in as ${ready.user.tag}; serving ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
     );
+    // Reconcile command registration at startup: a guild the bot was added to
+    // while offline never fired GuildCreate, so register in every allowlisted
+    // guild it is in now. Idempotent (a bulk overwrite of the same set is a
+    // no-op in effect), and it makes deploy-commands a manual escape hatch
+    // rather than a required step after moving the bot.
+    for (const guild of ready.guilds.cache.values()) {
+      if (!config.guildIds.includes(guild.id)) {
+        continue; // attachGuildAllowlist is already leaving this one
+      }
+      void registerCommandsInGuild(config, commands, guild.id).catch((err) =>
+        console.error(`Failed to register commands in guild ${guild.id} at startup:`, err),
+      );
+    }
+  });
+
+  // The allowlist can be provisioned ahead of the bot actually joining a guild
+  // (deploy-commands skips guilds it is not in). Register the commands the
+  // moment it joins an allowlisted guild, so moving the bot to a pre-listed
+  // server needs no redeploy. Foreign guilds are left by attachGuildAllowlist
+  // and never registered to.
+  client.on(Events.GuildCreate, (guild) => {
+    if (!config.guildIds.includes(guild.id)) {
+      return;
+    }
+    void registerCommandsInGuild(config, commands, guild.id)
+      .then((count) =>
+        console.log(`Registered ${count} command(s) in newly joined guild ${guild.id}.`),
+      )
+      .catch((err) =>
+        console.error(`Failed to register commands in newly joined guild ${guild.id}:`, err),
+      );
   });
 
   client.on(Events.InteractionCreate, (interaction) => {

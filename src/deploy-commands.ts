@@ -33,10 +33,16 @@ async function main(): Promise<void> {
   const db = openDb(config.databasePath);
   try {
     const commands = buildCommands({ db, config, notifier: noopNotifier });
-    const count = await registerCommands(config, commands);
+    const result = await registerCommands(config, commands);
     console.log(
-      `Registered ${count} command(s) to ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
+      `Registered ${result.commandCount} command(s) to ${result.registered.length} guild(s): ${result.registered.join(", ") || "none"}.`,
     );
+    if (result.skipped.length > 0) {
+      console.log(
+        `Skipped ${result.skipped.length} allowlisted guild(s) the bot has not joined: ${result.skipped.join(", ")}. ` +
+          "Commands register automatically when the bot joins them.",
+      );
+    }
   } finally {
     db.close();
   }
