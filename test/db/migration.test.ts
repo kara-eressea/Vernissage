@@ -120,6 +120,23 @@ describe("schema", () => {
     db.close();
   });
 
+  it("backfills a null draw_mode to 'auto' when upgrading past v13", () => {
+    const db = openDb(":memory:");
+    // A pre-v14 draft carried draw_mode NULL even though the wizard rendered it
+    // as 'auto' — validation then rejected the untouched select (see raffles.ts
+    // createDraft). Simulate one and migrate.
+    db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', NULL)`).run();
+    db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', 'manual')`).run();
+    db.pragma("user_version = 13");
+
+    migrate(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    const modes = db.prepare(`SELECT draw_mode FROM raffles ORDER BY raffle_id`).all();
+    expect(modes).toEqual([{ draw_mode: "auto" }, { draw_mode: "manual" }]);
+    db.close();
+  });
+
   it("is idempotent — running migrate again does not error or change the version", () => {
     const db = openDb(":memory:");
     expect(() => migrate(db)).not.toThrow();

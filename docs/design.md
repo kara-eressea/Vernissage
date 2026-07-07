@@ -349,7 +349,7 @@ raffles (
   cooldown_count  INTEGER,
   claim_window_hours INTEGER,       -- winners must claim within N hours; null/0 = off
   is_test         INTEGER DEFAULT 0, -- 1 = test raffle: prize-free, eligibility-neutral
-  draw_mode       TEXT,             -- auto or manual
+  draw_mode       TEXT,             -- auto or manual; 'auto' from draft creation
   channel_id      TEXT,             -- channel to announce in (override; else guild default)
   message_id      TEXT,             -- the entry message; edited at close to remove the Enter button
   entrants_hash   TEXT,             -- set at close

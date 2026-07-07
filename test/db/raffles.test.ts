@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import type { RaffleStatus } from "../../src/core/types.js";
+import { validateDraw } from "../../src/core/raffleValidation.js";
 import { openDb } from "../../src/db/index.js";
 import {
   countRafflesSince,
   createDraft,
+  getRaffle,
   maxReqDaysInUse,
   setStatus,
   updateRaffleFields,
@@ -29,6 +31,17 @@ function seed(status: RaffleStatus, reqDays: number | null): number {
   setStatus(db, id, status);
   return id;
 }
+
+describe("createDraft", () => {
+  it("starts a draft at draw_mode 'auto', matching the wizard's pre-selected default", () => {
+    // Repro of the 'draw mode must be auto or manual' error on an untouched
+    // draw step: the select showed 'auto' while the row held NULL.
+    const id = createDraft(db, "g1", "mod", "2026-07-01T00:00:00.000Z");
+    const raffle = getRaffle(db, id)!;
+    expect(raffle.draw_mode).toBe("auto");
+    expect(validateDraw(raffle).ok).toBe(true);
+  });
+});
 
 describe("maxReqDaysInUse", () => {
   it("returns null when nothing is scheduled or open", () => {

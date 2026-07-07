@@ -55,6 +55,11 @@ export function migrate(db: Database): void {
       // `/raffle reset` waiver flag on wins (default off).
       db.exec(`ALTER TABLE wins ADD COLUMN cooldown_waived INTEGER NOT NULL DEFAULT 0`);
     }
+    if (current < 14) {
+      // The wizard renders a null draw_mode as 'auto' but validation rejected
+      // null; drafts now start at 'auto', so backfill the rows that predate it.
+      db.exec(`UPDATE raffles SET draw_mode = 'auto' WHERE draw_mode IS NULL`);
+    }
   }
 
   if (current !== SCHEMA_VERSION) {
