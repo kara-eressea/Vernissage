@@ -29,7 +29,7 @@ import {
   validateSchedule,
   type RaffleDraftFields,
 } from "../../core/raffleValidation.js";
-import { parseFriendlyTimeInZone } from "../../core/timeParse.js";
+import { formatWallClockInZone, parseFriendlyTimeInZone } from "../../core/timeParse.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 import {
   getRaffle,
@@ -253,7 +253,13 @@ export function createWizard(deps: WizardDeps): Wizard {
     action: string,
   ): Promise<void> {
     if (action === "open" && interaction.isButton()) {
-      await interaction.showModal(scheduleModal(raffle));
+      const timeZone = getGuild(db, raffle.guild_id)?.timezone ?? null;
+      await interaction.showModal(
+        scheduleModal(raffle, {
+          start: raffle.starts_at ? formatWallClockInZone(raffle.starts_at, timeZone) : null,
+          end: raffle.ends_at ? formatWallClockInZone(raffle.ends_at, timeZone) : null,
+        }),
+      );
       return;
     }
     if (action === "submit" && interaction.isModalSubmit()) {

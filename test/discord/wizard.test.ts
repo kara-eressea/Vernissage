@@ -87,6 +87,27 @@ describe("wizard schedule step", () => {
   });
 });
 
+describe("wizard schedule step — revisit", () => {
+  it("prefills the schedule modal with the saved times in the guild's timezone", async () => {
+    setGuildConfig(db, "g1", { timezone: "Europe/Copenhagen" }, "2026-07-01T00:00:00.000Z");
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, {
+      starts_at: "2026-12-01T19:00:00.000Z", // 20:00 local (CET)
+      ends_at: "2026-12-08T19:00:00.000Z",
+    });
+    upsertWizardStep(db, id, "schedule", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeButton(`wiz:schedule:open:${id}`);
+    await wizard().handle(interaction);
+
+    expect(interaction.showModal).toHaveBeenCalledOnce();
+    const modal = (interaction.showModal.mock.calls[0]![0] as { toJSON(): unknown }).toJSON();
+    const values = JSON.stringify(modal);
+    expect(values).toContain("2026-12-01 20:00");
+    expect(values).toContain("2026-12-08 20:00");
+  });
+});
+
 describe("wizard basics step", () => {
   it("saves basics and advances to the schedule step", async () => {
     const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");

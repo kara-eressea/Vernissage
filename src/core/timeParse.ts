@@ -162,3 +162,18 @@ export function parseFriendlyTimeInZone(
   }
   return parseFriendlyTime(input, nowUtc, targetOffset);
 }
+
+/**
+ * Format a UTC ISO instant as the "YYYY-MM-DD HH:MM" wall-clock form in the
+ * given IANA zone (null = UTC) — exactly the absolute shape
+ * `parseFriendlyTimeInZone` accepts back, so a stored schedule can prefill the
+ * schedule modal and round-trip unchanged on resubmit.
+ */
+export function formatWallClockInZone(utcIso: string, timeZone: string | null): string {
+  const ms = Date.parse(utcIso);
+  if (Number.isNaN(ms)) {
+    throw new RangeError(`Invalid timestamp: ${utcIso}`);
+  }
+  const offset = timeZone ? offsetMinutesFor(utcIso, timeZone) : 0;
+  return new Date(ms + offset * 60_000).toISOString().slice(0, 16).replace("T", " ");
+}

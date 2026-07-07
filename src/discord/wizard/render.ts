@@ -65,13 +65,30 @@ export function basicsModal(raffle: RaffleRow): ModalBuilder {
     );
 }
 
-export function scheduleModal(raffle: RaffleRow): ModalBuilder {
+/**
+ * The schedule modal. `prefill` carries any already-saved times rendered as
+ * guild-local "YYYY-MM-DD HH:MM" wall-clock text (see formatWallClockInZone),
+ * so revisiting the step shows the stored schedule instead of blank required
+ * fields that read as forgotten.
+ */
+export function scheduleModal(
+  raffle: RaffleRow,
+  prefill: { start: string | null; end: string | null } = { start: null, end: null },
+): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(buildWizardId("schedule", "submit", raffle.raffle_id))
     .setTitle("Schedule")
     .addComponents(
-      textInput("start", "Starts", { required: true, placeholder: "tomorrow 20:00" }),
-      textInput("end", "Ends", { required: true, placeholder: "in 7 days, or 2026-08-01 20:00" }),
+      textInput("start", "Starts", {
+        required: true,
+        value: prefill.start,
+        placeholder: "tomorrow 20:00",
+      }),
+      textInput("end", "Ends", {
+        required: true,
+        value: prefill.end,
+        placeholder: "in 7 days, or 2026-08-01 20:00",
+      }),
     );
 }
 

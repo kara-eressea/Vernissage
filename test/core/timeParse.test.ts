@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFriendlyTime, parseFriendlyTimeInZone } from "../../src/core/timeParse.js";
+import { formatWallClockInZone, parseFriendlyTime, parseFriendlyTimeInZone } from "../../src/core/timeParse.js";
 
 const NOW = "2026-07-03T12:00:00.000Z";
 
@@ -119,5 +119,20 @@ describe("parseFriendlyTimeInZone", () => {
     expect(isoInZone("tomorrow 20:00", now, "Europe/Copenhagen")).toBe(
       "2026-10-25T19:00:00.000Z",
     );
+  });
+});
+
+describe("formatWallClockInZone", () => {
+  it("renders a stored UTC instant as guild-local wall clock that round-trips", () => {
+    // 19:00 UTC is 20:00 in Copenhagen (CET, winter).
+    const stored = "2026-12-01T19:00:00.000Z";
+    const text = formatWallClockInZone(stored, "Europe/Copenhagen");
+    expect(text).toBe("2026-12-01 20:00");
+    const parsed = parseFriendlyTimeInZone(text, "2026-11-01T00:00:00.000Z", "Europe/Copenhagen");
+    expect(parsed).toEqual({ ok: true, utcIso: stored });
+  });
+
+  it("uses UTC when no zone is configured", () => {
+    expect(formatWallClockInZone("2026-12-01T19:30:00.000Z", null)).toBe("2026-12-01 19:30");
   });
 });
