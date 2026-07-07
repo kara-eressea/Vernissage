@@ -29,6 +29,7 @@ import {
 } from "./discord/interactions.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { createNotifier } from "./discord/notifier.js";
+import { registerCommandsInGuild } from "./discord/register.js";
 import { routeInteraction } from "./discord/router.js";
 import { createWizard, type WizardInteraction } from "./discord/wizard/index.js";
 import { WIZARD_PREFIX } from "./discord/wizard/customId.js";
@@ -88,6 +89,24 @@ async function main(): Promise<void> {
     console.log(
       `Logged in as ${ready.user.tag}; serving ${config.guildIds.length} guild(s): ${config.guildIds.join(", ")}.`,
     );
+  });
+
+  // The allowlist can be provisioned ahead of the bot actually joining a guild
+  // (deploy-commands skips guilds it is not in). Register the commands the
+  // moment it joins an allowlisted guild, so moving the bot to a pre-listed
+  // server needs no redeploy. Foreign guilds are left by attachGuildAllowlist
+  // and never registered to.
+  client.on(Events.GuildCreate, (guild) => {
+    if (!config.guildIds.includes(guild.id)) {
+      return;
+    }
+    void registerCommandsInGuild(config, commands, guild.id)
+      .then((count) =>
+        console.log(`Registered ${count} command(s) in newly joined guild ${guild.id}.`),
+      )
+      .catch((err) =>
+        console.error(`Failed to register commands in newly joined guild ${guild.id}:`, err),
+      );
   });
 
   client.on(Events.InteractionCreate, (interaction) => {

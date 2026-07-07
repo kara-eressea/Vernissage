@@ -425,8 +425,12 @@ wizard_state (
   owner can invite it. The bot serves an allowlist of one or more guilds
   (`GUILD_IDS`, comma-separated; the legacy single-value `HOME_GUILD_ID` is
   still honored as a fallback). On startup and on guild join, it leaves any
-  guild not on the allowlist, and it registers its slash commands in each
-  allowlisted guild. Per-guild data is scoped by `guild_id`; a member's
+  guild not on the allowlist. The allowlist may be provisioned ahead of time:
+  the deploy-commands script registers slash commands only in allowlisted
+  guilds the bot is a member of (skipping the rest), and the running bot
+  registers them itself the moment it joins an allowlisted guild, so moving it
+  to a pre-listed server needs no redeploy. Per-guild data is scoped by
+  `guild_id`; a member's
   activity and win cooldown in one guild never affect another.
 - Time handling: store everything in UTC; render in server-local time in
   announcements where possible (Discord timestamp markup <t:epoch:F> handles
