@@ -122,6 +122,40 @@ describe("handleConfig — writes", () => {
     expect(getGuild(db, "g1")?.announce_channel).toBeNull();
   });
 
+  it("rejects an audit channel the bot cannot post in and writes nothing", async () => {
+    const interaction = fakeInteraction({
+      subcommand: "set",
+      manageGuild: true,
+      botMember: { id: "bot" },
+      values: {
+        "audit-channel": { id: "private-1", permissionsFor: () => ({ has: () => false }) },
+      },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    expect(interaction.reply).toHaveBeenCalledOnce();
+    const { content } = interaction.reply.mock.calls[0]![0] as { content: string };
+    expect(content).toMatch(/can't post in <#private-1>/);
+    expect(getGuild(db, "g1")?.audit_channel ?? null).toBeNull();
+    expect(auditRows()).toHaveLength(0);
+  });
+
+  it("accepts an announce channel the bot can post in", async () => {
+    const interaction = fakeInteraction({
+      subcommand: "set",
+      manageGuild: true,
+      botMember: { id: "bot" },
+      values: {
+        "announce-channel": { id: "open-1", permissionsFor: () => ({ has: () => true }) },
+      },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    expect(getGuild(db, "g1")?.announce_channel).toBe("open-1");
+  });
+
   it("rejects a set with no fields and writes nothing", async () => {
     const interaction = fakeInteraction({
       subcommand: "set",

@@ -179,6 +179,11 @@ only what you want to change.
 | `blacklist-generic-message` | Show blacklisted members a generic failure instead of "blacklisted". |
 | `clear` | Unset a single setting back to its default (choose which). |
 
+The `audit-channel` and `announce-channel` options are checked before saving:
+if the bot lacks **View Channel** or **Send Messages** in the chosen channel
+(e.g. a private channel it hasn't been granted), the setting is rejected with
+an explanation instead of failing silently at post time.
+
 ```
 /raffle config set audit-channel:#raffle-log mod-role:@Mods
 /raffle config set req-messages:20 req-days:14 timezone:Europe/Copenhagen
