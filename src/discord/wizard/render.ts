@@ -93,7 +93,8 @@ export function eligibilityModal(raffle: RaffleRow): ModalBuilder {
       textInput("min_account_age_days", "Min account age in days (optional)", {
         value: raffle.min_account_age_days,
       }),
-      textInput("new_member_days", "New-member exemption window in days (optional)", {
+      // Discord caps text-input labels at 45 characters; keep these short.
+      textInput("new_member_days", "New-member exemption in days (optional)", {
         value: raffle.new_member_days,
       }),
     );

@@ -12,6 +12,8 @@ export interface FakeChatInputOpts {
   ownerId?: string;
   roleIds?: string[];
   manageGuild?: boolean;
+  /** The bot's own guild member (guild.members.me); undefined models it unresolved. */
+  botMember?: unknown;
 }
 
 /** A fake ChatInputCommandInteraction with spyable reply/showModal and all option getters. */
@@ -39,7 +41,7 @@ export function fakeChatInput(opts: FakeChatInputOpts = {}): FakeChatInput {
   return {
     guildId: opts.guildId === undefined ? "g1" : opts.guildId,
     user: { id: opts.userId ?? "u1" },
-    guild: { ownerId: opts.ownerId ?? "owner" },
+    guild: { ownerId: opts.ownerId ?? "owner", members: { me: opts.botMember ?? null } },
     member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
     memberPermissions: { has: () => opts.manageGuild ?? false },
     isChatInputCommand: () => true,
