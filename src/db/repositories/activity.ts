@@ -47,6 +47,46 @@ export function getCountsInWindow(
     .all(guildId, userId, startDay, endDay) as DailyCount[];
 }
 
+/** A single user's daily counts over a window, for the eligibility snapshot. */
+export interface UserDailyCounts {
+  userId: string;
+  counts: DailyCount[];
+}
+
+/**
+ * Every user with counted activity in the guild within an inclusive UTC-day
+ * range, each with their daily counts (ascending by day). One query, grouped by
+ * user in memory, so `/raffle eligible` can enumerate candidates without a
+ * per-user round trip. Only users who have activity rows appear — the snapshot
+ * is a DB-only view and cannot see members who have never sent a counted
+ * message (design.md "Listing the eligible pool").
+ */
+export function listGuildCountsInWindow(
+  db: Database,
+  guildId: string,
+  startDay: string,
+  endDay: string,
+): UserDailyCounts[] {
+  const rows = db
+    .prepare(
+      `SELECT user_id, day, count FROM activity
+       WHERE guild_id = ? AND day >= ? AND day <= ?
+       ORDER BY user_id ASC, day ASC`,
+    )
+    .all(guildId, startDay, endDay) as Array<{ user_id: string; day: string; count: number }>;
+
+  const byUser: UserDailyCounts[] = [];
+  let current: UserDailyCounts | null = null;
+  for (const row of rows) {
+    if (current === null || current.userId !== row.user_id) {
+      current = { userId: row.user_id, counts: [] };
+      byUser.push(current);
+    }
+    current.counts.push({ day: row.day, count: row.count });
+  }
+  return byUser;
+}
+
 /**
  * Delete all activity rows for days strictly before `cutoffDay`. Returns the
  * number of rows removed.

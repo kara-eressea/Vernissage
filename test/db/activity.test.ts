@@ -5,6 +5,7 @@ import {
   deleteUserActivity,
   getCountsInWindow,
   incrementActivity,
+  listGuildCountsInWindow,
   pruneActivityBefore,
 } from "../../src/db/repositories/activity.js";
 
@@ -56,6 +57,31 @@ describe("activity buckets", () => {
     expect(getCountsInWindow(db, "g1", "u1", "2026-01-01", "2026-12-31")).toEqual([
       { day: "2026-07-01", count: 1 },
     ]);
+  });
+
+  it("listGuildCountsInWindow groups every active user's counts, guild- and window-scoped", () => {
+    incrementActivity(db, "g1", "u1", "2026-07-03", 5);
+    incrementActivity(db, "g1", "u1", "2026-07-04", 2);
+    incrementActivity(db, "g1", "u2", "2026-07-04", 9);
+    incrementActivity(db, "g1", "u3", "2026-07-01", 4); // before window, excluded
+    incrementActivity(db, "g2", "u1", "2026-07-04", 7); // other guild, excluded
+
+    const result = listGuildCountsInWindow(db, "g1", "2026-07-02", "2026-07-31");
+    expect(result).toEqual([
+      {
+        userId: "u1",
+        counts: [
+          { day: "2026-07-03", count: 5 },
+          { day: "2026-07-04", count: 2 },
+        ],
+      },
+      { userId: "u2", counts: [{ day: "2026-07-04", count: 9 }] },
+    ]);
+  });
+
+  it("listGuildCountsInWindow returns nothing for a guild with no activity in range", () => {
+    incrementActivity(db, "g1", "u1", "2026-07-03", 5);
+    expect(listGuildCountsInWindow(db, "g1", "2026-08-01", "2026-08-31")).toEqual([]);
   });
 
   it("deleteUserActivity removes one member's rows, scoped to the guild", () => {

@@ -11,13 +11,15 @@
  * (v8 added raffles.draw_disqualified; v9 dropped the redundant
  * idx_entries_raffle; v10 added the prior-winner and role entry gates; v11 added
  * the winner claim window; v12 added raffles.is_test; v13 added
- * wins.cooldown_waived; v14 backfilled null raffles.draw_mode to 'auto') and are
- * also reflected here so a fresh database is created at the current version
- * directly.
+ * wins.cooldown_waived; v14 backfilled null raffles.draw_mode to 'auto'; v15
+ * added the distinct-active-days activity floor, a server-wide tenure default,
+ * and the per-raffle open_to_all escape hatch, retiring the per-raffle
+ * account-age override and new-member exemption) and are also reflected here so
+ * a fresh database is created at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -33,8 +35,10 @@ CREATE TABLE IF NOT EXISTS guilds (
   default_cooldown_days        INTEGER,
   default_cooldown_count       INTEGER,
   default_min_account_age_days INTEGER,
+  default_min_server_age_days  INTEGER,
   default_req_messages         INTEGER,
   default_req_days             INTEGER,
+  default_req_active_days      INTEGER,
   timezone        TEXT,
   blacklist_generic_message INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT
@@ -72,10 +76,23 @@ CREATE TABLE IF NOT EXISTS raffles (
   winner_count    INTEGER NOT NULL DEFAULT 1,
   req_messages    INTEGER,
   req_days        INTEGER,
+  -- Distinct active days required within the window: the member must have been
+  -- active on at least this many separate UTC days, not just have the raw
+  -- message total. Burst-resistant half of the activity gate (design.md
+  -- "Entry flow"). Null/0 = no distinct-day floor.
+  req_active_days INTEGER,
   window_anchor   TEXT NOT NULL DEFAULT 'start',
+  -- DEPRECATED (schema v15): the per-raffle account-age override and the
+  -- days-based new-member exemption were replaced by a server-wide account-age
+  -- default plus the per-raffle open_to_all escape hatch. Columns are retained
+  -- (never read or written) to avoid a destructive migration; safe to drop later.
   new_member_exempt INTEGER NOT NULL DEFAULT 0,
   new_member_days INTEGER,
   min_account_age_days INTEGER,
+  -- When set, this raffle skips every eligibility gate except the blacklist and
+  -- the creator self-exclusion — a deliberate "anyone not banned may enter"
+  -- escape hatch (design.md "Entry flow"). Off by default.
+  open_to_all     INTEGER NOT NULL DEFAULT 0,
   -- Optional entry gates, all off/unset by default (design.md "Entry flow"):
   -- bar anyone who has ever won here, and require/exclude a single role. The
   -- creator self-exclusion needs no column (it reads created_by at entry time).

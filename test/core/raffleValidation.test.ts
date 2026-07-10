@@ -22,10 +22,9 @@ const validDraft: RaffleDraftFields = {
   winner_count: 1,
   req_messages: 20,
   req_days: 14,
+  req_active_days: null,
   window_anchor: "start",
-  new_member_exempt: 0,
-  new_member_days: null,
-  min_account_age_days: null,
+  open_to_all: 0,
   exclude_prior_winners: 0,
   required_role_id: null,
   excluded_role_id: null,
@@ -76,10 +75,11 @@ describe("validateEligibility", () => {
   const base = {
     req_messages: 20,
     req_days: 14,
+    req_active_days: null as number | null,
     window_anchor: "start",
-    min_account_age_days: null,
-    new_member_exempt: 0,
-    new_member_days: null,
+    open_to_all: 0 as number | null,
+    required_role_id: null as string | null,
+    excluded_role_id: null as string | null,
   };
 
   it("accepts a valid config", () => {
@@ -91,15 +91,26 @@ describe("validateEligibility", () => {
     expect(validateEligibility({ ...base, req_days: 0 }).ok).toBe(false);
   });
 
-  it("rejects a new-member exemption without a join window", () => {
-    expect(validateEligibility({ ...base, new_member_exempt: 1, new_member_days: null }).ok).toBe(
-      false,
-    );
-    expect(validateEligibility({ ...base, new_member_exempt: 1, new_member_days: 7 }).ok).toBe(true);
+  it("rejects a distinct-active-days floor above the window length", () => {
+    expect(validateEligibility({ ...base, req_active_days: 20 }).ok).toBe(false);
+    expect(validateEligibility({ ...base, req_active_days: 3 }).ok).toBe(true);
+    expect(validateEligibility({ ...base, req_active_days: -1 }).ok).toBe(false);
   });
 
   it("rejects an unknown window anchor", () => {
     expect(validateEligibility({ ...base, window_anchor: "sideways" }).ok).toBe(false);
+  });
+
+  it("open-to-everyone waives the activity requirement", () => {
+    // No message/day floor needed when everyone may enter.
+    expect(validateEligibility({ ...base, open_to_all: 1, req_messages: 0, req_days: 0 }).ok).toBe(
+      true,
+    );
+  });
+
+  it("open-to-everyone can't be combined with a role gate", () => {
+    expect(validateEligibility({ ...base, open_to_all: 1, required_role_id: "r" }).ok).toBe(false);
+    expect(validateEligibility({ ...base, open_to_all: 1, excluded_role_id: "r" }).ok).toBe(false);
   });
 });
 
@@ -129,22 +140,31 @@ describe("resolveRaffleSettings", () => {
     default_cooldown_days: 7,
     default_cooldown_count: 2,
     default_min_account_age_days: 30,
+    default_min_server_age_days: 5,
   };
 
-  it("fills unset fields from guild defaults", () => {
+  it("fills cooldown from guild defaults and injects the server-wide floors", () => {
     const resolved = resolveRaffleSettings(validDraft, defaults);
     expect(resolved.cooldown_days).toBe(7);
     expect(resolved.cooldown_count).toBe(2);
     expect(resolved.min_account_age_days).toBe(30);
+    expect(resolved.min_server_age_days).toBe(5);
   });
 
-  it("keeps explicit per-raffle overrides", () => {
-    const resolved = resolveRaffleSettings(
-      { ...validDraft, cooldown_days: 3, min_account_age_days: 0 },
-      defaults,
-    );
+  it("keeps an explicit per-raffle cooldown override", () => {
+    const resolved = resolveRaffleSettings({ ...validDraft, cooldown_days: 3 }, defaults);
     expect(resolved.cooldown_days).toBe(3);
-    expect(resolved.min_account_age_days).toBe(0); // explicit 0 is not overridden
+  });
+
+  it("account age and tenure always come from the guild, not the raffle", () => {
+    // They are server-wide policy now — the summary shows the guild default.
+    const resolved = resolveRaffleSettings(validDraft, {
+      ...defaults,
+      default_min_account_age_days: null,
+      default_min_server_age_days: null,
+    });
+    expect(resolved.min_account_age_days).toBeNull();
+    expect(resolved.min_server_age_days).toBeNull();
   });
 });
 

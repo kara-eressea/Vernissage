@@ -20,8 +20,10 @@ export const CLEARABLE_FIELDS = [
   "default_cooldown_days",
   "default_cooldown_count",
   "default_min_account_age_days",
+  "default_min_server_age_days",
   "default_req_messages",
   "default_req_days",
+  "default_req_active_days",
   "timezone",
 ] as const;
 
@@ -71,6 +73,11 @@ export function validateMinAccountAge(raw: number): ConfigValidation {
   return validateNonNegativeInt("Minimum account age (days)", raw);
 }
 
+/** Default minimum server tenure in days (0 = no lockout). */
+export function validateMinServerAge(raw: number): ConfigValidation {
+  return validateNonNegativeInt("Minimum time in server (days)", raw);
+}
+
 /** Default messages required: any non-negative whole number (0 = no requirement). */
 export function validateReqMessages(raw: number): ConfigValidation {
   return validateNonNegativeInt("Messages required", raw);
@@ -79,6 +86,11 @@ export function validateReqMessages(raw: number): ConfigValidation {
 /** Default activity window in days: must be at least 1 (a 0-day window is invalid). */
 export function validateReqDays(raw: number): ConfigValidation {
   return validatePositiveInt("Activity window (days)", raw);
+}
+
+/** Default distinct active days required (0 = no distinct-day floor). */
+export function validateReqActiveDays(raw: number): ConfigValidation {
+  return validateNonNegativeInt("Active days required", raw);
 }
 
 /** Result of validating a string config input (currently just the timezone). */
