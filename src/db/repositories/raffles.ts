@@ -21,10 +21,9 @@ export interface RaffleRow {
   winner_count: number;
   req_messages: number | null;
   req_days: number | null;
+  req_active_days: number | null;
   window_anchor: string;
-  new_member_exempt: number;
-  new_member_days: number | null;
-  min_account_age_days: number | null;
+  open_to_all: number;
   exclude_prior_winners: number;
   required_role_id: string | null;
   excluded_role_id: string | null;
@@ -96,10 +95,9 @@ export type RaffleFieldPatch = Partial<
     | "winner_count"
     | "req_messages"
     | "req_days"
+    | "req_active_days"
     | "window_anchor"
-    | "new_member_exempt"
-    | "new_member_days"
-    | "min_account_age_days"
+    | "open_to_all"
     | "exclude_prior_winners"
     | "required_role_id"
     | "excluded_role_id"
@@ -123,10 +121,9 @@ const PATCHABLE_COLUMNS = new Set<keyof RaffleFieldPatch>([
   "winner_count",
   "req_messages",
   "req_days",
+  "req_active_days",
   "window_anchor",
-  "new_member_exempt",
-  "new_member_days",
-  "min_account_age_days",
+  "open_to_all",
   "exclude_prior_winners",
   "required_role_id",
   "excluded_role_id",

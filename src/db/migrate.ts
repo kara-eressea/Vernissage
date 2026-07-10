@@ -23,7 +23,7 @@ export function migrate(db: Database): void {
     db.exec(SCHEMA_SQL);
   } else {
     // Existing database: apply only the steps it is missing. Each step upgrades
-    // one version; add the next as `if (current < 14) { ... }`.
+    // one version; add the next as `if (current < 16) { ... }`.
     if (current < 8) {
       db.exec(`ALTER TABLE raffles ADD COLUMN draw_disqualified TEXT`);
     }
@@ -59,6 +59,18 @@ export function migrate(db: Database): void {
       // The wizard renders a null draw_mode as 'auto' but validation rejected
       // null; drafts now start at 'auto', so backfill the rows that predate it.
       db.exec(`UPDATE raffles SET draw_mode = 'auto' WHERE draw_mode IS NULL`);
+    }
+    if (current < 15) {
+      // Activity now measures distinct active days as well as raw volume, and a
+      // server-wide tenure floor plus a per-raffle "open to everyone" escape
+      // hatch replace the old per-raffle account-age override / new-member
+      // exemption (whose columns are left in place, unused). Defaults null/off.
+      db.exec(
+        `ALTER TABLE guilds ADD COLUMN default_min_server_age_days INTEGER;
+         ALTER TABLE guilds ADD COLUMN default_req_active_days INTEGER;
+         ALTER TABLE raffles ADD COLUMN req_active_days INTEGER;
+         ALTER TABLE raffles ADD COLUMN open_to_all INTEGER NOT NULL DEFAULT 0`,
+      );
     }
   }
 

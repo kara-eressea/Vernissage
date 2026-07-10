@@ -88,10 +88,9 @@ function toDraftFields(r: RaffleRow): RaffleDraftFields {
     winner_count: r.winner_count,
     req_messages: r.req_messages,
     req_days: r.req_days,
+    req_active_days: r.req_active_days,
     window_anchor: r.window_anchor,
-    new_member_exempt: r.new_member_exempt,
-    new_member_days: r.new_member_days,
-    min_account_age_days: r.min_account_age_days,
+    open_to_all: r.open_to_all,
     exclude_prior_winners: r.exclude_prior_winners,
     required_role_id: r.required_role_id,
     excluded_role_id: r.excluded_role_id,
@@ -156,6 +155,7 @@ export function createWizard(deps: WizardDeps): Wizard {
       default_cooldown_days: guild?.default_cooldown_days ?? null,
       default_cooldown_count: guild?.default_cooldown_count ?? null,
       default_min_account_age_days: guild?.default_min_account_age_days ?? null,
+      default_min_server_age_days: guild?.default_min_server_age_days ?? null,
     });
     return describeRaffle(settings);
   }
@@ -301,8 +301,8 @@ export function createWizard(deps: WizardDeps): Wizard {
       updateRaffleFields(db, id, { window_anchor: interaction.values[0] });
       return rerender(interaction, id, "eligibility");
     }
-    if (action === "exempt" && interaction.isStringSelectMenu()) {
-      updateRaffleFields(db, id, { new_member_exempt: interaction.values[0] === "on" ? 1 : 0 });
+    if (action === "opentoall" && interaction.isStringSelectMenu()) {
+      updateRaffleFields(db, id, { open_to_all: interaction.values[0] === "on" ? 1 : 0 });
       return rerender(interaction, id, "eligibility");
     }
     if (action === "nums" && interaction.isButton()) {
@@ -312,9 +312,8 @@ export function createWizard(deps: WizardDeps): Wizard {
     if (action === "numsubmit" && interaction.isModalSubmit()) {
       const x = intField(interaction, "req_messages", "Messages required", true);
       const y = intField(interaction, "req_days", "Activity window (days)", true);
-      const age = intField(interaction, "min_account_age_days", "Min account age", false);
-      const nmd = intField(interaction, "new_member_days", "New-member window", false);
-      const bad = [x, y, age, nmd].find((f) => "error" in f);
+      const k = intField(interaction, "req_active_days", "Active days", false);
+      const bad = [x, y, k].find((f) => "error" in f);
       if (bad && "error" in bad) {
         await respond(interaction, withError("eligibility", raffle, bad.error));
         return;
@@ -322,8 +321,7 @@ export function createWizard(deps: WizardDeps): Wizard {
       updateRaffleFields(db, id, {
         req_messages: (x as { value: number | null }).value,
         req_days: (y as { value: number | null }).value,
-        min_account_age_days: (age as { value: number | null }).value,
-        new_member_days: (nmd as { value: number | null }).value,
+        req_active_days: (k as { value: number | null }).value,
       });
       return rerender(interaction, id, "eligibility");
     }
@@ -521,10 +519,9 @@ export function createWizard(deps: WizardDeps): Wizard {
     const guild = getGuild(db, raffle.guild_id);
     updateRaffleFields(db, raffle.raffle_id, {
       window_anchor: raffle.window_anchor ?? "start",
-      new_member_exempt: raffle.new_member_exempt ?? 0,
-      min_account_age_days: raffle.min_account_age_days ?? guild?.default_min_account_age_days ?? null,
       req_messages: raffle.req_messages ?? guild?.default_req_messages ?? null,
       req_days: raffle.req_days ?? guild?.default_req_days ?? null,
+      req_active_days: raffle.req_active_days ?? guild?.default_req_active_days ?? null,
     });
   }
 

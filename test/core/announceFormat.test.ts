@@ -10,16 +10,18 @@ const base: EntryMessageInput = {
   name: "Summer Giveaway",
   prize: "A vinyl record",
   description: "Our yearly community giveaway.",
+  openToAll: false,
   reqMessages: 20,
+  reqActiveDays: null,
   reqDays: 14,
   windowAnchor: "start",
   minAccountAgeDays: null,
+  minServerAgeDays: null,
   startsAt: "2026-07-10T12:00:00.000Z",
   endsAt: "2026-07-17T12:00:00.000Z",
   cooldownDays: null,
   cooldownCount: null,
   excludePriorWinners: false,
-  newMemberExemptDays: null,
   hostId: "host-1",
   entryCount: 7,
 };
@@ -100,10 +102,22 @@ describe("formatEntryMessage — open card", () => {
     expect(content).not.toContain("Recent winners");
   });
 
-  it("states the new-member exemption's join window", () => {
-    expect(formatEntryMessage({ ...base, newMemberExemptDays: 10 })).toContain(
-      "-# Joined the server within the last 10 days? The activity requirement doesn't apply to you.",
+  it("states the server-tenure requirement exactly (non-gameable)", () => {
+    expect(formatEntryMessage({ ...base, minServerAgeDays: 7 })).toContain(
+      "have been in the server at least 7 days",
     );
+  });
+
+  it("open-to-everyone replaces the requirement subtext entirely", () => {
+    const content = formatEntryMessage({
+      ...base,
+      openToAll: true,
+      minAccountAgeDays: 30,
+      cooldownDays: 30,
+    });
+    expect(content).toContain("-# Open to everyone — press Enter to join.");
+    expect(content).not.toContain("To enter, you must");
+    expect(content).not.toContain("Recent winners");
   });
 
   it("badges a test raffle prize-free", () => {

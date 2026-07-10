@@ -1,15 +1,15 @@
 /**
  * Entry reply copy (pure).
  *
- * Maps an eligibility outcome to the ephemeral message a member sees. Replies
- * quote concrete numbers only for the non-gameable gates (cooldown remaining,
- * account age): the activity gate stays vague even privately, since exact
- * have/need numbers would let a member farm precisely to the bar (design.md
- * "Entry flow"). Blacklist rejections honor the guild's generic-message
- * toggle. No discord.js/database import.
+ * Maps an eligibility outcome to the ephemeral message a member sees. Cooldown
+ * timing (non-gameable) is quoted exactly, but the activity thresholds are kept
+ * vague on every member-facing surface — publishing the message/active-day bar
+ * would invite gaming it (design.md "Entry flow", activity-privacy rule).
+ * Blacklist rejections honor the guild's generic-message toggle. No
+ * discord.js/database import.
  */
 
-import { activityProgress } from "../../core/eligibility.js";
+import { meetsActivityRequirement } from "../../core/eligibility.js";
 import { winCooldownStatus } from "../../core/cooldown.js";
 import { discordTimestamp } from "../../core/time.js";
 import type { EligibilityInput, IneligibleReason } from "../../core/types.js";
@@ -48,6 +48,8 @@ export function entryFailureMessage(
         : "Your role makes you ineligible for this raffle.";
     case "account_too_new":
       return "Your Discord account is too new to enter this raffle.";
+    case "too_new_to_server":
+      return "You haven't been in the server long enough to enter this raffle yet.";
     case "in_cooldown": {
       const status = winCooldownStatus({
         cooldownDays: input.cooldown.cooldownDays,
@@ -70,8 +72,8 @@ export function entryFailureMessage(
       return "This raffle is only open to members who haven't won here before.";
     case "insufficient_activity":
       // Deliberately no have/need numbers, mirroring the public card: exact
-      // figures would let members farm precisely to the bar.
-      return "You haven't been active enough in this server recently to enter. Keep participating!";
+      // figures (message and active-day floors) would let members farm to the bar.
+      return "You haven't been active enough here recently to enter yet — keep chatting!";
     case "already_entered":
       return "You're already entered into this raffle. Changed your mind? Use `/raffle withdraw`.";
   }
@@ -79,7 +81,6 @@ export function entryFailureMessage(
 
 /** The `/raffle status` card: the member's standing against one raffle's gates. */
 export function statusMessage(raffleName: string | null, input: EligibilityInput): string {
-  const progress = activityProgress(input);
   const cooldown = winCooldownStatus({
     cooldownDays: input.cooldown.cooldownDays,
     cooldownCount: input.cooldown.cooldownCount,
@@ -94,6 +95,13 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
   }
   if (input.isCreator) {
     lines.push("- ⛔ You created this raffle, so you can't enter it.");
+  }
+  // An open-to-everyone raffle waives every requirement below; there's nothing
+  // more to report than whether they're in.
+  if (input.openToAll) {
+    lines.push("- ✅ This raffle is open to everyone.");
+    lines.push(input.alreadyEntered ? "- 🎟️ You're already entered." : "- ⬜ Not entered yet.");
+    return lines.join("\n");
   }
   if (input.requiredRoleId) {
     lines.push(
@@ -113,11 +121,9 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
     );
   }
   lines.push(
-    progress.exempt
-      ? "- ✅ Activity: exempt (new member)"
-      : progress.have >= progress.need
-        ? "- ✅ Activity: you've been active enough recently."
-        : "- ⬜ Activity: not enough recent activity yet — keep participating!",
+    meetsActivityRequirement(input)
+      ? "- ✅ Activity: you've been active enough recently"
+      : "- ⬜ Activity: not enough recent activity yet",
   );
   lines.push(
     cooldown.active

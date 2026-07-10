@@ -39,6 +39,17 @@ function dropPostV9Columns(db: BetterSqlite3.Database): void {
   );
 }
 
+/** Strip the v15 columns (distinct-active-days floor, server-tenure default,
+ * open-to-all escape hatch) to simulate a pre-v15 database. */
+function dropV15Columns(db: BetterSqlite3.Database): void {
+  db.exec(
+    `ALTER TABLE guilds DROP COLUMN default_min_server_age_days;
+     ALTER TABLE guilds DROP COLUMN default_req_active_days;
+     ALTER TABLE raffles DROP COLUMN req_active_days;
+     ALTER TABLE raffles DROP COLUMN open_to_all`,
+  );
+}
+
 describe("schema", () => {
   it("a fresh database has the full current schema at the current version", () => {
     const db = openDb(":memory:");
@@ -85,6 +96,7 @@ describe("schema", () => {
     // gate columns it would not yet have.
     db.exec(`CREATE INDEX idx_entries_raffle ON entries (raffle_id)`);
     dropPostV9Columns(db);
+    dropV15Columns(db);
     db.pragma("user_version = 8");
 
     migrate(db);
@@ -93,6 +105,9 @@ describe("schema", () => {
     expect(indexNames(db, "entries")).not.toContain("idx_entries_raffle");
     // The v10 step re-adds the gate columns.
     expect(columnNames(db, "raffles")).toContain("exclude_prior_winners");
+    // The v15 step re-adds the activity/tenure/open-to-all columns.
+    expect(columnNames(db, "raffles")).toContain("open_to_all");
+    expect(columnNames(db, "guilds")).toContain("default_min_server_age_days");
     db.close();
   });
 
@@ -101,6 +116,7 @@ describe("schema", () => {
     // Simulate a v7 database created before these columns existed.
     db.exec(`ALTER TABLE raffles DROP COLUMN draw_disqualified`);
     dropPostV9Columns(db);
+    dropV15Columns(db);
     db.prepare(`INSERT INTO raffles (guild_id, status) VALUES ('g1', 'closed')`).run();
     db.pragma("user_version = 7");
 
@@ -125,6 +141,7 @@ describe("schema", () => {
     // A pre-v14 draft carried draw_mode NULL even though the wizard rendered it
     // as 'auto' — validation then rejected the untouched select (see raffles.ts
     // createDraft). Simulate one and migrate.
+    dropV15Columns(db);
     db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', NULL)`).run();
     db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', 'manual')`).run();
     db.pragma("user_version = 13");

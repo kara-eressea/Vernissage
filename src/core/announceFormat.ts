@@ -19,11 +19,17 @@ export interface EntryMessageInput {
   name: string | null;
   prize: string | null;
   description: string | null;
+  /** When true, anyone not blacklisted may enter — every gate below is waived. */
+  openToAll: boolean;
   reqMessages: number | null;
+  /** K: distinct active days required (kept vague on the public card). */
+  reqActiveDays: number | null;
   reqDays: number | null;
   /** "start" (window ends at raffle start) or "rolling" (ends at entry time). */
   windowAnchor: string;
   minAccountAgeDays: number | null;
+  /** Minimum days in the server before entering (a non-gameable tenure floor). */
+  minServerAgeDays: number | null;
   startsAt: string | null;
   endsAt: string | null;
   /** Winner cooldown (raffle override resolved against guild defaults). */
@@ -31,8 +37,6 @@ export interface EntryMessageInput {
   cooldownCount: number | null;
   /** Whether anyone who ever won here is barred from this raffle. */
   excludePriorWinners: boolean;
-  /** When the new-member exemption is on, its join window in days. */
-  newMemberExemptDays: number | null;
   /** The raffle's creator, shown as "Hosted by". */
   hostId: string | null;
   /** Current number of entries; the card is re-edited as this grows. */
@@ -63,14 +67,19 @@ export function resolveAnnounceChannelId(
  * The plain-language eligibility subtext shown while the raffle is open.
  * Rendered as Discord subtext ("-# "): present but unobtrusive, in the slot
  * the winner line takes over once the raffle is drawn. Non-gameable gates
- * (account age, cooldowns, the prior-winner bar, the new-member exemption's
- * join window) are stated exactly; the activity gate deliberately omits the
- * message count — publishing the exact number would invite gaming it with a
- * burst of filler messages right before the raffle.
+ * (account age, server tenure, cooldowns, the prior-winner bar) are stated
+ * exactly; the activity gate deliberately omits the message and active-day
+ * counts — publishing the exact numbers would invite gaming them with a burst
+ * of filler messages right before the raffle.
  */
 function requirementsLines(raffle: EntryMessageInput): string[] {
+  // An open-to-everyone raffle waives every gate; say so and stop.
+  if (raffle.openToAll) {
+    return ["-# Open to everyone — press Enter to join."];
+  }
+
   const requirements: string[] = [];
-  if (raffle.reqMessages && raffle.reqDays) {
+  if ((raffle.reqMessages || raffle.reqActiveDays) && raffle.reqDays) {
     requirements.push(
       raffle.windowAnchor === "rolling"
         ? `have been active in the last ${plural(raffle.reqDays, "day")}`
@@ -80,6 +89,11 @@ function requirementsLines(raffle: EntryMessageInput): string[] {
   if (raffle.minAccountAgeDays) {
     requirements.push(
       `have a Discord account at least ${plural(raffle.minAccountAgeDays, "day")} old`,
+    );
+  }
+  if (raffle.minServerAgeDays) {
+    requirements.push(
+      `have been in the server at least ${plural(raffle.minServerAgeDays, "day")}`,
     );
   }
 
@@ -99,11 +113,6 @@ function requirementsLines(raffle: EntryMessageInput): string[] {
       waits.push(`sit out the next ${plural(raffle.cooldownCount, "raffle")}`);
     }
     lines.push(`-# Recent winners must ${waits.join(" and ")} before entering again.`);
-  }
-  if (raffle.newMemberExemptDays) {
-    lines.push(
-      `-# Joined the server within the last ${plural(raffle.newMemberExemptDays, "day")}? The activity requirement doesn't apply to you.`,
-    );
   }
   return lines;
 }

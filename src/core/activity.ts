@@ -29,6 +29,28 @@ export function messagesInWindow(
 }
 
 /**
+ * How many distinct UTC days within the window the member was active on — a day
+ * counts if it has any counted message (count >= 1). This is the burst-resistant
+ * half of the activity gate: a single day of 100 greetings is one active day, so
+ * it can't satisfy a multi-day requirement (design.md "Entry flow").
+ *
+ * `dailyCounts` may contain days outside the window or zero-count rows; both are
+ * ignored. String comparison is valid for ISO dates.
+ */
+export function activeDaysInWindow(
+  dailyCounts: DailyCount[],
+  window: DayWindow,
+): number {
+  let days = 0;
+  for (const { day, count } of dailyCounts) {
+    if (count >= 1 && day >= window.startDay && day <= window.endDay) {
+      days += 1;
+    }
+  }
+  return days;
+}
+
+/**
  * Apply an optional per-hour cap to a running count within the current hour.
  *
  * Given the count already recorded this hour and the number of new messages,

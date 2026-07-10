@@ -23,10 +23,10 @@ export interface RaffleDraftFields {
   winner_count: number | null;
   req_messages: number | null;
   req_days: number | null;
+  req_active_days: number | null;
   window_anchor: string | null;
-  new_member_exempt: number | null;
-  new_member_days: number | null;
-  min_account_age_days: number | null;
+  /** 1 = anyone not blacklisted may enter (every other gate waived). */
+  open_to_all: number | null;
   exclude_prior_winners: number | null;
   required_role_id: string | null;
   excluded_role_id: string | null;
@@ -42,7 +42,9 @@ export interface RaffleDraftFields {
 export interface GuildDefaults {
   default_cooldown_days: number | null;
   default_cooldown_count: number | null;
+  /** Server-wide account-age and tenure floors (no per-raffle override). */
   default_min_account_age_days: number | null;
+  default_min_server_age_days: number | null;
 }
 
 export const WINDOW_ANCHORS = ["start", "rolling"] as const;
@@ -91,18 +93,29 @@ export function validateSchedule(
   return ok;
 }
 
-/** Step 3: activity requirement, account age, and new-member exemption. */
+/** Step 3: the activity requirement (X messages across K days) or open-to-all. */
 export function validateEligibility(
   fields: Pick<
     RaffleDraftFields,
     | "req_messages"
     | "req_days"
+    | "req_active_days"
     | "window_anchor"
-    | "min_account_age_days"
-    | "new_member_exempt"
-    | "new_member_days"
+    | "open_to_all"
+    | "required_role_id"
+    | "excluded_role_id"
   >,
 ): Validation {
+  // Open to everyone waives the activity requirement entirely; the only rule is
+  // that it can't be combined with a role gate (they'd contradict each other).
+  if (fields.open_to_all === 1) {
+    if (fields.required_role_id !== null || fields.excluded_role_id !== null) {
+      return err(
+        "An open-to-everyone raffle can't also require or exclude a role. Clear the role gate, or turn off open-to-everyone.",
+      );
+    }
+    return ok;
+  }
   if (fields.req_messages === null || fields.req_messages < 1) {
     return err("The message requirement must be at least 1.");
   }
@@ -112,11 +125,11 @@ export function validateEligibility(
   if (fields.window_anchor !== null && !(WINDOW_ANCHORS as readonly string[]).includes(fields.window_anchor)) {
     return err("The window anchor must be 'start' or 'rolling'.");
   }
-  if (fields.min_account_age_days !== null && fields.min_account_age_days < 0) {
-    return err("The minimum account age cannot be negative.");
+  if (fields.req_active_days !== null && fields.req_active_days < 0) {
+    return err("The active-days requirement cannot be negative.");
   }
-  if (fields.new_member_exempt === 1 && (fields.new_member_days === null || fields.new_member_days < 1)) {
-    return err("The new-member exemption needs a join window of at least 1 day.");
+  if (fields.req_active_days !== null && fields.req_active_days > fields.req_days) {
+    return err("The active-days requirement can't be more than the activity window.");
   }
   return ok;
 }
@@ -155,12 +168,20 @@ export function validateDraft(fields: RaffleDraftFields, nowUtc: string): Valida
  * shape as a draft; the defaultable fields are just guaranteed to be resolved
  * (per-raffle value or guild default) rather than left null by the wizard.
  */
-export type ResolvedRaffleSettings = RaffleDraftFields;
+export type ResolvedRaffleSettings = RaffleDraftFields & {
+  /**
+   * Effective server-wide floors, injected from the guild defaults for the
+   * summary. These are not per-raffle fields — they apply to every raffle in
+   * the guild — so they are resolved here rather than stored on the row.
+   */
+  min_account_age_days: number | null;
+  min_server_age_days: number | null;
+};
 
 /**
- * Fill unset (null) raffle fields from the guild defaults, keeping explicit
- * per-raffle overrides. Only the defaultable fields (cooldowns, min account age)
- * fall back; everything else is copied through unchanged.
+ * Fill unset (null) per-raffle fields from the guild defaults and inject the
+ * server-wide account-age / tenure floors for the summary. Only cooldown falls
+ * back per-raffle; account age and tenure come straight from the guild defaults.
  */
 export function resolveRaffleSettings(
   fields: RaffleDraftFields,
@@ -170,7 +191,8 @@ export function resolveRaffleSettings(
     ...fields,
     cooldown_days: fields.cooldown_days ?? defaults.default_cooldown_days,
     cooldown_count: fields.cooldown_count ?? defaults.default_cooldown_count,
-    min_account_age_days: fields.min_account_age_days ?? defaults.default_min_account_age_days,
+    min_account_age_days: defaults.default_min_account_age_days,
+    min_server_age_days: defaults.default_min_server_age_days,
   };
 }
 

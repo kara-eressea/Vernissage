@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cappedIncrement, messagesInWindow, pruneCutoffDay } from "../../src/core/activity.js";
+import {
+  activeDaysInWindow,
+  cappedIncrement,
+  messagesInWindow,
+  pruneCutoffDay,
+} from "../../src/core/activity.js";
 import type { DailyCount } from "../../src/core/types.js";
 
 describe("messagesInWindow", () => {
@@ -26,6 +31,39 @@ describe("messagesInWindow", () => {
     expect(
       messagesInWindow(counts, { startDay: "2026-08-01", endDay: "2026-08-31" }),
     ).toBe(0);
+  });
+});
+
+describe("activeDaysInWindow", () => {
+  const counts: DailyCount[] = [
+    { day: "2026-06-30", count: 5 },
+    { day: "2026-07-01", count: 3 },
+    { day: "2026-07-02", count: 10 },
+    { day: "2026-07-03", count: 1 },
+  ];
+
+  it("counts distinct days with any activity in the inclusive window", () => {
+    expect(
+      activeDaysInWindow(counts, { startDay: "2026-07-01", endDay: "2026-07-03" }),
+    ).toBe(3);
+  });
+
+  it("counts a huge single-day burst as one active day", () => {
+    const burst: DailyCount[] = [{ day: "2026-07-02", count: 500 }];
+    expect(
+      activeDaysInWindow(burst, { startDay: "2026-07-01", endDay: "2026-07-14" }),
+    ).toBe(1);
+  });
+
+  it("ignores zero-count rows and days outside the window", () => {
+    const withZero: DailyCount[] = [
+      { day: "2026-07-01", count: 0 },
+      { day: "2026-07-02", count: 4 },
+      { day: "2026-08-01", count: 9 },
+    ];
+    expect(
+      activeDaysInWindow(withZero, { startDay: "2026-07-01", endDay: "2026-07-31" }),
+    ).toBe(1);
   });
 });
 

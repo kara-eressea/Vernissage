@@ -61,6 +61,7 @@ export type IneligibleReason =
   | "missing_required_role"
   | "has_excluded_role"
   | "account_too_new"
+  | "too_new_to_server"
   | "in_cooldown"
   | "prior_winner"
   | "insufficient_activity"
@@ -84,6 +85,13 @@ export interface EligibilityInput {
   /** Whether this user created the raffle (creators can't enter their own). */
   isCreator: boolean;
 
+  /**
+   * When set, the raffle skips every gate below except the already-entered
+   * check — an "anyone not blacklisted may enter" escape hatch. Blacklist and
+   * creator self-exclusion (checked above) still apply.
+   */
+  openToAll: boolean;
+
   /** Role ids the member currently holds, for the optional role gates. */
   userRoleIds: string[];
   /** A role the member must hold to enter; null = no required-role gate. */
@@ -96,6 +104,12 @@ export interface EligibilityInput {
   /** Minimum account age in days; null = no requirement. */
   minAccountAgeDays: number | null;
 
+  /**
+   * Minimum days the member must have been in the guild before entering (a
+   * tenure lockout); null = no requirement. Evaluated against `joinedAt`.
+   */
+  minServerAgeDays: number | null;
+
   /** Win-cooldown configuration and the data needed to evaluate it. */
   cooldown: WinCooldownConfig;
   wins: WinRecord[];
@@ -107,18 +121,16 @@ export interface EligibilityInput {
   /** Whether the user has a prior non-rerolled win in this guild. */
   hasPriorWin: boolean;
 
-  /** Activity requirement. */
+  /** Activity requirement: X messages spread across at least K distinct days. */
   reqMessages: number;
+  /** K: distinct active days required within the window; 0/negative = no floor. */
+  reqActiveDays: number;
   reqDays: number;
   windowAnchor: WindowAnchor;
   /** Raffle start time, UTC ISO — the anchor for "start" mode. */
   raffleStart: string;
 
-  /** New-member exemption. */
-  newMemberExempt: boolean;
-  /** J: joined within this many days bypasses the activity check. */
-  newMemberDays: number | null;
-  /** When the user joined the guild, UTC ISO; null if unknown. */
+  /** When the user joined the guild, UTC ISO; null if unknown (tenure check). */
   joinedAt: string | null;
 
   /** The user's daily message counts (already scoped to counted channels). */
