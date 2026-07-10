@@ -161,6 +161,29 @@ It does not lift a blacklist (use `/raffle unban`) or remove active entries.
 /raffle reset user:@alice scope:all
 ```
 
+### `/raffle eligible`
+Show how many members — and which ones — would be eligible right now under the
+server's **default** entry settings, with no raffle running. A standing view of
+the pool a new raffle would draw from, useful for sanity-checking the defaults
+before opening one. Ephemeral. Full semantics:
+[Listing the eligible pool](design.md#listing-the-eligible-pool).
+
+It reuses the real entry gate, so it agrees with what members would actually
+hit — with these limits, because there is no raffle to read from:
+- It finds candidates from counted activity, so it needs a default activity
+  requirement (`req-messages` / `req-days`); set one first if you haven't. It
+  cannot see members who have never sent a counted message.
+- It applies the guild-wide bars it can measure from stored data — the activity
+  requirement (messages **and** distinct active days), minimum account age, and
+  win cooldown — over a rolling window ending now. The **server-tenure** floor is
+  skipped (no member join dates without a live fetch), and the per-raffle gates
+  (role gates, prior-winner bar, open-to-everyone) have no server default, so a
+  specific raffle may narrow — or widen — the pool further.
+
+```
+/raffle eligible
+```
+
 ---
 
 ## Server configuration
@@ -170,9 +193,10 @@ replies are ephemeral.
 
 ### `/raffle config show`
 Show the current configuration: audit and announce channels, mod role, hourly
-cap, default cooldown, default minimum account age, default activity
-requirement, timezone, blacklist-message style, and the counted-channel rules
-with their resulting precedence. If audit-channel posts have been failing (e.g.
+cap, default cooldown, default minimum account age, default minimum time in the
+server, default activity requirement (messages, active days, and window),
+timezone, blacklist-message style, and the counted-channel rules with their
+resulting precedence. If audit-channel posts have been failing (e.g.
 the bot's access was revoked after the channel was set), the audit-channel line
 carries a warning with the time the failures started.
 
@@ -188,9 +212,11 @@ only what you want to change.
 | `hourly-cap` | Max counted messages per member per hour (anti-spam). |
 | `cooldown-days` | Default days a winner waits before re-entering. |
 | `cooldown-count` | Default number of raffles a winner must skip. |
-| `min-account-age-days` | Default minimum Discord account age to enter. |
+| `min-account-age-days` | Default minimum Discord account age to enter (server-wide). |
+| `min-server-age-days` | Default minimum time in the server before entering — a tenure lockout for brand-new joiners (server-wide). |
 | `req-messages` | Default messages required to enter (X). |
 | `req-days` | Default activity window in days (Y). |
+| `req-active-days` | Default separate active days required within the window (K) — a burst-resistant floor; 0 = no spread requirement. |
 | `timezone` | IANA timezone for friendly schedule input, e.g. `Europe/Copenhagen`. |
 | `blacklist-generic-message` | Show blacklisted members a generic failure instead of "blacklisted". |
 | `clear` | Unset a single setting back to its default (choose which). |
@@ -202,7 +228,8 @@ an explanation instead of failing silently at post time.
 
 ```
 /raffle config set audit-channel:#raffle-log mod-role:@Mods
-/raffle config set req-messages:20 req-days:14 timezone:Europe/Copenhagen
+/raffle config set req-messages:20 req-days:14 req-active-days:3 timezone:Europe/Copenhagen
+/raffle config set min-server-age-days:14
 /raffle config set clear:"hourly cap"
 ```
 
@@ -248,17 +275,21 @@ The flow (all on one ephemeral message that updates in place):
    markup, so you see it in your own timezone before confirming (interpreted in
    the server's configured `timezone`). A start of `now` opens the raffle on
    the first scheduler sweep after you confirm.
-3. **Eligibility** — window anchor and new-member exemption via menus, plus a
-   modal for X messages / Y days / minimum account age. Each field shows the
-   server default and can be left as-is. A **More restrictions…** sub-screen holds
-   the optional gates: bar prior winners, and require or exclude a role.
+3. **Eligibility** — the window anchor and an **Open to everyone?** toggle via
+   menus, plus a modal for X messages / Y days / K separate active days. "Open
+   to everyone" waives every requirement (see
+   [Entry flow](design.md#entry-flow)) and can't be combined with a role gate.
+   Minimum account age and server tenure are **server-wide** settings (in
+   `/raffle config set`), not per-raffle. A **More restrictions…** sub-screen
+   holds the optional per-raffle gates: bar prior winners, and require or exclude
+   a role.
 4. **Draw** — winner count, draw mode (auto at close or manual), cooldown
    override, an optional claim window in hours, and a **test-mode** toggle
    (default off — see [Test raffles](design.md#test-raffles)).
 5. **Summary** — every setting in plain language (for example, "To enter, members
-   must have sent at least 20 messages in the 14 days before the raffle starts"),
-   with buttons: **Confirm & schedule**, **Edit a step**, **Save as draft**,
-   **Cancel**.
+   must have sent at least 20 messages on at least 3 different days in the 14
+   days before the raffle starts"), with buttons: **Confirm & schedule**, **Edit
+   a step**, **Save as draft**, **Cancel**.
 
 Useful behaviors:
 - The raffle exists as a **draft** from step 1, so an abandoned wizard loses
@@ -281,19 +312,24 @@ raffles:
 
 ```
 /raffle config set audit-channel:#raffle-log announce-channel:#raffles mod-role:@Mods
-/raffle config set req-messages:10 req-days:14 min-account-age-days:30 hourly-cap:10 cooldown-count:1
+/raffle config set req-messages:10 req-days:14 req-active-days:3 min-account-age-days:30 min-server-age-days:14 hourly-cap:10 cooldown-count:1
 /raffle config channels action:exclude channel:#bot-spam
 ```
 
-- **Activity 10 messages / 14 days**: a low bar on purpose — it filters, it
-  doesn't rank. A casual-but-real member chatting a few times a week passes;
+- **Activity 10 messages across 3 days / 14-day window**: a low bar on purpose —
+  it filters, it doesn't rank. The **3 separate days** matter more than the
+  count: they're what stop a one-off greeting burst from qualifying a member who
+  then goes quiet. A casual-but-real member chatting a few times a week passes;
   pure lurkers and prize tourists don't. If it excludes people you consider
-  active, lower `req-messages` before widening `req-days`.
+  active, lower `req-active-days` first, then `req-messages`, before widening
+  `req-days`.
 - **Account age 30 days**: blocks throwaway/alt accounts; inconveniences nobody
   legitimate.
-- **New-member exemption: leave off** (the default). "Joined last week" is the
-  raffle-tourist profile; a genuine newcomer becomes eligible after two weeks
-  of normal participation.
+- **Server tenure 14 days**: closes the join-for-the-raffle path — a brand-new
+  member can't enter until they've been around two weeks. Pair it with the
+  active-days floor and a newcomer earns eligibility by actually taking part,
+  not just by showing up. For a specific one-off "everyone welcome" raffle, use
+  the wizard's **Open to everyone** toggle instead of lowering these.
 - **Hourly cap 10**: no real member sustains 10 counted messages an hour; it
   makes farming the (unpublished) activity bar slow.
 - **Cooldown: sit out 1 raffle** rather than a day count — self-adjusting for a

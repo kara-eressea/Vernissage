@@ -22,6 +22,7 @@ import type { Command } from "../types.js";
 import { addBanSubcommands, handleBan, handleBanlist, handleUnban } from "./blacklist.js";
 import { addConfigGroup, handleConfig } from "./config.js";
 import { addDrawSubcommands, handleDraw, handleReroll } from "./draw.js";
+import { addEligibleSubcommand, handleEligible } from "./eligible.js";
 import {
   addEntrySubcommands,
   handleClaim,
@@ -46,6 +47,7 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   addDrawSubcommands(data);
   addBanSubcommands(data);
   addResetSubcommand(data);
+  addEligibleSubcommand(data);
   data.addSubcommandGroup(addConfigGroup);
 
   return {
@@ -106,6 +108,9 @@ async function dispatch(
       return;
     case "reset":
       await handleReset(interaction, ctx);
+      return;
+    case "eligible":
+      await handleEligible(interaction, ctx);
       return;
     default:
       await interaction.reply({

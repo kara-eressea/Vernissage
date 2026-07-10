@@ -158,7 +158,7 @@ describe("wizard eligibility defaults", () => {
     setGuildConfig(
       db,
       "g1",
-      { default_req_messages: 20, default_req_days: 14, default_min_account_age_days: 30 },
+      { default_req_messages: 20, default_req_days: 14, default_req_active_days: 3 },
       "2026-07-01T00:00:00.000Z",
     );
     const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
@@ -169,7 +169,7 @@ describe("wizard eligibility defaults", () => {
     const raffle = getRaffle(db, id)!;
     expect(raffle.req_messages).toBe(20);
     expect(raffle.req_days).toBe(14);
-    expect(raffle.min_account_age_days).toBe(30);
+    expect(raffle.req_active_days).toBe(3);
   });
 });
 

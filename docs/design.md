@@ -92,30 +92,53 @@ automatic at close or manually triggered by a mod (configurable per raffle).
    - User is not the raffle's creator. A raffle's creator (the mod who made it,
      stored in `raffles.created_by`) can never enter their own raffle. This is
      always enforced and needs no configuration or extra storage.
+   - **Open to everyone**: if the raffle sets `open_to_all`, every check below is
+     waived — anyone not blacklisted (and not the creator) may enter. It is the
+     deliberate escape hatch for a "no requirements" raffle and it overrides the
+     activity, account-age, tenure, cooldown, and prior-winner gates alike (so
+     even a recent or prior winner can enter). It cannot be combined with a role
+     gate; the wizard rejects that combination. When it is off, the remaining
+     checks apply, in order:
    - Role gates, if configured (both optional, off by default): the user holds
      the raffle's `required_role_id`, and does not hold its `excluded_role_id`.
      Roles are read live from the guild member object at check time, so gaining
      or losing a role takes effect immediately; no membership is stored.
-   - User's Discord account meets the minimum account age, if set (derived
-     from the user id snowflake, no extra storage needed).
+   - User's Discord account meets the minimum account age, if set. This is a
+     **server-wide default** (`guilds.default_min_account_age_days`), not a
+     per-raffle setting; it is derived from the user id snowflake, no extra
+     storage needed.
+   - User has been in the server at least the minimum tenure, if set. Also a
+     **server-wide default** (`guilds.default_min_server_age_days`): a lockout
+     that keeps brand-new joiners from entering for their first N days, closing
+     the join-for-the-raffle path. The join date is read live from the guild
+     member object at check time; a leave-and-rejoin resets it, and an unknown
+     join date fails the check (a tenure we cannot verify blocks entry).
    - User is not within a win cooldown.
    - If the raffle has `exclude_prior_winners` set, the user has no prior
      non-rerolled win in this guild (a lifetime bar, distinct from the win
      cooldown's time/count window; off by default). A rerolled/disqualified win
      does not count, mirroring the cooldown rule.
-   - User meets the activity requirement: X messages within the Y-day
-     window. The window anchor is set per raffle: "anchored" measures the Y
-     days before raffle start (default, prevents qualifying by spamming
-     after the announcement), "rolling" measures the Y days before the entry
-     attempt. Exemption below applies in either mode, unless
-     the raffle has the new-member exemption enabled and the user joined the
-     server within the last J days (join date read from the guild member
-     object at check time).
+   - User meets the activity requirement: at least **X messages** spread across
+     at least **K distinct active days** within the Y-day window (a day counts
+     as active with any single counted message). The two floors are independent
+     — a member can fail on either the total or the spread. The distinct-day
+     floor is what makes the gate burst-resistant: a single day of greetings,
+     however loud, is one active day and cannot satisfy a multi-day requirement,
+     so measured activity reflects sustained participation rather than one
+     session. Both X and K are server defaults a raffle may override
+     (`req_messages`/`req_days`/`req_active_days`); K of 0 imposes no spread
+     floor (volume-only, the old behavior). The window anchor is set per raffle:
+     "anchored" measures the Y days before raffle start (default, prevents
+     qualifying by spamming after the announcement), "rolling" measures the Y
+     days before the entry attempt.
    - User has not already entered.
 
 All of these are evaluated at entry time and short-circuit on the first failure,
 so a rejected user is told exactly which gate they failed and is never recorded
-as entered — they cannot mistake ineligibility for a lost draw.
+as entered — they cannot mistake ineligibility for a lost draw. The exact
+activity thresholds (X and K) are never shown to members — not on the entry
+card, the failure reply, or /raffle status — so the bar cannot be farmed to;
+non-gameable gates (account age, tenure, cooldown) are stated exactly.
 3. On success: entry recorded, ephemeral confirmation to user, audit log
    entry written.
 4. On failure: ephemeral message explaining which check failed (mods may
@@ -194,6 +217,37 @@ as entered — they cannot mistake ineligibility for a lost draw.
   rule. A reset that finds nothing to clear still runs and is still logged.
 - Not in scope: it does not lift a blacklist (use /raffle unban) and does not
   remove active entries.
+
+### Listing the eligible pool
+- Mod-only command: /raffle eligible. A read-only snapshot of who would be
+  eligible *right now* under the guild's default entry settings, with no raffle
+  in play — a standing view of the pool a new raffle would draw from, so a mod
+  can sanity-check the defaults before opening one. It changes no state and
+  writes no audit row.
+- It reuses the same pure eligibility check the entry flow uses, so the report
+  can never drift from the real gate. It is not, and cannot be, a preview of a
+  *specific* raffle — there is no raffle, so the per-raffle fields (role gates,
+  the prior-winner bar, the open-to-all escape hatch) are not applied. The
+  server-tenure floor is also skipped: like the entry snapshot it has no member
+  join dates. What it does apply are the guild-wide bars it can evaluate from
+  stored data: not blacklisted, account old enough
+  (`default_min_account_age_days`), off any win cooldown
+  (`default_cooldown_days`/`default_cooldown_count`), and the default activity
+  requirement — `default_req_messages` across `default_req_active_days` distinct
+  days within `default_req_days` (the distinct-day floor **is** applied, since
+  the daily buckets are stored).
+- The activity window is **rolling**, ending now — a real raffle usually anchors
+  its window to its start, but a no-raffle snapshot has no start to anchor to, so
+  "the last Y days" is the only meaningful reading.
+- It is a DB-only view: candidates are enumerated from the `activity` table, so
+  it needs a default activity requirement to apply and it cannot see members who
+  have never sent a counted message. Enumerating the full membership would need a
+  privileged member fetch the bot does not assume; the activity-scoped
+  approximation is deliberate.
+- Because the report is mod-only and ephemeral, it may state the applied default
+  numbers — the activity-privacy rule (never publish the message bar to members)
+  governs member-facing surfaces, not a moderator read-out; the same numbers are
+  already shown by /raffle config show.
 
 ### Blacklist
 - Mod-only commands: /raffle ban, /raffle unban, /raffle banlist.
@@ -316,9 +370,11 @@ guilds (
   hourly_cap      INTEGER,          -- null = uncapped
   default_cooldown_days   INTEGER,
   default_cooldown_count  INTEGER,
-  default_min_account_age_days INTEGER,  -- null = no requirement
+  default_min_account_age_days INTEGER,  -- null = no requirement (server-wide)
+  default_min_server_age_days  INTEGER,  -- tenure lockout, null = none (server-wide)
   default_req_messages    INTEGER,       -- default X for "Use defaults"
   default_req_days        INTEGER,       -- default Y for "Use defaults"
+  default_req_active_days INTEGER,       -- default K (distinct active days)
   timezone        TEXT,                  -- IANA zone for wizard schedule input
   created_at      TEXT
 )
@@ -350,11 +406,13 @@ raffles (
   ends_at         TEXT,
   winner_count    INTEGER DEFAULT 1,
   req_messages    INTEGER,          -- X
-  req_days        INTEGER,          -- Y
+  req_days        INTEGER,          -- Y (window length)
+  req_active_days INTEGER,          -- K, distinct active days required; null/0 = no spread floor
   window_anchor   TEXT DEFAULT 'start', -- 'start' (raffle start) or 'rolling' (entry time)
-  new_member_exempt INTEGER DEFAULT 0, -- 1 = exemption enabled
-  new_member_days INTEGER,          -- J, joined within J days bypasses activity check
-  min_account_age_days INTEGER,     -- null = guild default
+  open_to_all     INTEGER DEFAULT 0, -- 1 = skip every gate but blacklist + creator self-exclusion
+  -- DEPRECATED (v15): min_account_age_days, new_member_exempt, new_member_days are
+  -- retained but unused — account age is now a server-wide default and the
+  -- new-member exemption was replaced by open_to_all. Safe to drop later.
   exclude_prior_winners INTEGER DEFAULT 0, -- 1 = bar anyone who has won here before
   required_role_id TEXT,            -- must hold this role to enter; null = no gate
   excluded_role_id TEXT,            -- barred from entering if held; null = no gate
@@ -490,7 +548,6 @@ wizard_state (
 ## Out of scope for v1 (future ideas)
 - Web dashboard for configuration and public audit viewing.
 - drand integration if fallback commit-reveal is used first.
-- Server join age requirements beyond the new-member exemption logic.
 - Export of audit history as CSV/JSON via command.
 
 ## Testing
@@ -501,10 +558,12 @@ window math, draw selection) is written as pure functions with no Discord
 dependencies. The Discord layer only parses interactions, calls core
 functions, and formats replies.
 
-- Unit tests for eligibility: each check (open state, blacklist, account
-  age, cooldown, activity window in both anchor modes, new-member
-  exemption, duplicate entry) with passing and failing cases, including
-  boundary values (exactly X messages, window edges at UTC midnight).
+- Unit tests for eligibility: each check (open state, blacklist, creator,
+  open-to-all short-circuit, role gates, account age, server tenure, cooldown,
+  prior-winner bar, the activity gate — X messages and K distinct active days —
+  in both anchor modes, duplicate entry) with passing and failing cases,
+  including boundary values (exactly X messages, exactly K days, window edges at
+  UTC midnight).
 - Draw tests: deterministic given a seed (fixed seed in, same winner out),
   correct multi-winner iteration without duplicates, reroll re-selecting over
   the frozen committed list from the same base seed with disqualified ids

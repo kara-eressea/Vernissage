@@ -54,6 +54,7 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
   const { raffle, guild, userId, now } = ctx;
   const settings = resolveEntrySettings(raffle, {
     default_min_account_age_days: guild?.default_min_account_age_days ?? null,
+    default_min_server_age_days: guild?.default_min_server_age_days ?? null,
     default_cooldown_days: guild?.default_cooldown_days ?? null,
     default_cooldown_count: guild?.default_cooldown_count ?? null,
   });
@@ -67,6 +68,7 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
     latestWonAt === null ? 0 : countRafflesSince(db, raffle.guild_id, latestWonAt);
 
   const reqMessages = raffle.req_messages ?? 0;
+  const reqActiveDays = raffle.req_active_days ?? 0;
   const reqDays = raffle.req_days && raffle.req_days >= 1 ? raffle.req_days : 1;
   const windowAnchor = (raffle.window_anchor as WindowAnchor) ?? "start";
   const raffleStart = raffle.starts_at ?? now;
@@ -81,22 +83,23 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
     status: raffle.status as EligibilityInput["status"],
     blacklisted: isBlacklisted(db, raffle.guild_id, userId, now),
     isCreator: raffle.created_by !== null && raffle.created_by === userId,
+    openToAll: raffle.open_to_all === 1,
     userRoleIds: ctx.userRoleIds,
     requiredRoleId: raffle.required_role_id,
     excludedRoleId: raffle.excluded_role_id,
     userSnowflake: userId,
     minAccountAgeDays: settings.minAccountAgeDays,
+    minServerAgeDays: settings.minServerAgeDays,
     cooldown: { cooldownDays: settings.cooldownDays, cooldownCount: settings.cooldownCount },
     wins,
     rafflesSinceLastWin,
     excludePriorWinners: raffle.exclude_prior_winners === 1,
     hasPriorWin: wins.length > 0,
     reqMessages,
+    reqActiveDays,
     reqDays,
     windowAnchor,
     raffleStart,
-    newMemberExempt: raffle.new_member_exempt === 1,
-    newMemberDays: raffle.new_member_days,
     joinedAt: ctx.joinedAt,
     dailyCounts,
     alreadyEntered: hasEntry(db, raffle.raffle_id, userId),
@@ -170,6 +173,7 @@ export function buildEntryMessageInput(db: Database, raffle: RaffleRow): EntryMe
   const guild = getGuild(db, raffle.guild_id);
   const settings = resolveEntrySettings(raffle, {
     default_min_account_age_days: guild?.default_min_account_age_days ?? null,
+    default_min_server_age_days: guild?.default_min_server_age_days ?? null,
     default_cooldown_days: guild?.default_cooldown_days ?? null,
     default_cooldown_count: guild?.default_cooldown_count ?? null,
   });
@@ -177,16 +181,18 @@ export function buildEntryMessageInput(db: Database, raffle: RaffleRow): EntryMe
     name: raffle.name,
     prize: raffle.prize,
     description: raffle.description,
+    openToAll: raffle.open_to_all === 1,
     reqMessages: raffle.req_messages,
+    reqActiveDays: raffle.req_active_days,
     reqDays: raffle.req_days,
     windowAnchor: raffle.window_anchor,
     minAccountAgeDays: settings.minAccountAgeDays,
+    minServerAgeDays: settings.minServerAgeDays,
     startsAt: raffle.starts_at,
     endsAt: raffle.ends_at,
     cooldownDays: settings.cooldownDays,
     cooldownCount: settings.cooldownCount,
     excludePriorWinners: raffle.exclude_prior_winners === 1,
-    newMemberExemptDays: raffle.new_member_exempt === 1 ? raffle.new_member_days : null,
     hostId: raffle.created_by,
     entryCount: listEntrants(db, raffle.raffle_id).length,
     isTest: raffle.is_test === 1,

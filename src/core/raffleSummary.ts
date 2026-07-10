@@ -34,37 +34,47 @@ export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
     lines.push(`Closes ${discordTimestamp(settings.ends_at)}.`);
   }
 
-  // Eligibility sentence, switching on the window anchor.
-  if (settings.req_messages && settings.req_days) {
-    const window =
-      settings.window_anchor === "rolling"
-        ? `in the ${plural(settings.req_days, "day")} before they enter`
-        : `in the ${plural(settings.req_days, "day")} before the raffle starts`;
-    lines.push(
-      `To enter, members must have sent at least ${plural(settings.req_messages, "message")} ${window}.`,
-    );
-  }
+  // Open to everyone short-circuits every other eligibility line.
+  if (settings.open_to_all === 1) {
+    lines.push("**Open to everyone** — anyone not blacklisted may enter (even past winners).");
+  } else {
+    // Eligibility sentence, switching on the window anchor. States the exact
+    // numbers: this is the mod-facing summary, not a member-facing surface.
+    if (settings.req_messages && settings.req_days) {
+      const window =
+        settings.window_anchor === "rolling"
+          ? `in the ${plural(settings.req_days, "day")} before they enter`
+          : `in the ${plural(settings.req_days, "day")} before the raffle starts`;
+      const spread =
+        settings.req_active_days && settings.req_active_days > 1
+          ? ` on at least ${plural(settings.req_active_days, "different day")}`
+          : "";
+      lines.push(
+        `To enter, members must have sent at least ${plural(settings.req_messages, "message")}${spread} ${window}.`,
+      );
+    }
 
-  if (settings.min_account_age_days) {
-    lines.push(
-      `Their Discord account must be at least ${plural(settings.min_account_age_days, "day")} old.`,
-    );
-  }
+    if (settings.min_account_age_days) {
+      lines.push(
+        `Their Discord account must be at least ${plural(settings.min_account_age_days, "day")} old.`,
+      );
+    }
 
-  if (settings.new_member_exempt === 1 && settings.new_member_days) {
-    lines.push(
-      `Members who joined in the last ${plural(settings.new_member_days, "day")} are exempt from the activity requirement.`,
-    );
-  }
+    if (settings.min_server_age_days) {
+      lines.push(
+        `They must have been in the server at least ${plural(settings.min_server_age_days, "day")}.`,
+      );
+    }
 
-  if (settings.exclude_prior_winners === 1) {
-    lines.push("Members who have won a raffle here before cannot enter.");
-  }
-  if (settings.required_role_id) {
-    lines.push(`Only members with the <@&${settings.required_role_id}> role can enter.`);
-  }
-  if (settings.excluded_role_id) {
-    lines.push(`Members with the <@&${settings.excluded_role_id}> role cannot enter.`);
+    if (settings.exclude_prior_winners === 1) {
+      lines.push("Members who have won a raffle here before cannot enter.");
+    }
+    if (settings.required_role_id) {
+      lines.push(`Only members with the <@&${settings.required_role_id}> role can enter.`);
+    }
+    if (settings.excluded_role_id) {
+      lines.push(`Members with the <@&${settings.excluded_role_id}> role cannot enter.`);
+    }
   }
 
   const winnerCount = settings.winner_count ?? 1;

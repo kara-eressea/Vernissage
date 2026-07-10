@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { DISCORD_EPOCH } from "../../src/core/accountAge.js";
 import {
   checkEligibility,
-  isNewMemberExempt,
   meetsActivityRequirement,
 } from "../../src/core/eligibility.js";
 import type { EligibilityInput } from "../../src/core/types.js";
@@ -19,22 +18,23 @@ function baseInput(overrides: Partial<EligibilityInput> = {}): EligibilityInput 
     status: "open",
     blacklisted: false,
     isCreator: false,
+    openToAll: false,
     userRoleIds: [],
     requiredRoleId: null,
     excludedRoleId: null,
     userSnowflake: oldAccount(),
     minAccountAgeDays: null,
+    minServerAgeDays: null,
     cooldown: { cooldownDays: null, cooldownCount: null },
     wins: [],
     rafflesSinceLastWin: 0,
     excludePriorWinners: false,
     hasPriorWin: false,
     reqMessages: 10,
+    reqActiveDays: 0,
     reqDays: 14,
     windowAnchor: "start",
     raffleStart: "2026-07-14T12:00:00.000Z",
-    newMemberExempt: false,
-    newMemberDays: null,
     joinedAt: null,
     dailyCounts: [{ day: "2026-07-10", count: 10 }],
     alreadyEntered: false,
@@ -238,48 +238,119 @@ describe("activity requirement - malformed/absent requirement degrades safely", 
   });
 });
 
-describe("new-member exemption", () => {
-  it("bypasses the activity check for a recent joiner", () => {
+describe("activity requirement - distinct active days (K)", () => {
+  it("rejects a single-day burst that clears the message total but not the day spread", () => {
+    // 30 messages, but all on one day: fails a 3-distinct-day requirement.
     const input = baseInput({
-      dailyCounts: [],
-      newMemberExempt: true,
-      newMemberDays: 7,
-      joinedAt: "2026-07-12T00:00:00.000Z",
+      reqMessages: 10,
+      reqActiveDays: 3,
+      dailyCounts: [{ day: "2026-07-10", count: 30 }],
     });
-    expect(isNewMemberExempt(input)).toBe(true);
+    expect(meetsActivityRequirement(input)).toBe(false);
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "insufficient_activity" });
+  });
+
+  it("accepts activity spread across at least K days", () => {
+    const input = baseInput({
+      reqMessages: 10,
+      reqActiveDays: 3,
+      dailyCounts: [
+        { day: "2026-07-08", count: 4 },
+        { day: "2026-07-09", count: 3 },
+        { day: "2026-07-10", count: 3 },
+      ],
+    });
+    expect(meetsActivityRequirement(input)).toBe(true);
     expect(checkEligibility(input)).toEqual({ ok: true });
   });
 
-  it("does not apply when the exemption is disabled", () => {
+  it("still enforces the message total alongside the day spread", () => {
+    // Active on 3 days, but only 3 messages total — fails the message floor.
     const input = baseInput({
-      dailyCounts: [],
-      newMemberExempt: false,
-      newMemberDays: 7,
-      joinedAt: "2026-07-12T00:00:00.000Z",
+      reqMessages: 10,
+      reqActiveDays: 3,
+      dailyCounts: [
+        { day: "2026-07-08", count: 1 },
+        { day: "2026-07-09", count: 1 },
+        { day: "2026-07-10", count: 1 },
+      ],
     });
-    expect(isNewMemberExempt(input)).toBe(false);
-    expect(checkEligibility(input)).toEqual({
-      ok: false,
-      reason: "insufficient_activity",
-    });
+    expect(meetsActivityRequirement(input)).toBe(false);
   });
 
-  it("does not apply to a member who joined outside the J-day window", () => {
+  it("a zero day-floor imposes no spread requirement", () => {
     const input = baseInput({
-      dailyCounts: [],
-      newMemberExempt: true,
-      newMemberDays: 7,
+      reqMessages: 10,
+      reqActiveDays: 0,
+      dailyCounts: [{ day: "2026-07-10", count: 10 }],
+    });
+    expect(meetsActivityRequirement(input)).toBe(true);
+  });
+});
+
+describe("checkEligibility - server tenure lockout", () => {
+  it("rejects a member who has not been in the server long enough", () => {
+    const input = baseInput({
+      minServerAgeDays: 7,
+      joinedAt: "2026-07-12T00:00:00.000Z", // ~2 days before now
+    });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "too_new_to_server" });
+  });
+
+  it("accepts a member past the tenure floor", () => {
+    const input = baseInput({
+      minServerAgeDays: 7,
       joinedAt: "2026-07-01T00:00:00.000Z",
     });
-    expect(isNewMemberExempt(input)).toBe(false);
+    expect(checkEligibility(input)).toEqual({ ok: true });
   });
 
-  it("does not apply when the join date is unknown", () => {
+  it("rejects when the tenure floor is set but the join date is unknown", () => {
+    const input = baseInput({ minServerAgeDays: 7, joinedAt: null });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "too_new_to_server" });
+  });
+
+  it("reports account age before server tenure when both would fire", () => {
+    const created = Date.parse("2026-07-13T00:00:00.000Z");
+    const youngSnowflake = ((BigInt(created) - BigInt(DISCORD_EPOCH)) << 22n).toString();
     const input = baseInput({
-      newMemberExempt: true,
-      newMemberDays: 7,
+      userSnowflake: youngSnowflake,
+      minAccountAgeDays: 30,
+      minServerAgeDays: 7,
       joinedAt: null,
     });
-    expect(isNewMemberExempt(input)).toBe(false);
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "account_too_new" });
+  });
+});
+
+describe("checkEligibility - open to everyone", () => {
+  it("waives every requirement below the creator check", () => {
+    const input = baseInput({
+      openToAll: true,
+      dailyCounts: [], // fails activity...
+      minServerAgeDays: 30,
+      joinedAt: null, // ...and tenure...
+      minAccountAgeDays: 3650, // ...and account age...
+      excludePriorWinners: true,
+      hasPriorWin: true, // ...and prior-winner...
+      cooldown: { cooldownDays: 30, cooldownCount: null },
+      wins: [{ raffleId: 1, wonAt: "2026-07-13T00:00:00.000Z" }], // ...and cooldown.
+    });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+
+  it("still rejects a blacklisted member", () => {
+    const input = baseInput({ openToAll: true, blacklisted: true });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "blacklisted" });
+  });
+
+  it("still rejects the raffle creator", () => {
+    const input = baseInput({ openToAll: true, isCreator: true });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "is_creator" });
+  });
+
+  it("still rejects a duplicate entry", () => {
+    const input = baseInput({ openToAll: true, alreadyEntered: true });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "already_entered" });
   });
 });

@@ -12,22 +12,23 @@ function input(overrides: Partial<EligibilityInput> = {}): EligibilityInput {
     status: "open",
     blacklisted: false,
     isCreator: false,
+    openToAll: false,
     userRoleIds: [],
     requiredRoleId: null,
     excludedRoleId: null,
     userSnowflake: "1",
     minAccountAgeDays: null,
+    minServerAgeDays: null,
     cooldown: { cooldownDays: 7, cooldownCount: null },
     wins: [{ raffleId: 1, wonAt: "2026-07-01T00:00:00.000Z" }],
     rafflesSinceLastWin: 0,
     excludePriorWinners: false,
     hasPriorWin: false,
     reqMessages: 20,
+    reqActiveDays: 0,
     reqDays: 14,
     windowAnchor: "start",
     raffleStart: "2026-07-10T12:00:00.000Z",
-    newMemberExempt: false,
-    newMemberDays: null,
     joinedAt: null,
     dailyCounts: [{ day: "2026-07-05", count: 8 }],
     alreadyEntered: false,
@@ -50,10 +51,12 @@ describe("entryFailureMessage", () => {
     expect(generic.toLowerCase()).not.toContain("blacklisted");
   });
 
-  it("quotes have/need for an activity shortfall", () => {
+  it("keeps the activity shortfall vague — no gameable numbers", () => {
     const msg = entryFailureMessage("insufficient_activity", input(), false);
-    expect(msg).toContain("20");
-    expect(msg).toContain("8");
+    expect(msg.toLowerCase()).toContain("active");
+    // The message and active-day thresholds must never leak to members.
+    expect(msg).not.toContain("20");
+    expect(msg).not.toContain("8");
   });
 
   it("describes the win cooldown", () => {
@@ -65,6 +68,7 @@ describe("entryFailureMessage", () => {
     for (const reason of [
       "not_open",
       "account_too_new",
+      "too_new_to_server",
       "already_entered",
     ] as const) {
       expect(entryFailureMessage(reason, input(), false).length).toBeGreaterThan(0);
@@ -73,22 +77,26 @@ describe("entryFailureMessage", () => {
 });
 
 describe("statusMessage", () => {
-  it("shows activity progress, cooldown, and entry state", () => {
+  it("shows a vague activity state, cooldown, and entry state — no numbers", () => {
     // 8 messages in-window against a 20 requirement, an active cooldown, entered.
     const msg = statusMessage("Big One", input({ alreadyEntered: true }));
     expect(msg).toContain("Big One");
-    expect(msg).toContain("8/20");
+    expect(msg.toLowerCase()).toContain("activity");
+    expect(msg).not.toContain("8/20");
+    expect(msg).not.toContain("20");
     expect(msg.toLowerCase()).toContain("cooldown");
     expect(msg).toContain("already entered");
   });
 
-  it("marks a blacklisted member and the new-member activity exemption", () => {
-    const msg = statusMessage(
-      null,
-      input({ blacklisted: true, newMemberExempt: true, newMemberDays: 7, joinedAt: "2026-07-04T00:00:00.000Z" }),
-    );
+  it("marks a blacklisted member", () => {
+    const msg = statusMessage(null, input({ blacklisted: true }));
     expect(msg.toLowerCase()).toContain("blacklisted");
-    expect(msg.toLowerCase()).toContain("exempt");
+  });
+
+  it("collapses to an open-to-everyone note", () => {
+    const msg = statusMessage("Party", input({ openToAll: true }));
+    expect(msg.toLowerCase()).toContain("open to everyone");
+    expect(msg).not.toContain("Activity");
   });
 });
 

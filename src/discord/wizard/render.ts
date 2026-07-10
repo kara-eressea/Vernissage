@@ -108,12 +108,11 @@ export function eligibilityModal(raffle: RaffleRow): ModalBuilder {
         value: raffle.req_days,
         placeholder: "14",
       }),
-      textInput("min_account_age_days", "Min account age in days (optional)", {
-        value: raffle.min_account_age_days,
-      }),
-      // Discord caps text-input labels at 45 characters; keep these short.
-      textInput("new_member_days", "New-member exemption in days (optional)", {
-        value: raffle.new_member_days,
+      // Distinct active days (K): the burst-resistant half of the gate. Discord
+      // caps text-input labels at 45 characters, so keep this short.
+      textInput("req_active_days", "On how many separate days (optional)", {
+        value: raffle.req_active_days,
+        placeholder: "3",
       }),
     );
 }
@@ -190,22 +189,22 @@ function anchorSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuild
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 }
 
-function exemptSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
+function openToAllSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(buildWizardId("eligibility", "exempt", raffle.raffle_id))
-    .setPlaceholder("New-member exemption")
+    .setCustomId(buildWizardId("eligibility", "opentoall", raffle.raffle_id))
+    .setPlaceholder("Who can enter")
     .addOptions(
       {
-        label: "New-member exemption: off",
-        description: "Everyone must meet the activity requirement.",
+        label: "Entry: normal eligibility rules",
+        description: "The activity, account-age, and server-tenure requirements all apply.",
         value: "off",
-        default: raffle.new_member_exempt !== 1,
+        default: raffle.open_to_all !== 1,
       },
       {
-        label: "New-member exemption: on",
-        description: "Members who joined within the exemption window skip the activity requirement.",
+        label: "Entry: open to everyone",
+        description: "Anyone not blacklisted may enter — every requirement is waived (even past winners).",
         value: "on",
-        default: raffle.new_member_exempt === 1,
+        default: raffle.open_to_all === 1,
       },
     );
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
@@ -382,7 +381,7 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
         content: "**Step 3 of 5 — Eligibility**\nWho can enter. Set the activity numbers, or use guild defaults.",
         components: rows(
           anchorSelect(raffle),
-          exemptSelect(raffle),
+          openToAllSelect(raffle),
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("eligibility", "nums", id, "Set activity numbers", ButtonStyle.Primary),
             button("eligibility", "defaults", id, "Use defaults"),
