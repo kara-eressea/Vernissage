@@ -25,7 +25,60 @@ with a single, richly-specified screen than "design six pages."
 
 ---
 
-## 1. Raffle Designer (the hero screen)
+## 1. App shell — login + home overview
+
+```
+Design the ENTRY SCREENS for a Discord raffle bot's MODERATOR DASHBOARD — the
+front door and the home a moderator lands on. This establishes the app shell
+(chrome, nav, server switcher) that every other screen lives inside, so get the
+frame right. Product: a moderator dashboard for a bot that runs auditable,
+activity-gated raffles; moderators log in with Discord; nothing here is public.
+Calm, precise, trust-forward, WYSIWYG — not flashy or gamified. Dark-mode-first
+with a clean light mode; accessible contrast. NAMING: no fixed product name — once
+a server is selected the header shows that server's bot nickname (placeholder
+"Tombola"); before a server is selected, show just "Moderator Dashboard" and no
+bot name.
+
+Design these states:
+
+1. LOGIN (unauthenticated, no server yet): a minimal, confident front door. Title
+   "Moderator Dashboard", a single "Sign in with Discord" button, one calm line of
+   reassurance ("Moderators only — you'll only see servers you help run"), and
+   nothing else. No bot name here. A restrained ticket/raffle motif is welcome,
+   kept grown-up.
+
+2. SERVER PICKER (signed in, choosing a guild): a clean list of the servers this
+   moderator manages — each row an avatar, server name, and a small stat or two
+   ("3 raffles run · ~48 eligible today"). Selecting one enters the dashboard for
+   that server. (If a moderator has only one server, this is skipped — but design
+   the list.)
+
+3. HOME OVERVIEW (the main deliverable — signed in, inside a server): the hub that
+   orients a moderator and routes them everywhere. Persistent chrome: the resolved
+   bot nickname + a SERVER SWITCHER (to change guild), and primary nav to
+   Simulator, Raffle Designer, Raffles/History, and Verify. The body is an
+   at-a-glance, read-only summary:
+     • WHAT'S LIVE NOW — a card list of active/scheduled raffles: name, opens →
+       closes, entries so far, draw mode (auto/manual); each links to its detail.
+       Include an empty state ("No raffles running — design one").
+     • THE POOL RIGHT NOW — one prominent stat, "~48 of 213 members eligible
+       today," under the server's current default requirements, with a tiny link
+       "tune this →" to the simulator.
+     • RECENT ACTIVITY — a small sparkline/mini-histogram of guild-wide message
+       activity over the last few weeks (server warming up or cooling off?).
+     • A slot for gentle CONFIG-HEALTH banners ("No announce channel set") when
+       something needs attention — design one example, dismissible-looking.
+   A primary "Design a raffle" call-to-action is welcome. This is a legibility-and-
+   wayfinding screen, not a data dump — calm hierarchy, generous whitespace.
+
+Design loading and empty states. Exact numbers are fine (mod-only). Brand:
+Discord-adjacent but its own identity; the header name is data (per-server
+nickname), not a logo.
+```
+
+---
+
+## 2. Raffle Designer (the hero screen)
 
 ```
 Design a screen for a Discord raffle bot's MODERATOR DASHBOARD. The bot runs
@@ -86,7 +139,7 @@ ticket/raffle motif is welcome, kept grown-up, not carnival.
 
 ---
 
-## 2. Standalone eligibility simulator
+## 3. Standalone eligibility simulator
 
 ```
 Design a screen for a Discord raffle bot's MODERATOR DASHBOARD (mod-only, Discord
@@ -131,7 +184,7 @@ histogram is the hero; give it room.
 
 ---
 
-## 3. Draw-verification page (gated, not public)
+## 4. Draw-verification page (gated, not public)
 
 ```
 Design an AUTHENTICATED page inside a Discord raffle bot's dashboard (Discord

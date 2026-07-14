@@ -74,6 +74,43 @@ add new behaviour to it.
   surface: "Vernissage" appears only in this doc, never in the UI. This mostly
   moots the Tombola-vs-Vernissage question: the name is data, not a constant.
 
+## The front door: login and a home overview
+
+Before any tool, the dashboard needs a place to *arrive*. Two screens carry the
+whole surface:
+
+- **The login (unauthenticated).** A minimal front door: the title "Moderator
+  Dashboard" (no bot name yet — no server is selected, so per the naming rule
+  none is shown), a one-line "sign in with Discord" action, and nothing else. It
+  requests only the `identify` scope. Everything past it is gated.
+- **The guild picker.** A moderator may manage more than one allowlisted guild.
+  After login, intersect the guilds they are in with the configured allowlist and
+  the `ensureModerator` check; if exactly one qualifies, drop them straight into
+  it, otherwise let them pick. The chosen guild lives in the session, and a
+  **persistent server switcher** in the chrome lets them change it — this is the
+  moment the displayed name resolves to that guild's bot nickname, so the whole
+  UI rebrands to what the community calls the bot.
+- **The home overview.** The screen a moderator lands on once they are in a
+  guild — the hub that orients them and routes to every tool, so no page is an
+  orphan. It is pure presentation over data already stored, read-only like the
+  rest:
+  - **What's live now** — active and scheduled raffles at a glance (name, opens/
+    closes, entries so far, draw mode), each linking to its detail/verification.
+  - **The pool right now** — the eligible-member count under the guild's current
+    defaults ("~48 of 213 eligible today"), computed from the same snapshot the
+    simulator uses; a single number that tells a moderator whether it's a good
+    week to run something.
+  - **A recent-activity spark** — guild-wide message activity over the last few
+    weeks from the daily buckets, so the health of the server is visible without
+    opening the trends view.
+  - **Navigation into the tools** — clear routes to the simulator, the Raffle
+    Designer, raffle history, and the verifier, plus any config-health warnings
+    (see "beyond the simulator") surfaced as gentle banners.
+
+None of this adds behaviour: it reuses the snapshot, the daily counts, and the
+raffle rows the bot already keeps. Its job is legibility and wayfinding — the
+frame the rest of the dashboard hangs inside.
+
 ## The centrepiece: an eligibility simulator
 
 The feature that motivated this note: let a moderator **play with the knobs and
@@ -322,9 +359,12 @@ conscious decision, not a side effect of wanting nicer charts.
 
 ## Suggested sequencing
 
-1. **Read-only auth shell + OAuth `identify` + guild/mod gating.** The frame
-   everything hangs on: Discord login, a guild-membership check, and the
-   `ensureModerator` check for mod-only pages.
+1. **Read-only auth shell + OAuth `identify` + guild/mod gating, landing on a
+   home overview.** The frame everything hangs on: the Discord-login front door,
+   a guild-membership check, the `ensureModerator` check for mod-only pages, the
+   per-guild server switcher, and the home overview moderators land on (live
+   raffles, the current eligible-pool count, a recent-activity spark, and routes
+   into the tools).
 2. **Draw-verification page.** High trust payoff, reuses the draw formatting and
    the pure verification math; behind the shell (gated to the raffle's server).
 3. **Eligibility simulator (Tier 1) + generate-the-command.** The feature that
