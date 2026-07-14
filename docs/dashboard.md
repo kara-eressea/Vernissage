@@ -60,6 +60,17 @@ add new behaviour to it.
   avoids a frontend build and a client-side API surface. A little client-side JS
   is worth it only where interactivity earns it (the simulator's live re-query,
   the public verifier's in-browser hash check).
+- **The displayed name follows the bot, per guild.** Rather than hardcode a
+  product name, resolve the bot's nickname on the currently-selected guild
+  (`guild.members.me.nickname`), falling back to the bot's global display name and
+  then a static default. Because the dashboard is per-guild, its chrome then calls
+  the bot exactly what that community calls it, and the member-facing surfaces
+  (the entry-card preview, the public verification page) show the same name
+  members see — no "Tombola here, Vernissage there" special-casing. The guild-less
+  moments (the login/landing screen, before a server is picked) name no bot at all
+  — just "Moderator Dashboard" — which also keeps the internal codename off every
+  surface: "Vernissage" appears only in this doc, never in the UI. This mostly
+  moots the Tombola-vs-Vernissage question: the name is data, not a constant.
 
 ## The centrepiece: an eligibility simulator
 
