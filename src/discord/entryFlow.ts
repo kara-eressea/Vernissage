@@ -20,7 +20,7 @@ import {
 import { checkEligibility } from "../core/eligibility.js";
 import { resolveEntrySettings } from "../core/settings.js";
 import { activityWindow } from "../core/time.js";
-import type { EligibilityInput, EligibilityResult, WindowAnchor } from "../core/types.js";
+import type { EligibilityInput, EligibilityResult } from "../core/types.js";
 import { writeAudit } from "../db/repositories/audit.js";
 import { getCountsInWindow } from "../db/repositories/activity.js";
 import { isBlacklisted } from "../db/repositories/blacklist.js";
@@ -70,13 +70,12 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
   const reqMessages = raffle.req_messages ?? 0;
   const reqActiveDays = raffle.req_active_days ?? 0;
   const reqDays = raffle.req_days && raffle.req_days >= 1 ? raffle.req_days : 1;
-  const windowAnchor = (raffle.window_anchor as WindowAnchor) ?? "start";
   const raffleStart = raffle.starts_at ?? now;
 
-  // Counts are already scoped to counted channels at write time, so the window
-  // read needs no per-channel filtering.
-  const anchor = windowAnchor === "start" ? raffleStart : now;
-  const window = activityWindow(anchor, reqDays);
+  // Activity is always anchored to the raffle's start (post-announcement activity
+  // can't create eligibility). Counts are already scoped to counted channels at
+  // write time, so the window read needs no per-channel filtering.
+  const window = activityWindow(raffleStart, reqDays);
   const dailyCounts = getCountsInWindow(db, raffle.guild_id, userId, window.startDay, window.endDay);
 
   return {
@@ -98,7 +97,6 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
     reqMessages,
     reqActiveDays,
     reqDays,
-    windowAnchor,
     raffleStart,
     joinedAt: ctx.joinedAt,
     dailyCounts,
@@ -185,7 +183,6 @@ export function buildEntryMessageInput(db: Database, raffle: RaffleRow): EntryMe
     reqMessages: raffle.req_messages,
     reqActiveDays: raffle.req_active_days,
     reqDays: raffle.req_days,
-    windowAnchor: raffle.window_anchor,
     minAccountAgeDays: settings.minAccountAgeDays,
     minServerAgeDays: settings.minServerAgeDays,
     startsAt: raffle.starts_at,

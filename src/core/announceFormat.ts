@@ -25,8 +25,6 @@ export interface EntryMessageInput {
   /** K: distinct active days required (kept vague on the public card). */
   reqActiveDays: number | null;
   reqDays: number | null;
-  /** "start" (window ends at raffle start) or "rolling" (ends at entry time). */
-  windowAnchor: string;
   minAccountAgeDays: number | null;
   /** Minimum days in the server before entering (a non-gameable tenure floor). */
   minServerAgeDays: number | null;
@@ -81,9 +79,7 @@ function requirementsLines(raffle: EntryMessageInput): string[] {
   const requirements: string[] = [];
   if ((raffle.reqMessages || raffle.reqActiveDays) && raffle.reqDays) {
     requirements.push(
-      raffle.windowAnchor === "rolling"
-        ? `have been active in the last ${plural(raffle.reqDays, "day")}`
-        : `have been active in the ${plural(raffle.reqDays, "day")} before the raffle starts`,
+      `have been active in the ${plural(raffle.reqDays, "day")} before the raffle starts`,
     );
   }
   if (raffle.minAccountAgeDays) {

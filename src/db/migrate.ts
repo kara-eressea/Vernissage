@@ -72,6 +72,10 @@ export function migrate(db: Database): void {
          ALTER TABLE raffles ADD COLUMN open_to_all INTEGER NOT NULL DEFAULT 0`,
       );
     }
+    // v16 is a semantics-only change with no structural migration: the per-raffle
+    // "rolling" activity window was removed, so every raffle now anchors its
+    // window (and win cooldown) to its start. raffles.window_anchor is left in
+    // place, deprecated and always 'start' (see schema.ts); nothing to ALTER.
   }
 
   if (current !== SCHEMA_VERSION) {

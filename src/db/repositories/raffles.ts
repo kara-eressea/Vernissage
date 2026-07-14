@@ -22,7 +22,6 @@ export interface RaffleRow {
   req_messages: number | null;
   req_days: number | null;
   req_active_days: number | null;
-  window_anchor: string;
   open_to_all: number;
   exclude_prior_winners: number;
   required_role_id: string | null;
@@ -96,7 +95,6 @@ export type RaffleFieldPatch = Partial<
     | "req_messages"
     | "req_days"
     | "req_active_days"
-    | "window_anchor"
     | "open_to_all"
     | "exclude_prior_winners"
     | "required_role_id"
@@ -122,7 +120,6 @@ const PATCHABLE_COLUMNS = new Set<keyof RaffleFieldPatch>([
   "req_messages",
   "req_days",
   "req_active_days",
-  "window_anchor",
   "open_to_all",
   "exclude_prior_winners",
   "required_role_id",

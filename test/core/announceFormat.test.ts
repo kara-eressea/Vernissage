@@ -14,7 +14,6 @@ const base: EntryMessageInput = {
   reqMessages: 20,
   reqActiveDays: null,
   reqDays: 14,
-  windowAnchor: "start",
   minAccountAgeDays: null,
   minServerAgeDays: null,
   startsAt: "2026-07-10T12:00:00.000Z",
@@ -47,18 +46,12 @@ describe("formatEntryMessage — open card", () => {
   });
 
   it("renders the requirements as subtext without the exact message count", () => {
-    const content = formatEntryMessage({ ...base, windowAnchor: "start" });
+    const content = formatEntryMessage(base);
     expect(content).toContain("-# To enter, you must have been active");
     expect(content).toContain("in the 14 days before the raffle starts");
     // The exact count stays private so it cannot be gamed.
     expect(content).not.toContain("20");
     expect(content).not.toMatch(/message/i);
-  });
-
-  it("phrases the activity window for the 'rolling' anchor", () => {
-    const content = formatEntryMessage({ ...base, windowAnchor: "rolling" });
-    expect(content).toContain("active in the last 14 days");
-    expect(content).not.toContain("before the raffle starts");
   });
 
   it("includes the account-age requirement only when set", () => {

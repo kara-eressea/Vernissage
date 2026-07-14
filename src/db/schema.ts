@@ -19,7 +19,7 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS raffles (
   -- message total. Burst-resistant half of the activity gate (design.md
   -- "Entry flow"). Null/0 = no distinct-day floor.
   req_active_days INTEGER,
+  -- DEPRECATED (schema v16): the per-raffle "rolling" activity window was
+  -- removed — every raffle now anchors its window (and win cooldown) to its
+  -- start. The column is retained, never read or written, and always 'start';
+  -- safe to drop later.
   window_anchor   TEXT NOT NULL DEFAULT 'start',
   -- DEPRECATED (schema v15): the per-raffle account-age override and the
   -- days-based new-member exemption were replaced by a server-wide account-age

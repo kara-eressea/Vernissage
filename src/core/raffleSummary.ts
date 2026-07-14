@@ -4,8 +4,8 @@
  * Produces the human-readable lines shown on the wizard's summary card and,
  * later, in announcements — e.g. "To enter, members must have sent at least 20
  * messages in the 14 days before the raffle starts" (design.md "Raffle creation
- * wizard" step 5). Wording switches on the window anchor. Returns strings only;
- * the Discord layer assembles the embed. No discord.js/database import.
+ * wizard" step 5). Returns strings only; the Discord layer assembles the embed.
+ * No discord.js/database import.
  */
 
 import { plural } from "./format.js";
@@ -38,13 +38,10 @@ export function describeRaffle(settings: ResolvedRaffleSettings): string[] {
   if (settings.open_to_all === 1) {
     lines.push("**Open to everyone** — anyone not blacklisted may enter (even past winners).");
   } else {
-    // Eligibility sentence, switching on the window anchor. States the exact
-    // numbers: this is the mod-facing summary, not a member-facing surface.
+    // Eligibility sentence. States the exact numbers: this is the mod-facing
+    // summary, not a member-facing surface.
     if (settings.req_messages && settings.req_days) {
-      const window =
-        settings.window_anchor === "rolling"
-          ? `in the ${plural(settings.req_days, "day")} before they enter`
-          : `in the ${plural(settings.req_days, "day")} before the raffle starts`;
+      const window = `in the ${plural(settings.req_days, "day")} before the raffle starts`;
       const spread =
         settings.req_active_days && settings.req_active_days > 1
           ? ` on at least ${plural(settings.req_active_days, "different day")}`

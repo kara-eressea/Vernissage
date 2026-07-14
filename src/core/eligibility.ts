@@ -28,13 +28,13 @@ import type { DayWindow, EligibilityInput, EligibilityResult } from "./types.js"
 
 /**
  * The activity window both the entry gate and `/raffle status` evaluate: the
- * `reqDays` days ending at the anchor (raffle start or now). A non-positive
- * `reqDays` is clamped to a single day so a malformed raffle row never throws;
- * `meetsActivityRequirement` short-circuits before reaching here in that case.
+ * `reqDays` days ending at the eligibility instant (`raffleStart`). A
+ * non-positive `reqDays` is clamped to a single day so a malformed raffle row
+ * never throws; `meetsActivityRequirement` short-circuits before reaching here
+ * in that case.
  */
 function resolveActivityWindow(input: EligibilityInput): DayWindow {
-  const anchor = input.windowAnchor === "start" ? input.raffleStart : input.now;
-  return activityWindow(anchor, input.reqDays >= 1 ? input.reqDays : 1);
+  return activityWindow(input.raffleStart, input.reqDays >= 1 ? input.reqDays : 1);
 }
 
 /**
@@ -103,7 +103,9 @@ export function checkEligibility(input: EligibilityInput): EligibilityResult {
       cooldownCount: input.cooldown.cooldownCount,
       wins: input.wins,
       rafflesSinceLastWin: input.rafflesSinceLastWin,
-      now: input.now,
+      // Judged as of the raffle start, like the activity window: a cooldown that
+      // lapses mid-raffle still bars a raffle that opened during it.
+      now: input.raffleStart,
     });
     if (inCooldown) {
       return { ok: false, reason: "in_cooldown" };

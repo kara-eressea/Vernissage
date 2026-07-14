@@ -14,9 +14,6 @@ export type RaffleStatus =
   | "completed"
   | "cancelled";
 
-/** Where the activity window ends. See design.md "Key constraint". */
-export type WindowAnchor = "start" | "rolling";
-
 /** How a counted-channel rule applies. */
 export type ChannelMode = "include" | "exclude";
 
@@ -126,8 +123,14 @@ export interface EligibilityInput {
   /** K: distinct active days required within the window; 0/negative = no floor. */
   reqActiveDays: number;
   reqDays: number;
-  windowAnchor: WindowAnchor;
-  /** Raffle start time, UTC ISO — the anchor for "start" mode. */
+  /**
+   * The instant every point-in-time gate is judged as of: the activity window
+   * ends here and the win cooldown is measured against it. For a real entry this
+   * is the raffle's start (activity is always anchored to start — post-
+   * announcement activity can't create eligibility, and a cooldown that lapses
+   * mid-raffle still bars a raffle that opened during it). The `/raffle eligible`
+   * snapshot, which has no raffle, passes `now` so its window ends now.
+   */
   raffleStart: string;
 
   /** When the user joined the guild, UTC ISO; null if unknown (tenure check). */
