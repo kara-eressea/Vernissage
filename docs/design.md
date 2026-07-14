@@ -297,10 +297,13 @@ secret (`raffles.draw_secret`) alongside its commitment
 (`raffles.draw_commitment = SHA-256(secret)`); the hash and commitment are
 published to the audit channel. Persisting the secret and commitment on the
 raffle row means a restart between close and draw loses nothing. At draw the
-seed is `SHA-256(entrant_list_hash + secret)` and the secret is revealed with
+seed is `SHA-256(entrant_list_hash + ":" + secret)` and the secret is revealed with
 the results. The randomness source sits behind `deriveSeed(entrants_hash,
 randomness)`, so a drand round signature can replace the revealed secret later
-without changing the selection code.
+without changing the selection code. The seed preimage is the two values joined
+by a literal colon — `SHA-256("<hash>:<secret>")` — so a verifier must recompute
+over exactly that string (the colon is part of the committed formula, not
+prose).
 
 **Reroll semantics.** A reroll re-runs the *same* selection from the *same*
 base seed with the disqualified winner(s) added to an exclusion set: the seed
@@ -492,7 +495,43 @@ wizard_state (
 )
 -- Resumption pointer only: the collected values live in the draft raffles row,
 -- so a restart mid-wizard resumes at the right step with nothing lost.
+
+members (
+  guild_id     TEXT,
+  user_id      TEXT,
+  username     TEXT,                 -- Discord handle, e.g. "alice"
+  display_name TEXT,                 -- server nickname, else global display name
+  updated_at   TEXT,
+  PRIMARY KEY (guild_id, user_id)
+)
+-- See "Member name cache" below.
 ```
+
+### Member name cache
+The dashboard runs as a separate, read-only process with no gateway and no bot
+token (see docs/dashboard.md), so it cannot turn a user id into a name on its
+own. The `members` table is a small cache the **bot** writes so the dashboard can
+label ids with real names — otherwise a verification page or the eligibility
+simulator would show a layperson nothing but 18-digit snowflakes.
+
+- **Only the bot writes it.** The dashboard reads it read-only, like every other
+  table. Names are captured off objects the bot already has: the author of a
+  counted message (so anyone recently active is named), and the member on a
+  raffle entry (so every entrant is named even if they never posted a counted
+  message). Message-path writes are batched into the same 15-second flush as the
+  counts and deduped, so naming adds no per-message write.
+- **Backfill.** Entrants/winners that predate the cache (or never posted) are
+  filled once at startup by a per-id REST lookup — which needs only the bot
+  token, not the privileged `GuildMembers` intent — bounded per run so a large
+  backlog is caught over a few restarts. A member who has since left resolves to
+  their global handle (no server nickname).
+- **This is identity metadata, not message content.** The "never store message
+  content, only counts" rule is unchanged — a handle and a display name are not
+  message content. Names are refreshed as a member is seen again, and are scoped
+  per guild like everything else.
+- **The id stays authoritative.** The provably-fair hash is computed over user
+  *ids*, so the verifier always shows the id alongside the name — the name is a
+  convenience label, never the value a skeptic recomputes.
 
 ## Technical stack
 - Language: TypeScript with discord.js (or Python with discord.py; pick one

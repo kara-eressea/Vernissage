@@ -21,11 +21,13 @@ import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
 import { getGuild } from "../db/repositories/guilds.js";
+import { getMemberNames } from "../db/repositories/members.js";
 import {
   simulateEligiblePool,
   type SimulationSettings,
 } from "../eligibility/service.js";
 import { buildSimulatorView, resolveSimSettings, type SimFilter } from "./simulator.js";
+import { buildVerification, listVerifiableRaffles } from "./verify.js";
 import {
   decodeSession,
   encodeSession,
@@ -37,7 +39,17 @@ import {
   type Session,
   type SessionGuild,
 } from "./session.js";
-import { errorPage, homePage, loginPage, noAccessPage, pickerPage, simulatorPage } from "./views.js";
+import {
+  errorPage,
+  homePage,
+  loginPage,
+  noAccessPage,
+  pickerPage,
+  simulatorPage,
+  verifyIndexPage,
+  verifyPage,
+  verifyUnavailablePage,
+} from "./views.js";
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes to complete the OAuth round-trip
 
@@ -103,11 +115,15 @@ export function createServer(deps: ServerDeps): Server {
   // so live tuning is unhindered but a scripted flood can't hammer the read path
   // (docs/dashboard.md "Security and operations").
   const simLimiter = new RateLimiter(120, 60 * 1000);
+  // The verifier recomputes a draw per view (a bounded hash chain); the same
+  // generous read ceiling keeps it usable while capping a scripted flood.
+  const verifyLimiter = new RateLimiter(120, 60 * 1000);
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
     loginLimiter.sweep(t);
     simLimiter.sweep(t);
+    verifyLimiter.sweep(t);
   }, 5 * 60 * 1000);
   sweepTimer.unref();
 
@@ -191,6 +207,15 @@ export function createServer(deps: ServerDeps): Server {
         return;
       }
       handleSimulator(res, session, url);
+      return;
+    }
+
+    if (path === "/app/verify") {
+      if (!verifyLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleVerify(res, session, url);
       return;
     }
 
@@ -304,9 +329,58 @@ export function createServer(deps: ServerDeps): Server {
       filterParam === "eligible" || filterParam === "blocked" ? filterParam : "all";
 
     const result = simulateEligiblePool(db, guild.id, settings, now);
-    const view = buildSimulatorView(result, filter);
+    // Resolve cached names for just the members the table will show, so a
+    // layperson sees people, not ids (the ids stay available on the verifier).
+    const nameRows = getMemberNames(db, guild.id, result.members.map((m) => m.userId));
+    const names = new Map<string, string>();
+    for (const [id, n] of nameRows) {
+      if (n.displayName) names.set(id, n.displayName);
+    }
+    const view = buildSimulatorView(result, filter, names);
     const cards = buildPickerCards(db, session.guilds, now);
     sendHtml(res, 200, simulatorPage(session, guild, view, cards));
+  }
+
+  function handleVerify(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      redirect(res, "/app");
+      return;
+    }
+    const cards = buildPickerCards(db, session.guilds, new Date().toISOString());
+    const raffleParam = url.searchParams.get("raffle");
+    const raffleId = raffleParam ? Number.parseInt(raffleParam, 10) : NaN;
+
+    // No (or unparseable) raffle id: list the finished raffles to pick from.
+    if (!Number.isInteger(raffleId) || raffleId <= 0) {
+      const raffles = listVerifiableRaffles(db, guild.id);
+      sendHtml(res, 200, verifyIndexPage(session, guild, raffles, cards));
+      return;
+    }
+
+    const result = buildVerification(db, guild.id, raffleId);
+    if (!result.ok) {
+      if (result.reason === "not_found") {
+        // Unknown to this guild (or another server's raffle): back to the list.
+        redirect(res, "/app/verify");
+        return;
+      }
+      const message =
+        result.reason === "not_drawn"
+          ? "This raffle hasn't been drawn yet — there's nothing to verify until its winner is drawn."
+          : "This raffle is missing its draw data, so it can't be verified.";
+      sendHtml(res, 200, verifyUnavailablePage(session, guild, cards, result.raffleName, message));
+      return;
+    }
+    sendHtml(res, 200, verifyPage(session, guild, result, cards));
   }
 
   function handleSelect(res: ServerResponse, session: Session | null, url: URL): void {

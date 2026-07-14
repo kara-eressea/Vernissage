@@ -2,12 +2,12 @@
 
 **Status: partially built.** Sequencing step 1 (the read-only auth shell —
 Discord login, guild/mod gating, the guild picker/switcher, and the home
-overview) and the Tier-1 eligibility simulator (step 3) are implemented under
-`src/web/`; the rest (the draw-verification page, history/trends, the Designer)
-remains a forward-looking note, not shipped behaviour. The simulator was built
-before the verifier at the maintainer's request. This document captures the
-whole shape so the rest is ready to pick up. It deliberately stays inside the
-project's existing values (auditable, fair, privacy-preserving) — see
+overview), the Tier-1 eligibility simulator (step 3), and the draw-verification
+page (step 2) are implemented under `src/web/`; the rest (history/trends, the
+Designer) remains a forward-looking note, not shipped behaviour. The simulator
+was built before the verifier at the maintainer's request. This document
+captures the whole shape so the rest is ready to pick up. It deliberately stays
+inside the project's existing values (auditable, fair, privacy-preserving) — see
 [design.md](design.md) for those.
 
 **What shipped in step 1, and where it refines this note.** The auth shell is a
@@ -160,12 +160,14 @@ design mock:
   labels. This keeps the eligibility logic *only* on the server (principle 2) —
   no second implementation in the browser to drift. It works with JS disabled via
   a "Run simulation" button.
-- **The member table is keyed by user id.** The isolated web process has no
-  gateway or bot token, so it has no usernames/avatars — only the ids in the
-  `activity` table. Rows show the id, the in-window message and active-day counts,
-  the pass/fail status, and the first failing reason. Names arrive with the
-  Tier-2 member fetch. Account age *is* shown, since it derives from the id
-  snowflake with no fetch.
+- **The member table is keyed by user id, now labelled with a name.** The
+  isolated web process still has no gateway or bot token, so it can't resolve
+  names itself — but it reads the `members` name cache the bot writes (design.md
+  "Member name cache"), so each row shows a **display name over the id** (falling
+  back to the bare id for anyone the bot hasn't cached yet). Rows show the member,
+  the in-window message and active-day counts, the pass/fail status, and the
+  first failing reason. Account age would derive from the id snowflake with no
+  fetch (not currently surfaced here).
 - **The generated command uses the real option names.** It is built from the
   actual `/raffle config set` options (`req-messages`, `req-days`,
   `req-active-days`, `min-account-age-days`, `cooldown-days`) so it pastes back
@@ -373,7 +375,7 @@ flagged by whether they lean on data we already store:
 - **A draw-verification page (medium; the strongest trust win).** A read-only view
   of a finished raffle: the entrant-list hash, the revealed secret, the derived
   seed, the winners, and the check itself — `SHA-256(secret) == commitment`,
-  `seed = SHA-256(hash + secret)` — recomputed **in the viewer's browser** so a
+  `seed = SHA-256(hash + ":" + secret)` — recomputed **in the viewer's browser** so a
   green "verified" badge needs no trust in the operator. It is **gated, not
   public**: a private, single-server bot should not expose what raffles run on a
   server to the world, so this sits behind Discord login and is limited to that
@@ -383,6 +385,35 @@ flagged by whether they lean on data we already store:
   page is the friendly UI over that same data, for the server's own people. What
   it gives up is *outside* third-party verification — a reasonable privacy trade
   for a private bot.
+
+  **What shipped (step 2), and where it refines this note.** The verifier lives in
+  `src/web/verify.ts` (the recompute) and `src/web/views.ts` (`verifyIndexPage` /
+  `verifyPage` / `verifyUnavailablePage`), on the route `/app/verify` (index) and
+  `/app/verify?raffle=<id>` (one draw), gated to the selected guild like every
+  other `/app` page. `buildVerification` reconstructs the *frozen committed list*
+  (active entrants + `draw_disqualified`, sorted) and re-derives the hash,
+  commitment, seed, and winners with the **same pure core the draw used**
+  (`hashEntrants`, `commitSecret`, `deriveSeed`, `selectWinners`), so the page
+  can't drift from the real scheme. It then verifies the standing winners by
+  reselecting with the failsafe-removed **and** any rerolled ids excluded — the
+  same reconstruction `rerollWinner`/`reannounceDraw` use — so multi-winner,
+  failsafe, and rerolled draws all verify, not just the single-winner happy path.
+  The page also ships the public inputs as an inline JSON island and **recomputes
+  the whole chain again in the browser with WebCrypto** (`crypto.subtle`), turning
+  the on-device line green on agreement; with JS off (or on an insecure origin)
+  the server-rendered verdict stands. Honest adaptations: the seed formula is
+  shown with its **literal colon separator** — `SHA-256(hash + ":" + secret)`,
+  the exact `deriveSeed` preimage, since the older `hash + secret` shorthand isn't
+  reproducible (the audit result post and design.md were corrected to match). The
+  design mock's animated spinner-reveal and floating demo-state switcher are
+  dropped — the verdict is data, rendered once.
+
+  **Names on top of ids.** Entrants and winners now show a **display name over
+  the id**, resolved from the `members` name cache the bot writes (design.md
+  "Member name cache") — so a layperson reads people, not snowflakes. The id
+  stays visible because it is the value the hash is computed over; a member the
+  bot has never cached falls back to the bare id. The eligibility simulator's
+  member table reads the same cache.
 - **Per-draft raffle dry-run (medium; needs Tier-2 member fetch).** The simulator
   aimed at a *specific* draft's real settings — role gates, tenure, prior-winner
   bar included — so a moderator can preview the actual pool a configured raffle
@@ -413,15 +444,18 @@ conscious decision, not a side effect of wanting nicer charts.
 ## Suggested sequencing
 
 1. **Read-only auth shell + OAuth `identify` + guild/mod gating, landing on a
-   home overview.** The frame everything hangs on: the Discord-login front door,
-   a guild-membership check, the `ensureModerator` check for mod-only pages, the
-   per-guild server switcher, and the home overview moderators land on (live
-   raffles, the current eligible-pool count, a recent-activity spark, and routes
-   into the tools).
-2. **Draw-verification page.** High trust payoff, reuses the draw formatting and
-   the pure verification math; behind the shell (gated to the raffle's server).
-3. **Eligibility simulator (Tier 1) + generate-the-command.** The feature that
-   motivated this, and the cheapest high-leverage thing once the shell exists.
+   home overview.** ✅ *Built.* The frame everything hangs on: the Discord-login
+   front door, a guild-membership check, the `ensureModerator` check for mod-only
+   pages, the per-guild server switcher, and the home overview moderators land on
+   (live raffles, the current eligible-pool count, a recent-activity spark, and
+   routes into the tools).
+2. **Draw-verification page.** ✅ *Built* (`/app/verify`). High trust payoff,
+   reuses the pure verification math; behind the shell (gated to the raffle's
+   server), recomputed again in the browser. See the "What shipped (step 2)" note
+   above.
+3. **Eligibility simulator (Tier 1) + generate-the-command.** ✅ *Built*
+   (`/app/simulator`). The feature that motivated this, and the cheapest
+   high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
    data we already keep.
 5. **Raffle Designer.** The one feature that reaches past read-only, so it comes

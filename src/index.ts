@@ -28,6 +28,7 @@ import {
   type CustomIdInteraction,
 } from "./discord/interactions.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
+import { backfillMemberNames } from "./discord/memberNames.js";
 import { createNotifier } from "./discord/notifier.js";
 import { registerCommandsInGuild } from "./discord/register.js";
 import { routeInteraction } from "./discord/router.js";
@@ -102,6 +103,15 @@ async function main(): Promise<void> {
         console.error(`Failed to register commands in guild ${guild.id} at startup:`, err),
       );
     }
+
+    // Backfill cached names for past entrants/winners that predate the name
+    // cache (or never posted a counted message), so the dashboard can label
+    // them. Detached and bounded per run; safe to fail (leaves ids as ids).
+    void backfillMemberNames(client, db, config.guildIds, new Date().toISOString())
+      .then((n) => {
+        if (n > 0) console.log(`Backfilled ${n} member name(s) for the dashboard.`);
+      })
+      .catch((err) => console.error("Failed to backfill member names:", err));
   });
 
   // The allowlist can be provisioned ahead of the bot actually joining a guild

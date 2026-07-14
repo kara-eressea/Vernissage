@@ -76,6 +76,20 @@ export function migrate(db: Database): void {
     // "rolling" activity window was removed, so every raffle now anchors its
     // window (and win cooldown) to its start. raffles.window_anchor is left in
     // place, deprecated and always 'start' (see schema.ts); nothing to ALTER.
+    if (current < 17) {
+      // Member name cache: lets the dashboard label ids with real names. Empty
+      // on upgrade; the bot fills it as members are seen and backfills entrants.
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS members (
+           guild_id     TEXT NOT NULL,
+           user_id      TEXT NOT NULL,
+           username     TEXT,
+           display_name TEXT,
+           updated_at   TEXT NOT NULL,
+           PRIMARY KEY (guild_id, user_id)
+         )`,
+      );
+    }
   }
 
   if (current !== SCHEMA_VERSION) {
