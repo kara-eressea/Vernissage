@@ -17,7 +17,7 @@ import {
 import { userMention } from "../../../core/format.js";
 import { getGuildRaffle } from "../../../db/repositories/raffles.js";
 import { listWinsForRaffle } from "../../../db/repositories/wins.js";
-import { executeDraw, rerollWinner } from "../../../draw/service.js";
+import { executeDraw, reannounceDraw, rerollWinner } from "../../../draw/service.js";
 import { makePresenceResolver } from "../../memberPresence.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
@@ -29,6 +29,14 @@ export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBu
       s
         .setName("draw")
         .setDescription("Draw a closed raffle now (if not drawn automatically).")
+        .addIntegerOption((o) =>
+          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+        ),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("announce")
+        .setDescription("Re-post a drawn raffle's result if a post failed. No re-draw.")
         .addIntegerOption((o) =>
           o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
         ),
@@ -94,6 +102,46 @@ export async function handleDraw(
       outcome.winners.length === 0
         ? "Drawn — there were no eligible entrants."
         : `Drawn. Winner(s): ${outcome.winners.map(userMention).join(", ")}.`,
+  });
+}
+
+/** Handle `/raffle announce`: re-post a drawn raffle's result from stored data. */
+export async function handleAnnounce(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
+  const guildId = await ensureModerator(interaction, ctx.db);
+  if (!guildId) {
+    return;
+  }
+  const raffleId = interaction.options.getInteger("raffle", true);
+  const raffle = getGuildRaffle(ctx.db, guildId, raffleId);
+  if (!raffle) {
+    await interaction.reply({
+      content: "No raffle with that id in this server.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const outcome = await reannounceDraw(ctx.db, ctx.notifier, raffleId, new Date().toISOString());
+
+  if (!outcome.ok) {
+    const message =
+      outcome.reason === "not_drawn"
+        ? "Only a drawn raffle can be re-announced. Use `/raffle draw` for one that hasn't been drawn yet."
+        : outcome.reason === "missing_commitment"
+          ? "That raffle has no stored draw data to re-announce."
+          : "No raffle with that id in this server.";
+    await interaction.editReply({ content: message });
+    return;
+  }
+  await interaction.editReply({
+    content:
+      outcome.winners.length === 0
+        ? "Re-announced — this raffle drew no eligible winner."
+        : `Re-announced. Winner(s): ${outcome.winners.map(userMention).join(", ")}.`,
   });
 }
 

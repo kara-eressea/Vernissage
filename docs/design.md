@@ -542,6 +542,16 @@ wizard_state (
   the scheduler's next tick.
 - Winner selection when entrant count is 0: raffle marked drawn with no
   winner, logged.
+- Draw succeeds but a post fails: the draw's database writes (wins, the `drawn`
+  status, the audit_log row, and the revealed secret) all commit in one
+  transaction *before* any Discord post, and posts are best-effort and never
+  throw. So a failed announcement leaves the result recorded and verifiable but
+  unpublished. A crash *before* the commit leaves the raffle `closed`, and the
+  startup reconcile re-commits and (for auto raffles) re-draws it. A post that
+  fails *after* the commit is recovered with `/raffle announce <raffle>`, which
+  re-publishes the winner announcement and audit result from the stored winners,
+  seed, and secret without re-selecting — it draws no new winner and changes no
+  state, so it is safe to run repeatedly.
 - Multiple concurrent raffles per guild: supported; entry button binds to a
   specific raffle id.
 - Rate limits: batch activity writes (in-memory counter flushed every N

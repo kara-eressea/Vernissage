@@ -22,6 +22,7 @@ import {
   commitOnClose,
   executeDraw,
   expireUnclaimedWins,
+  reannounceDraw,
   reconcilePendingDraws,
   recordClaim,
   rerollWinner,
@@ -518,5 +519,86 @@ describe("reconcilePendingDraws", () => {
     expect(getRaffle(db, manual)!.draw_commitment).not.toBeNull();
     expect(auditTypes(auto)).toEqual(["draw_committed", "raffle_drawn"]);
     expect(auditTypes(manual)).toEqual(["draw_committed"]);
+  });
+});
+
+describe("reannounceDraw", () => {
+  it("re-posts result + winner announcement from stored data, drawing nothing new", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c", "d", "e"]);
+    updateRaffleFields(db, raffleId, { message_id: "m1" });
+    const announcer = fakeAnnouncer();
+    const first = await executeDraw(db, announcer, raffleId, NOW, gen);
+    expect(first.ok).toBe(true);
+    const winners = (first as { ok: true; winners: string[] }).winners;
+
+    const auditRowsBefore = auditTypes(raffleId);
+    const winsBefore = listWinsForRaffle(db, raffleId).map((w) => w.user_id);
+
+    // Simulate "the original posts failed" by dropping what we captured, then
+    // recover on a later instant.
+    announcer.auditPosts.length = 0;
+    announcer.announcements.length = 0;
+    announcer.edits.length = 0;
+
+    const outcome = await reannounceDraw(db, announcer, raffleId, "2026-07-15T13:00:00.000Z");
+    expect(outcome).toEqual({ ok: true, winners });
+
+    // Re-published the verification result, the public winner line, and the card.
+    expect(announcer.auditPosts).toHaveLength(1);
+    expect(announcer.auditPosts[0]).toContain("Draw result");
+    expect(announcer.auditPosts[0]).toContain(SECRET); // stored secret re-revealed
+    expect(announcer.announcements).toHaveLength(1);
+    expect(announcer.announcements[0]).toContain(`<@${winners[0]}>`);
+    expect(announcer.edits).toHaveLength(1);
+
+    // No new state: no extra audit_log rows, same wins, still drawn.
+    expect(auditTypes(raffleId)).toEqual(auditRowsBefore);
+    expect(listWinsForRaffle(db, raffleId).map((w) => w.user_id)).toEqual(winsBefore);
+    expect(getRaffle(db, raffleId)!.status).toBe("drawn");
+  });
+
+  it("is safe to run repeatedly (idempotent)", async () => {
+    const raffleId = seedClosedRaffle(["a", "b", "c"]);
+    const announcer = fakeAnnouncer();
+    await executeDraw(db, announcer, raffleId, NOW, gen);
+    const before = auditTypes(raffleId);
+
+    await reannounceDraw(db, announcer, raffleId, NOW);
+    await reannounceDraw(db, announcer, raffleId, NOW);
+
+    expect(auditTypes(raffleId)).toEqual(before);
+  });
+
+  it("rejects a raffle that has not been drawn", async () => {
+    const raffleId = seedClosedRaffle(["a", "b"]);
+    const announcer = fakeAnnouncer();
+    expect(await reannounceDraw(db, announcer, raffleId, NOW)).toEqual({
+      ok: false,
+      reason: "not_drawn",
+    });
+    expect(announcer.announcements).toHaveLength(0);
+  });
+
+  it("reports not_found for an unknown raffle", async () => {
+    const announcer = fakeAnnouncer();
+    expect(await reannounceDraw(db, announcer, 9999, NOW)).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+  });
+
+  it("re-announces a no-eligible-winner draw with an empty winner set", async () => {
+    const raffleId = seedClosedRaffle(["a", "b"]);
+    const announcer = fakeAnnouncer();
+    for (const id of ["a", "b"]) {
+      addBan(db, { guildId: GUILD, userId: id, bannedBy: "mod", reason: null, bannedAt: NOW, expiresAt: null });
+    }
+    const drew = await executeDraw(db, announcer, raffleId, NOW, gen);
+    expect(drew).toEqual({ ok: true, winners: [] });
+
+    announcer.announcements.length = 0;
+    const outcome = await reannounceDraw(db, announcer, raffleId, NOW);
+    expect(outcome).toEqual({ ok: true, winners: [] });
+    expect(announcer.announcements[0]).toContain("no eligible entrants");
   });
 });

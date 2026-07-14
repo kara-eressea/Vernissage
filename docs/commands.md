@@ -109,6 +109,19 @@ selection and its verification data are published per the
 /raffle draw raffle:42
 ```
 
+### `/raffle announce <raffle>`
+Re-post an already-drawn raffle's public winner announcement and audit result
+from stored data. Use it if the draw itself succeeded but a Discord post failed
+to go out (posts are best-effort, so a failure is silent). It re-selects nothing
+— the same winners, seed, and secret are re-published and the entry card's winner
+line is refreshed. Idempotent and state-free, so it is safe to run more than once;
+it never re-draws, extends a claim window, or changes who won. Only valid on a
+`drawn` raffle (for one not yet drawn, use `/raffle draw`).
+
+```
+/raffle announce raffle:42
+```
+
 ### `/raffle reroll <raffle> <winner> <reason>`
 Replace a disqualified winner. The replacement is re-selected from the *same*
 base seed with the disqualified winner excluded, so it stays verifiable from
