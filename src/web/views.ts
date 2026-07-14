@@ -18,6 +18,7 @@ import { html, raw, type RawHtml } from "./html.js";
 import type { HomeView, PickerCard } from "./home.js";
 import { resolveDisplayName } from "./naming.js";
 import type { Session, SessionGuild } from "./session.js";
+import type { SimulatorView } from "./simulator.js";
 
 /** The one accent theme (the design's teal default), exposed as CSS variables. */
 const THEME = {
@@ -49,6 +50,10 @@ summary::-webkit-details-marker{display:none}
 @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes barrise{from{transform:scaleY(.3);opacity:.4}to{transform:none;opacity:1}}
 @media (max-width:820px){.home-grid{grid-template-columns:1fr !important}}
+@media (max-width:900px){.sim-grid{grid-template-columns:1fr !important}.sim-controls{position:static !important}}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;background:#22262d;outline:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.45);border:3px solid #16181d}
+input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid #16181d}
 `;
 
 /** Wrap page content in the full HTML document, fonts, and accent variables. */
@@ -287,8 +292,22 @@ function switcher(guild: SessionGuild, cards: PickerCard[]): RawHtml {
   `;
 }
 
+/** One primary-nav item: an active tab (highlighted span) or a link. */
+function navItem(label: string, href: string, active: boolean): RawHtml {
+  if (active) {
+    return html`<span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22;">${label}</span>`;
+  }
+  return html`<a href="${href}" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">${label}</a>`;
+}
+
 /** The home chrome: brand, switcher, nav, and the moderator block. */
-function homeHeader(session: Session, guild: SessionGuild, brand: string, cards: PickerCard[]): RawHtml {
+function homeHeader(
+  session: Session,
+  guild: SessionGuild,
+  brand: string,
+  cards: PickerCard[],
+  active: "overview" | "simulator",
+): RawHtml {
   return html`
     <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
       <div style="display:flex; align-items:center; gap:16px;">
@@ -303,9 +322,9 @@ function homeHeader(session: Session, guild: SessionGuild, brand: string, cards:
         ${switcher(guild, cards)}
       </div>
       <nav style="display:flex; align-items:center; gap:6px;">
-        <span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22;">Overview</span>
+        ${navItem("Overview", "/app", active === "overview")}
         <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Raffles</a>
-        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Simulator</a>
+        ${navItem("Simulator", "/app/simulator", active === "simulator")}
         <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>
         <div style="width:1px; height:24px; background:#242830; margin:0 6px;"></div>
         ${modBlock(session.username, "Moderator")}
@@ -403,7 +422,7 @@ function poolPanel(view: HomeView): RawHtml {
       <div style="height:6px; border-radius:6px; background:#23272e; overflow:hidden; margin-bottom:15px;"><div style="height:100%; width:${pct}%; background:var(--accent); border-radius:6px;"></div></div>
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:14px; border-top:1px solid #23272e;">
         <div style="font-size:11.5px; color:#6b717c; line-height:1.45;">Under the server default bar<br /><span style="color:#8b93a0;">${reqSummary}</span></div>
-        <a href="#" style="flex:none; font-size:12.5px; font-weight:600; white-space:nowrap;">tune this →</a>
+        <a href="/app/simulator" style="flex:none; font-size:12.5px; font-weight:600; white-space:nowrap;">tune this →</a>
       </div>
     </section>
   `;
@@ -451,7 +470,7 @@ export function homePage(session: Session, guild: SessionGuild, view: HomeView, 
   const liveCountLabel = `${view.liveCount} live · ${view.scheduledCount} scheduled`;
 
   const body = html`
-    ${homeHeader(session, guild, brand, cards)}
+    ${homeHeader(session, guild, brand, cards, "overview")}
     <div style="max-width:1120px; margin:0 auto; padding:26px 24px 84px;">
       ${banners(view)}
 
@@ -486,6 +505,274 @@ export function homePage(session: Session, guild: SessionGuild, view: HomeView, 
     </div>
   `;
   return shell(`${guild.name} — Moderator Dashboard`, body);
+}
+
+// ---------------------------------------------------------------------------
+// Eligibility simulator
+// ---------------------------------------------------------------------------
+
+/** The query string carrying the current dial values (without the filter). */
+function settingsQuery(view: SimulatorView): string {
+  const p = new URLSearchParams();
+  for (const s of view.sliders) p.set(s.param, String(s.value));
+  return p.toString();
+}
+
+/** The left-hand controls: a GET form of sliders that re-runs the simulation. */
+function simControls(view: SimulatorView): RawHtml {
+  return html`
+    <aside class="sim-controls" style="flex:0 0 340px; max-width:340px; position:sticky; top:82px;">
+      <form id="sim-form" method="get" action="/app/simulator">
+        <input type="hidden" name="filter" value="${view.filter}" />
+        <section style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:18px 20px 20px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+            <span style="font-weight:700; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">Entry requirements</span>
+            <a href="/app/simulator" style="font-size:11.5px; font-weight:600;">Reset</a>
+          </div>
+          <p style="margin:0 0 16px; font-size:11.5px; color:#585e68;">Adjust the bar, then re-run to see who clears it.</p>
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            ${view.sliders.map(
+              (s) => html`
+                <div>
+                  <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:9px;">
+                    <label for="sl-${s.param}" style="font-weight:600; font-size:13.5px; color:#dfe2e7; display:flex; align-items:center; gap:7px;">${s.label}${s.symbol
+                      ? html`<span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:600; color:#585e68; background:#101216; border:1px solid #23272e; border-radius:5px; padding:1px 5px;">${s.symbol}</span>`
+                      : ""}</label>
+                    <span style="display:flex; align-items:baseline; gap:4px;"><span id="${s.param}-val" class="serif" style="font-weight:600; font-size:20px; color:var(--accent); line-height:1;">${s.value}</span><span style="font-size:11px; color:#6b717c;">${s.unit}</span></span>
+                  </div>
+                  <input id="sl-${s.param}" type="range" name="${s.param}" min="${s.min}" max="${s.max}" step="${s.step}" value="${s.value}" data-valout="${s.param}-val" style="background:linear-gradient(90deg, var(--accent) ${s.pct}, #22262d ${s.pct});" />
+                  <div style="display:flex; justify-content:space-between; font-size:10px; color:#4c525c; font-family:'JetBrains Mono',monospace; margin-top:6px;"><span>${s.minLabel}</span><span>${s.hint}</span><span>${s.maxLabel}</span></div>
+                </div>
+              `,
+            )}
+          </div>
+          <button type="submit" class="hovbtn" style="margin-top:20px; width:100%; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:11px 16px; font-size:13.5px; font-weight:700; cursor:pointer;">Run simulation</button>
+        </section>
+      </form>
+    </aside>
+  `;
+}
+
+/** The headline count with the "clears it" donut. */
+function simHeadline(view: SimulatorView): RawHtml {
+  const ringLen = 2 * Math.PI * 50;
+  const dash = view.considered > 0 ? (ringLen * view.eligible) / view.considered : 0;
+  const shortfall = view.considered - view.eligible;
+  const line =
+    view.considered === 0
+      ? "No members with counted activity in this window yet."
+      : view.eligible === view.considered
+        ? "Every active member clears this bar."
+        : `${view.pctClear}% of active members clear this bar. ${shortfall} fall short.`;
+  return html`
+    <section style="background:linear-gradient(160deg,#181b21,#14171d); border:1px solid #23272e; border-radius:16px; padding:22px 24px; display:flex; align-items:center; justify-content:space-between; gap:20px;">
+      <div>
+        <div style="font-size:12px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0; margin-bottom:8px;">Eligible right now</div>
+        <div class="serif" style="font-weight:600; font-size:34px; letter-spacing:-.02em; line-height:1;"><span style="color:var(--accent);">~${view.eligible}</span> <span style="color:#6b717c; font-weight:500; font-size:24px;">of ${view.considered} active members</span></div>
+        <div style="font-size:13px; color:#8b93a0; margin-top:8px;">${line}</div>
+      </div>
+      <div style="flex:none; width:118px; height:118px; position:relative; display:flex; align-items:center; justify-content:center;">
+        <svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">
+          <circle cx="59" cy="59" r="50" fill="none" stroke="#23272e" stroke-width="10"></circle>
+          <circle cx="59" cy="59" r="50" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${ringLen.toFixed(1)}"></circle>
+        </svg>
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;"><span class="serif" style="font-weight:600; font-size:24px; color:#e6e8ec;">${view.pctClear}%</span><span style="font-size:10px; color:#6b717c;">clear it</span></div>
+      </div>
+    </section>
+  `;
+}
+
+/** The message-count histogram with the threshold line drawn on it. */
+function simHistogram(view: SimulatorView): RawHtml {
+  const h = view.histogram;
+  const cap = view.caption;
+  const capColor =
+    cap.tone === "raise" ? "var(--danger)" : cap.tone === "lower" ? "var(--accent)" : "#8b93a0";
+  const capBg =
+    cap.tone === "raise"
+      ? "rgba(229,104,122,.14)"
+      : cap.tone === "lower"
+        ? "var(--accent-soft)"
+        : "#1c2027";
+  const capIcon = cap.tone === "raise" ? "↑" : cap.tone === "lower" ? "↓" : "≈";
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:16px; padding:22px 24px 20px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px;">
+        <div>
+          <div class="serif" style="font-weight:600; font-size:18px; letter-spacing:-.01em;">Where members fall</div>
+          <div style="font-size:12.5px; color:#8b93a0; margin-top:3px;">Messages sent per member across the last ${view.settings.reqDays} days</div>
+        </div>
+        <div style="display:flex; gap:16px; flex:none;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#a7adb7;"><span style="width:11px; height:11px; border-radius:3px; background:var(--accent);"></span>Clears the bar</div>
+          <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#a7adb7;"><span style="width:11px; height:11px; border-radius:3px; background:#363b44;"></span>Below X</div>
+        </div>
+      </div>
+      <div style="position:relative; height:216px; padding-left:30px;">
+        <div style="position:absolute; left:0; right:0; top:0; bottom:26px; display:flex; flex-direction:column; justify-content:space-between;">
+          ${h.yTicks.map(
+            (y) => html`<div style="position:relative; height:1px; background:#1d2027;"><span style="position:absolute; left:-30px; top:-6px; font-size:9.5px; color:#4c525c; font-family:'JetBrains Mono',monospace; width:26px; text-align:right;">${y}</span></div>`,
+          )}
+        </div>
+        <div style="position:absolute; left:30px; right:0; top:0; bottom:26px; display:flex; align-items:flex-end; gap:4px;">
+          ${h.bins.map(
+            (b) => html`<div title="${b.count}" style="flex:1; height:${b.heightPct}; min-height:2px; background:${b.clears
+              ? "var(--accent)"
+              : "#363b44"}; border-radius:3px 3px 0 0; transform-origin:bottom; animation:barrise .4s ease;"></div>`,
+          )}
+        </div>
+        <div style="position:absolute; top:-6px; bottom:26px; left:calc(30px + (100% - 30px) * ${(parseFloat(view.histogram.thresholdPct) / 100).toFixed(4)}); width:2px; background:var(--accent); box-shadow:0 0 0 2px rgba(22,24,29,.9); z-index:3;"></div>
+        <div style="position:absolute; top:-14px; left:calc(30px + (100% - 30px) * ${(parseFloat(view.histogram.thresholdPct) / 100).toFixed(4)}); transform:translateX(-50%); z-index:4; background:var(--accent); color:#0e1013; font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; white-space:nowrap; font-family:'JetBrains Mono',monospace;">X = ${view.settings.reqMessages}</div>
+        <div style="position:absolute; left:30px; right:0; bottom:0; display:flex; justify-content:space-between; font-size:9.5px; color:#4c525c; font-family:'JetBrains Mono',monospace;">
+          ${h.xTicks.map((x) => html`<span>${x}</span>`)}
+        </div>
+      </div>
+      <div style="margin-top:24px; display:flex; align-items:center; gap:12px; background:#101216; border:1px solid #23272e; border-radius:11px; padding:13px 16px;">
+        <span style="flex:none; width:26px; height:26px; border-radius:8px; background:${capBg}; display:flex; align-items:center; justify-content:center; font-size:14px; color:${capColor};">${capIcon}</span>
+        <div style="font-size:13.5px; color:#dfe2e7; line-height:1.45;">${cap.text}</div>
+      </div>
+    </section>
+  `;
+}
+
+/** The member table (keyed by id — the web process has no usernames). */
+function simTable(view: SimulatorView): RawHtml {
+  const q = settingsQuery(view);
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:16px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px 14px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="serif" style="font-weight:600; font-size:16px;">Members</span>
+          <span style="font-size:11px; color:#6b717c;">${view.shownLabel}</span>
+        </div>
+        <div style="display:flex; background:#101216; border:1px solid #2a2f37; border-radius:9px; padding:3px;">
+          ${view.filterTabs.map(
+            (f) => html`<a href="/app/simulator?${raw(q)}&filter=${f.filter}" style="border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; white-space:nowrap; background:${f.active
+              ? "var(--accent)"
+              : "transparent"}; color:${f.active ? "#0e1013" : "#c3c8d1"};">${f.label}</a>`,
+          )}
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:2.4fr .9fr .9fr 1fr 1.8fr; align-items:center; padding:0 20px; height:34px; border-top:1px solid #23272e; border-bottom:1px solid #23272e; background:#131519; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#6b717c;">
+        <span>Member</span><span style="text-align:center;">Msgs</span><span style="text-align:center;">Active</span><span style="text-align:center;">Status</span><span>Reason</span>
+      </div>
+      <div style="max-height:440px; overflow-y:auto;">
+        ${view.rows.length === 0
+          ? html`<div style="padding:44px 20px; text-align:center; font-size:13px; color:#8b93a0;">No members match this filter.</div>`
+          : view.rows.map(
+              (r) => html`
+                <div class="hovrow" style="display:grid; grid-template-columns:2.4fr .9fr .9fr 1fr 1.8fr; align-items:center; padding:10px 20px; border-bottom:1px solid #1b1e24;">
+                  <div style="display:flex; align-items:center; gap:11px; min-width:0;">
+                    <span style="flex:none; width:30px; height:30px; border-radius:50%; background:${r.avatarColor};"></span>
+                    <span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span><span style="display:block; font-size:11px; color:#6b717c;">member</span></span>
+                  </div>
+                  <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${r.messages}</div>
+                  <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${r.activeDays}</div>
+                  <div style="display:flex; justify-content:center;">
+                    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 9px 3px 7px; border-radius:20px; background:${r.eligible
+                      ? "rgba(70,184,119,.13)"
+                      : "rgba(229,104,122,.12)"}; color:${r.eligible ? "#5ccc8a" : "#e58497"};"><span style="width:6px; height:6px; border-radius:50%; background:${r.eligible
+                      ? "var(--ok)"
+                      : "var(--danger)"};"></span>${r.statusLabel}</span>
+                  </div>
+                  <div style="font-size:12px; color:${r.eligible ? "#4c525c" : "#a7adb7"}; padding-left:6px;">${r.reason}</div>
+                </div>
+              `,
+            )}
+      </div>
+    </section>
+  `;
+}
+
+/** The apply-in-Discord card: the generated command with a copy button. */
+function simApply(view: SimulatorView, guild: SessionGuild): RawHtml {
+  return html`
+    <section style="background:#14171d; border:1px solid #262a31; border-radius:16px; padding:20px 22px; box-shadow:0 10px 30px rgba(0,0,0,.3);">
+      <div style="display:flex; align-items:center; gap:9px; margin-bottom:5px;">
+        <span style="width:24px; height:24px; border-radius:7px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; color:var(--accent); font-size:13px;">↗</span>
+        <h2 class="serif" style="font-weight:600; font-size:17px; margin:0; letter-spacing:-.01em;">Apply in Discord</h2>
+      </div>
+      <p style="margin:0 0 15px; font-size:13px; color:#8b93a0; line-height:1.5;">Happy with the bar? Run this command in <span style="color:#dfe2e7; font-weight:600;">${guild.name}</span> to save it as the server default — the dashboard changes nothing itself.</p>
+      <div style="background:#0c0e11; border:1px solid #262a31; border-radius:11px; padding:14px 16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+          <code style="font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.6; color:#c3c8d1; overflow-x:auto; white-space:nowrap;">${view.command}</code>
+          <button type="button" class="sim-copy" data-cmd="${view.command}" style="flex:none; display:flex; align-items:center; gap:6px; background:var(--accent); color:#0e1013; border:1px solid transparent; border-radius:9px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer;">Copy</button>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:7px; margin-top:12px; font-size:11.5px; color:#6b717c;"><span style="color:var(--ok); font-size:12px;">✓</span>Read-only — nothing is written until you run this in your server.</div>
+    </section>
+  `;
+}
+
+/** Progressive enhancement: live value labels, auto-run on release, copy button. */
+const SIM_SCRIPT = raw(`<script>
+(function(){
+  var f=document.getElementById('sim-form');
+  if(f){
+    f.querySelectorAll('input[type=range]').forEach(function(r){
+      var out=document.getElementById(r.getAttribute('data-valout'));
+      r.addEventListener('input',function(){
+        if(out) out.textContent=r.value;
+        var p=(r.max>r.min)?((r.value-r.min)/(r.max-r.min)*100):0;
+        r.style.background='linear-gradient(90deg, var(--accent) '+p+'%, #22262d '+p+'%)';
+      });
+      r.addEventListener('change',function(){ f.submit(); });
+    });
+  }
+  document.querySelectorAll('.sim-copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=b.getAttribute('data-cmd');
+      var done=function(){ var o=b.textContent; b.textContent='Copied \\u2713'; setTimeout(function(){ b.textContent=o; },1800); };
+      if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,function(){}); }
+    });
+  });
+})();
+</script>`);
+
+/** The eligibility simulator: tune the bar, see who clears it, carry it back. */
+export function simulatorPage(
+  session: Session,
+  guild: SessionGuild,
+  view: SimulatorView,
+  cards: PickerCard[],
+): string {
+  const brand = resolveDisplayName({});
+  const results = view.hasCandidates
+    ? html`
+        ${simHeadline(view)}
+        ${simHistogram(view)}
+        ${simTable(view)}
+      `
+    : html`
+        ${simHeadline(view)}
+        <div style="background:#16181d; border:1px dashed #2f3540; border-radius:16px; padding:56px 40px; text-align:center;">
+          <div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">No activity to simulate yet</div>
+          <p style="margin:0 auto; font-size:13.5px; color:#8b93a0; max-width:44ch; line-height:1.55;">No member has a counted message in the last ${view.settings.reqDays} days. Widen the window, or check back once the server has been active.</p>
+        </div>
+      `;
+
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "simulator")}
+    <div style="max-width:1280px; margin:0 auto; padding:26px 24px 84px;">
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app">${guild.name}</a><span>/</span><span>Eligibility simulator</span></div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px; flex-wrap:wrap;">
+        <div>
+          <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0 0 4px;">Eligibility Simulator</h1>
+          <p style="margin:0; font-size:14px; color:#8b93a0; max-width:66ch;">Tune the server's default entry bar and see who clears it — before you commit to anything. This is a sandbox: it reads your members but <span style="color:#c3c8d1;">never changes a thing.</span></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; flex:none; font-size:11.5px; color:#6b717c; background:#16181d; border:1px solid #23272e; border-radius:20px; padding:6px 12px 6px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Read-only · nothing is written</div>
+      </div>
+
+      <div class="sim-grid" style="display:grid; grid-template-columns:340px 1fr; gap:26px; align-items:start;">
+        ${simControls(view)}
+        <main style="min-width:0; display:flex; flex-direction:column; gap:16px;">
+          ${results}
+          ${simApply(view, guild)}
+        </main>
+      </div>
+    </div>
+    ${SIM_SCRIPT}
+  `;
+  return shell("Eligibility Simulator — Moderator Dashboard", body);
 }
 
 // ---------------------------------------------------------------------------
