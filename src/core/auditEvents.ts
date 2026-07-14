@@ -29,6 +29,11 @@ export const AUDIT_EVENTS = {
   countedChannelSet: "counted_channel_set",
   countedChannelCleared: "counted_channel_cleared",
   eligibilityReset: "eligibility_reset",
+  // A raffle composed in the dashboard's Raffle Designer was staged as an inert
+  // pending spec (design.md "Raffle Designer handoff"). Not mirrored to the audit
+  // channel — it becomes real, with its own raffle_created/scheduled rows, only
+  // when a moderator redeems it with /raffle from-design.
+  pendingRaffleStaged: "pending_raffle_staged",
 } as const;
 
 /** Every known audit event type string. */

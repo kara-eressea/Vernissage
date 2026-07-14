@@ -32,6 +32,14 @@ export interface WebConfig {
   trustProxy: boolean;
   /** Whether to mark cookies Secure — true when the public base URL is https. */
   secureCookies: boolean;
+  /**
+   * The bot's Raffle Designer handoff endpoint, e.g. http://127.0.0.1:8899.
+   * Undefined disables the handoff (the designer's "Create in Discord" stays a
+   * preview). Set alongside `handoffSecret` (docs/dashboard.md).
+   */
+  handoffUrl?: string;
+  /** Shared secret presented to the bot handoff endpoint. Undefined disables the handoff. */
+  handoffSecret?: string;
 }
 
 /** Environment variable names specific to the dashboard, documented in .env.example. */
@@ -42,6 +50,10 @@ export const WEB_ENV = {
   sessionSecret: "DASHBOARD_SESSION_SECRET",
   port: "DASHBOARD_PORT",
   trustProxy: "DASHBOARD_TRUST_PROXY",
+  /** The bot's Raffle Designer handoff endpoint URL (optional). */
+  handoffUrl: "DESIGNER_HANDOFF_URL",
+  /** Shared secret for the handoff endpoint — must match the bot's (optional). */
+  handoffSecret: "DESIGNER_HANDOFF_SECRET",
 } as const;
 
 /** Thrown when required dashboard configuration is missing, listing every problem. */
@@ -105,5 +117,9 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     guildIds,
     trustProxy: parseBool(env[WEB_ENV.trustProxy], true),
     secureCookies: baseUrl.startsWith("https://"),
+    // The handoff is enabled only when both the URL and the shared secret are
+    // set (they must match the bot's DESIGNER_HANDOFF_* config).
+    handoffUrl: env[WEB_ENV.handoffUrl]?.trim().replace(/\/+$/, "") || undefined,
+    handoffSecret: env[WEB_ENV.handoffSecret]?.trim() || undefined,
   };
 }

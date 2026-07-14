@@ -120,7 +120,7 @@ RIGHT — a stack of live previews:
 BOTTOM of the composer: a primary "Create in Discord" button. Clicking it opens a
 HANDOFF MODAL — a signature moment, design it with care:
   • A short generated command in a big copyable code block:
-        /raffle create-from a7f3k9
+        /raffle from-design gentle-harbor-4821
   • Copy button.
   • Reassuring explanation: "Run this in your server. The bot will show you a
     summary and ask you to confirm before the raffle is created — nothing is

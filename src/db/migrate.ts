@@ -90,6 +90,23 @@ export function migrate(db: Database): void {
          )`,
       );
     }
+    if (current < 18) {
+      // Inert staging for the Raffle Designer handoff. Empty on upgrade; the bot
+      // fills it when a moderator hands a composed raffle off from the dashboard.
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS pending_raffles (
+           token              TEXT PRIMARY KEY,
+           guild_id           TEXT NOT NULL,
+           staged_by_user_id  TEXT NOT NULL,
+           spec_json          TEXT NOT NULL,
+           created_at         TEXT NOT NULL,
+           expires_at         TEXT NOT NULL,
+           redeemed_at        TEXT,
+           redeemed_raffle_id INTEGER
+         );
+         CREATE INDEX IF NOT EXISTS idx_pending_expires ON pending_raffles (expires_at)`,
+      );
+    }
   }
 
   if (current !== SCHEMA_VERSION) {

@@ -19,6 +19,23 @@ export interface BotConfig {
   guildIds: string[];
   /** Path to the SQLite database file. Defaults to ./vernissage.db. */
   databasePath: string;
+  /**
+   * The Raffle Designer handoff listener, when enabled. Present only when
+   * DESIGNER_HANDOFF_SECRET is set; otherwise the dashboard's "Create in Discord"
+   * stays inert and the bot opens no inbound socket. The dashboard POSTs a
+   * composed raffle here to stage it as a pending spec (design.md "Raffle Designer
+   * handoff").
+   */
+  handoff?: HandoffConfig;
+}
+
+/** The internal handoff endpoint's bind address and shared secret. */
+export interface HandoffConfig {
+  /** Shared secret the dashboard presents as a Bearer token (constant-time checked). */
+  secret: string;
+  /** Bind host — localhost by default, so it isn't exposed off-box. */
+  host: string;
+  port: number;
 }
 
 /** Environment variable names, in one place so they are easy to document. */
@@ -30,6 +47,12 @@ export const ENV = {
   /** Legacy single-guild variable, still honored as a fallback for GUILD_IDS. */
   homeGuildId: "HOME_GUILD_ID",
   databasePath: "DATABASE_PATH",
+  /** Shared secret enabling the Raffle Designer handoff listener (optional). */
+  handoffSecret: "DESIGNER_HANDOFF_SECRET",
+  /** Handoff listener bind host (default 127.0.0.1). */
+  handoffHost: "DESIGNER_HANDOFF_HOST",
+  /** Handoff listener port (default 8899). */
+  handoffPort: "DESIGNER_HANDOFF_PORT",
 } as const;
 
 /** Parse a comma-separated guild-id list: trim, drop blanks, de-duplicate. */
@@ -78,5 +101,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
     appId: appId!,
     guildIds,
     databasePath: env[ENV.databasePath]?.trim() || "./vernissage.db",
+    handoff: loadHandoffConfig(env),
+  };
+}
+
+/**
+ * The Raffle Designer handoff listener config, or undefined when the handoff is
+ * off (no shared secret set). Throws only if the secret is set but the port is
+ * invalid — a misconfiguration the operator should see immediately.
+ */
+function loadHandoffConfig(env: NodeJS.ProcessEnv): HandoffConfig | undefined {
+  const secret = env[ENV.handoffSecret]?.trim();
+  if (!secret) {
+    return undefined;
+  }
+  const portRaw = env[ENV.handoffPort]?.trim();
+  const port = portRaw ? Number(portRaw) : 8899;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new ConfigError([`${ENV.handoffPort} (must be a valid port number)`]);
+  }
+  return {
+    secret,
+    host: env[ENV.handoffHost]?.trim() || "127.0.0.1",
+    port,
   };
 }

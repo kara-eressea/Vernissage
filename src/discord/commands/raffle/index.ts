@@ -23,6 +23,7 @@ import { addBanSubcommands, handleBan, handleBanlist, handleUnban } from "./blac
 import { addConfigGroup, handleConfig } from "./config.js";
 import { addDrawSubcommands, handleAnnounce, handleDraw, handleReroll } from "./draw.js";
 import { addEligibleSubcommand, handleEligible } from "./eligible.js";
+import { addFromDesignSubcommand, handleFromDesign } from "./fromDesign.js";
 import {
   addEntrySubcommands,
   handleClaim,
@@ -43,6 +44,7 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
   // Top-level subcommands (create/edit/cancel) added while `data` is still a
   // full SlashCommandBuilder, then the config subcommand group.
   addManageSubcommands(data);
+  addFromDesignSubcommand(data);
   addEntrySubcommands(data);
   addDrawSubcommands(data);
   addBanSubcommands(data);
@@ -75,6 +77,9 @@ async function dispatch(
       return;
     case "cancel":
       await handleCancel(interaction, ctx);
+      return;
+    case "from-design":
+      await handleFromDesign(interaction, ctx);
       return;
     case "enter":
       await handleEnter(interaction, ctx);

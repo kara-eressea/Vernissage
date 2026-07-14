@@ -18,34 +18,26 @@ import {
   type StringSelectMenuInteraction,
 } from "discord.js";
 import type { Database } from "better-sqlite3";
-import { AUDIT_EVENTS } from "../../core/auditEvents.js";
 import { describeRaffle } from "../../core/raffleSummary.js";
 import {
   resolveRaffleSettings,
   validateBasics,
-  validateDraft,
   validateDraw,
   validateEligibility,
   validateSchedule,
-  type RaffleDraftFields,
 } from "../../core/raffleValidation.js";
 import { formatWallClockInZone, parseFriendlyTimeInZone } from "../../core/timeParse.js";
 import { getGuild } from "../../db/repositories/guilds.js";
-import {
-  getRaffle,
-  setStatus,
-  updateRaffleFields,
-  type RaffleRow,
-} from "../../db/repositories/raffles.js";
+import { getRaffle, updateRaffleFields, type RaffleRow } from "../../db/repositories/raffles.js";
 import {
   clearWizardState,
   getWizardState,
   upsertWizardStep,
   type WizardStep,
 } from "../../db/repositories/wizardState.js";
-import { resolveAnnounceChannelId } from "../../core/announceFormat.js";
 import { channelAccessError } from "../channelAccess.js";
-import { auditAndMirror, type Notifier } from "../notifier.js";
+import { type Notifier } from "../notifier.js";
+import { confirmAndSchedule, toDraftFields } from "../raffleScheduling.js";
 import { parseWizardId } from "./customId.js";
 import {
   basicsModal,
@@ -75,30 +67,6 @@ export interface Wizard {
   start(interaction: ChatInputCommandInteraction, raffleId: number): Promise<void>;
   /** Handle a wizard component/modal interaction. */
   handle(interaction: WizardInteraction): Promise<void>;
-}
-
-/** Project a raffle row onto the draft-fields shape the validators consume. */
-function toDraftFields(r: RaffleRow): RaffleDraftFields {
-  return {
-    name: r.name,
-    description: r.description,
-    prize: r.prize,
-    starts_at: r.starts_at,
-    ends_at: r.ends_at,
-    winner_count: r.winner_count,
-    req_messages: r.req_messages,
-    req_days: r.req_days,
-    req_active_days: r.req_active_days,
-    open_to_all: r.open_to_all,
-    exclude_prior_winners: r.exclude_prior_winners,
-    required_role_id: r.required_role_id,
-    excluded_role_id: r.excluded_role_id,
-    cooldown_days: r.cooldown_days,
-    cooldown_count: r.cooldown_count,
-    claim_window_hours: r.claim_window_hours,
-    is_test: r.is_test,
-    draw_mode: r.draw_mode,
-  };
 }
 
 /** Read an integer from a modal text field: {value} (null if blank) or {error}. */
@@ -440,49 +408,13 @@ export function createWizard(deps: WizardDeps): Wizard {
     if (action === "confirm" && interaction.isButton()) {
       const now = new Date().toISOString();
       const fresh = getRaffle(db, id)!;
-      const check = validateDraft(toDraftFields(fresh), now);
-      if (!check.ok) {
-        await respond(interaction, withError("summary", fresh, check.error));
+      // Shared with /raffle from-design: validate, resolve + permission-check the
+      // announce channel, flip to scheduled, audit, and clear wizard state.
+      const outcome = confirmAndSchedule(db, deps.notifier, fresh, interaction.guild, interaction.user.id, now);
+      if (!outcome.ok) {
+        await respond(interaction, withError("summary", fresh, outcome.error));
         return;
       }
-      // The raffle needs somewhere to announce itself, and the bot must be
-      // able to post there — otherwise it opens with no entry message and
-      // nobody can enter. Checked here (not in the pure validator) because it
-      // reads guild config and live channel permissions.
-      const announceChannelId = resolveAnnounceChannelId(
-        fresh.channel_id,
-        getGuild(db, fresh.guild_id)?.announce_channel ?? null,
-      );
-      if (!announceChannelId) {
-        await respond(
-          interaction,
-          withError(
-            "summary",
-            fresh,
-            "There is no channel to announce this raffle in. Pick one below, or set a server default with /raffle config set announce-channel.",
-          ),
-        );
-        return;
-      }
-      const accessError = channelAccessError(
-        interaction.guild?.members?.me,
-        interaction.guild?.channels?.cache?.get(announceChannelId),
-        "announce",
-      );
-      if (accessError) {
-        await respond(interaction, withError("summary", fresh, accessError));
-        return;
-      }
-      setStatus(db, id, "scheduled");
-      auditAndMirror(db, deps.notifier, {
-        guildId: fresh.guild_id,
-        raffleId: id,
-        eventType: AUDIT_EVENTS.raffleScheduled,
-        actorId: interaction.user.id,
-        payload: { name: fresh.name },
-        createdAt: now,
-      });
-      clearWizardState(db, id);
       await respond(interaction, {
         content: `🎉 **${fresh.name}** is scheduled. It will open automatically at its start time.`,
         components: [],

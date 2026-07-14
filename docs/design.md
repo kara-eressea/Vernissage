@@ -331,6 +331,10 @@ verifier reproduces from public data.
   - Blacklist additions and removals (without private reasons).
   - Eligibility resets (the scope, without the activity counts involved).
   - Draw commitment data and draw results with verification data.
+- Some events are recorded in the database but deliberately **not** mirrored to the
+  channel: staging a Raffle Designer handoff (`pending_raffle_staged`) is one — an
+  inert staged spec isn't a real raffle yet, so it surfaces in the channel only
+  when redeemed, via its own `raffle_created` / `raffle_scheduled` rows.
 - All events also stored in the database with timestamps for export.
 - Optional: /raffle audit <raffle_id> command that outputs the full event
   history and verification instructions for a raffle.
@@ -505,6 +509,19 @@ members (
   PRIMARY KEY (guild_id, user_id)
 )
 -- See "Member name cache" below.
+
+pending_raffles (
+  token              TEXT PRIMARY KEY,  -- friendly single-use claim code, e.g. gentle-harbor-4821
+  guild_id           TEXT,
+  staged_by_user_id  TEXT,              -- only this moderator may redeem it
+  spec_json          TEXT,              -- validated raffle fields, UTC-normalised schedule
+  created_at         TEXT,
+  expires_at         TEXT,              -- swept after this; 24h TTL
+  redeemed_at        TEXT,              -- set when consumed
+  redeemed_raffle_id INTEGER            -- the raffle it created
+)
+-- See "Raffle Designer handoff" below. Inert staging only; nothing here is
+-- visible to members, entries, or the draw until a moderator redeems it.
 ```
 
 ### Member name cache
@@ -532,6 +549,39 @@ simulator would show a layperson nothing but 18-digit snowflakes.
 - **The id stays authoritative.** The provably-fair hash is computed over user
   *ids*, so the verifier always shows the id alongside the name — the name is a
   convenience label, never the value a skeptic recomputes.
+
+### Raffle Designer handoff
+The moderator dashboard (docs/dashboard.md) can *compose* a whole raffle — the
+Raffle Designer — but the dashboard is read-only and never writes the database.
+So composing and creating are split by a **claim-token handoff**, the one place
+the dashboard reaches past read-only, kept narrow and bot-mediated:
+
+- **Stage (dashboard → bot).** When the moderator clicks "Create in Discord", the
+  dashboard POSTs the composed raffle to a small **authenticated endpoint on the
+  bot** (localhost-bound, shared-secret; the bot is still the sole DB writer). The
+  bot re-validates it through the same `validateDraft` the wizard uses — including
+  converting the wall-clock schedule to UTC in the guild timezone — and stores it
+  in `pending_raffles` under a friendly single-use token (`adjective-noun-NNNN`,
+  e.g. `gentle-harbor-4821`), bound to that moderator. This writes a
+  `pending_raffle_staged` audit row (not mirrored to the audit channel — the
+  staged spec isn't a real raffle yet). The token is returned for the moderator to
+  run in Discord.
+- **Redeem (`/raffle from-design <token>`).** The moderator runs the command in
+  the server. The bot re-authorises them (moderator of *this* guild), checks the
+  token is theirs, unredeemed, and unexpired, and shows an ephemeral summary with
+  a **Confirm** button. Only on Confirm does it create the raffle — through the
+  exact same scheduling seam the wizard's Confirm uses (create draft → apply the
+  spec → re-validate → resolve + permission-check the announce channel → schedule
+  → audit `raffle_created` + `raffle_scheduled`) — and mark the token redeemed.
+- **Why this is safe.** The staged spec is inert: until redeemed it changes
+  nothing a member, entry, or draw can see, and unredeemed rows are swept on a TTL.
+  Authorization, the human confirmation, and the audit trail all happen at
+  redemption in Discord — exactly as if the moderator had built the raffle in the
+  wizard, because from the bot's side they did. The token's entropy is only a
+  light backstop: you must be a moderator of the staging guild to see it and to
+  redeem it, and it is single-use and bound to the staging moderator, so a guessed
+  or leaked token creates nothing. The endpoint and the token are off entirely
+  unless `DESIGNER_HANDOFF_SECRET` is configured.
 
 ## Technical stack
 - Language: TypeScript with discord.js (or Python with discord.py; pick one

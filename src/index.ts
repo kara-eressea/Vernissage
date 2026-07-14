@@ -15,11 +15,17 @@ import { createClient } from "./discord/client.js";
 import { buildCommands, type CommandContext } from "./discord/commands/index.js";
 import { EDIT_END_PREFIX, handleEditEnd } from "./discord/commands/raffle/editEnd.js";
 import { handleEnterButton } from "./discord/commands/raffle/entry.js";
+import {
+  FROMDESIGN_PREFIX,
+  handleFromDesignComponent,
+} from "./discord/commands/raffle/fromDesign.js";
 import { ENTER_PREFIX } from "./discord/components/enterButton.js";
 import { announceOpenRaffle, closeEntryMessage } from "./discord/entryFlow.js";
 import { makePresenceResolver } from "./discord/memberPresence.js";
 import { onRaffleClosed, reconcilePendingDraws } from "./draw/service.js";
+import { startHandoffServer } from "./handoff/server.js";
 import { startClaimSweep } from "./scheduler/claims.js";
+import { startPendingRaffleSweep } from "./scheduler/pendingSweep.js";
 import { startActivityPruning } from "./scheduler/pruning.js";
 import { attachGuildAllowlist } from "./discord/guildAllowlist.js";
 import {
@@ -71,6 +77,9 @@ async function main(): Promise<void> {
   interactionRouter.register(ENTER_PREFIX, (i) =>
     handleEnterButton(i as unknown as ButtonInteraction, commandCtx),
   );
+  interactionRouter.register(FROMDESIGN_PREFIX, (i) =>
+    handleFromDesignComponent(i as unknown as ButtonInteraction, { db, notifier }),
+  );
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counting = attachMessageCounter(client, db, counter, config.guildIds);
@@ -85,6 +94,20 @@ async function main(): Promise<void> {
   // Reroll winners who let their claim window lapse, and reconcile any that
   // expired while the bot was offline.
   const claimSweep = startClaimSweep(db, notifier);
+
+  // Sweep expired Raffle Designer handoff tokens so staging can't accumulate.
+  const pendingSweep = startPendingRaffleSweep(db);
+
+  // The dashboard's Raffle Designer handoff: a small authenticated listener the
+  // dashboard POSTs a composed raffle to, staging it for `/raffle from-design`.
+  // Off unless DESIGNER_HANDOFF_SECRET is set — the bot then opens no inbound
+  // socket (docs/dashboard.md "The dashboard never writes the database directly").
+  const handoffServer = config.handoff
+    ? startHandoffServer({ db, handoff: config.handoff, guildIds: config.guildIds })
+    : null;
+  if (handoffServer) {
+    console.log(`Raffle Designer handoff listening on ${handoffServer.url}.`);
+  }
 
   client.once(Events.ClientReady, (ready) => {
     console.log(
@@ -205,6 +228,11 @@ async function main(): Promise<void> {
     counting.stop();
     pruning.stop();
     claimSweep.stop();
+    pendingSweep.stop();
+    // Stop accepting handoff requests before the DB closes; then destroy the
+    // gateway and close the DB. The listener's close is async but in-flight
+    // stage requests are synchronous DB writes, so they complete first.
+    void handoffServer?.stop();
     client.destroy();
     db.close();
     process.exit(0);
