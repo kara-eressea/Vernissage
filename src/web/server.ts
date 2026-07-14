@@ -16,6 +16,7 @@ import { randomBytes } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { WebConfig } from "./config.js";
 import type { Database } from "../db/index.js";
+import { buildDesignerView, buildDesignerPool } from "./designer.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
 import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
@@ -40,6 +41,7 @@ import {
   type SessionGuild,
 } from "./session.js";
 import {
+  designerPage,
   errorPage,
   homePage,
   loginPage,
@@ -68,6 +70,15 @@ function sendHtml(res: ServerResponse, status: number, body: string, cookies: st
   res.end(body);
 }
 
+/** Send a JSON response with the given status (no-store; read-only data). */
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(JSON.stringify(body));
+}
+
 /** Send a 302 redirect with any accumulated cookies. */
 function redirect(res: ServerResponse, location: string, cookies: string[] = []): void {
   res.writeHead(302, {
@@ -75,6 +86,34 @@ function redirect(res: ServerResponse, location: string, cookies: string[] = [])
     ...(cookies.length ? { "Set-Cookie": cookies } : {}),
   });
   res.end();
+}
+
+/** Read a request body up to a size cap; resolves null if it's too large. */
+function readRequestBody(req: IncomingMessage, maxBytes: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let size = 0;
+    let aborted = false;
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => {
+      if (aborted) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        aborted = true;
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (!aborted) resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    req.on("error", () => {
+      if (!aborted) {
+        aborted = true;
+        resolve(null);
+      }
+    });
+  });
 }
 
 /** The client IP, honouring the proxy's X-Forwarded-For only when trusted. */
@@ -118,12 +157,16 @@ export function createServer(deps: ServerDeps): Server {
   // The verifier recomputes a draw per view (a bounded hash chain); the same
   // generous read ceiling keeps it usable while capping a scripted flood.
   const verifyLimiter = new RateLimiter(120, 60 * 1000);
+  // The designer's live pool preview fires a request per dial nudge (debounced);
+  // a higher ceiling keeps interactive tuning smooth under the same flood cap.
+  const designerLimiter = new RateLimiter(240, 60 * 1000);
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
     loginLimiter.sweep(t);
     simLimiter.sweep(t);
     verifyLimiter.sweep(t);
+    designerLimiter.sweep(t);
   }, 5 * 60 * 1000);
   sweepTimer.unref();
 
@@ -152,7 +195,19 @@ export function createServer(deps: ServerDeps): Server {
       return;
     }
 
-    // GET is the only method these read-only routes use (forms use GET too).
+    // The Raffle Designer handoff is the one POST route — it proxies the composed
+    // raffle to the bot, which is the sole DB writer (the web tier still writes
+    // nothing itself). Handled before the GET-only guard below.
+    if (path === "/app/designer/stage" && req.method === "POST") {
+      if (!designerLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendJson(res, 429, { error: "rate_limited" });
+        return;
+      }
+      await handleDesignerStage(req, res, session);
+      return;
+    }
+
+    // GET is the only method the read-only routes use (forms use GET too).
     if (req.method !== "GET") {
       sendHtml(res, 405, errorPage("Method not allowed."));
       return;
@@ -207,6 +262,24 @@ export function createServer(deps: ServerDeps): Server {
         return;
       }
       handleSimulator(res, session, url);
+      return;
+    }
+
+    if (path === "/app/designer") {
+      if (!designerLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleDesigner(res, session);
+      return;
+    }
+
+    if (path === "/app/designer/pool") {
+      if (!designerLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendJson(res, 429, { error: "rate_limited" });
+        return;
+      }
+      handleDesignerPool(res, session, url);
       return;
     }
 
@@ -339,6 +412,108 @@ export function createServer(deps: ServerDeps): Server {
     const view = buildSimulatorView(result, filter, names);
     const cards = buildPickerCards(db, session.guilds, now);
     sendHtml(res, 200, simulatorPage(session, guild, view, cards));
+  }
+
+  function handleDesigner(res: ServerResponse, session: Session | null): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      redirect(res, "/app");
+      return;
+    }
+    const now = new Date().toISOString();
+    const view = buildDesignerView(db, guild.id, guild.name, session.username, now);
+    const cards = buildPickerCards(db, session.guilds, now);
+    const handoffEnabled = Boolean(config.handoffUrl && config.handoffSecret);
+    sendHtml(res, 200, designerPage(session, guild, view, cards, handoffEnabled));
+  }
+
+  /**
+   * Proxy a composed raffle to the bot's handoff endpoint (the sole DB writer).
+   * The web tier authenticates the moderator via the session, wraps the
+   * submission with the guild + moderator identity, and forwards it under the
+   * shared secret; it stores nothing. Returns the bot's response verbatim.
+   */
+  async function handleDesignerStage(
+    req: IncomingMessage,
+    res: ServerResponse,
+    session: Session | null,
+  ): Promise<void> {
+    if (!session) {
+      sendJson(res, 401, { error: "unauthorized" });
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      sendJson(res, 403, { error: "no_guild" });
+      return;
+    }
+    if (!config.handoffUrl || !config.handoffSecret) {
+      sendJson(res, 503, { error: "handoff_disabled" });
+      return;
+    }
+    const raw = await readRequestBody(req, 32 * 1024);
+    if (raw === null) {
+      sendJson(res, 413, { error: "payload_too_large" });
+      return;
+    }
+    let submission: unknown;
+    try {
+      submission = JSON.parse(raw);
+    } catch {
+      sendJson(res, 400, { error: "invalid_json" });
+      return;
+    }
+    try {
+      const resp = await fetch(`${config.handoffUrl}/stage-raffle`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.handoffSecret}`,
+        },
+        body: JSON.stringify({ guildId: guild.id, moderatorUserId: session.uid, submission }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as unknown;
+      sendJson(res, resp.status, data);
+    } catch (err) {
+      console.error("Designer handoff call failed:", err);
+      sendJson(res, 502, { error: "handoff_unreachable" });
+    }
+  }
+
+  /** The designer's live eligible-pool preview: same engine as the simulator. */
+  function handleDesignerPool(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      sendJson(res, 401, { error: "unauthorized" });
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      sendJson(res, 403, { error: "no_guild" });
+      return;
+    }
+    const now = new Date().toISOString();
+    // Seed the base from the guild defaults (so the un-dialled fields — notably
+    // the server-wide min account age — apply), then overlay the query dials.
+    const g = getGuild(db, guild.id);
+    const base: SimulationSettings = {
+      reqMessages: g?.default_req_messages ?? 10,
+      reqDays: g?.default_req_days ?? 14,
+      reqActiveDays: g?.default_req_active_days ?? 0,
+      minAccountAgeDays: g?.default_min_account_age_days ?? 0,
+      cooldownDays: g?.default_cooldown_days ?? 0,
+      cooldownCount: g?.default_cooldown_count ?? null,
+    };
+    const settings = resolveSimSettings(base, url.searchParams);
+    const pool = buildDesignerPool(simulateEligiblePool(db, guild.id, settings, now));
+    sendJson(res, 200, pool);
   }
 
   function handleVerify(res: ServerResponse, session: Session | null, url: URL): void {

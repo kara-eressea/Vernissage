@@ -14,12 +14,14 @@
  * wins.cooldown_waived; v14 backfilled null raffles.draw_mode to 'auto'; v15
  * added the distinct-active-days activity floor, a server-wide tenure default,
  * and the per-raffle open_to_all escape hatch, retiring the per-raffle
- * account-age override and new-member exemption) and are also reflected here so
- * a fresh database is created at the current version directly.
+ * account-age override and new-member exemption; v17 added the members name
+ * cache; v18 added the pending_raffles staging table for the dashboard's Raffle
+ * Designer handoff) and are also reflected here so a fresh database is created at
+ * the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -211,4 +213,27 @@ CREATE TABLE IF NOT EXISTS members (
   updated_at   TEXT NOT NULL,
   PRIMARY KEY (guild_id, user_id)
 );
+
+-- Inert staging for the dashboard's Raffle Designer handoff (design.md "Raffle
+-- Designer handoff", docs/dashboard.md). The bot stages a composed-but-unpublished
+-- raffle spec here (via its authenticated internal endpoint — the web tier never
+-- writes), keyed by a friendly single-use claim token bound to the staging
+-- moderator. A moderator redeems it in-guild with /raffle from-design, which
+-- re-authorises, re-validates, confirms, and only then creates the real raffle.
+-- Nothing here is visible to members, entries, or the draw; unredeemed rows
+-- expire (expires_at) and are swept. spec_json holds the validated raffle fields
+-- (UTC-normalised schedule) ready to apply.
+CREATE TABLE IF NOT EXISTS pending_raffles (
+  token              TEXT PRIMARY KEY,
+  guild_id           TEXT NOT NULL,
+  staged_by_user_id  TEXT NOT NULL,
+  spec_json          TEXT NOT NULL,
+  created_at         TEXT NOT NULL,
+  expires_at         TEXT NOT NULL,
+  redeemed_at        TEXT,
+  redeemed_raffle_id INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_expires
+  ON pending_raffles (expires_at);
 `;

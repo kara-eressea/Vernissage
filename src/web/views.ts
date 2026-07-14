@@ -14,6 +14,7 @@
  * upstream in home.ts; this file is markup and light formatting only.
  */
 
+import type { DesignerView } from "./designer.js";
 import { html, raw, type RawHtml } from "./html.js";
 import type { HomeView, PickerCard } from "./home.js";
 import { resolveDisplayName } from "./naming.js";
@@ -57,6 +58,20 @@ summary::-webkit-details-marker{display:none}
 @keyframes popin{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
 @media (max-width:820px){.home-grid{grid-template-columns:1fr !important}}
 @media (max-width:900px){.sim-grid{grid-template-columns:1fr !important}.sim-controls{position:static !important}}
+@media (max-width:960px){.ds-grid{grid-template-columns:1fr !important}.ds-aside{position:static !important;max-width:none !important}}
+.ds-sw-input,.ds-seg-input{position:absolute;opacity:0;width:0;height:0}
+.ds-sw{position:relative;flex:none;width:38px;height:22px;border-radius:22px;background:#2a2f37;transition:background .15s}
+.ds-sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+.ds-sw-input:checked + .ds-sw{background:var(--accent)}
+.ds-sw-input:checked + .ds-sw::after{transform:translateX(16px)}
+.ds-sw-input:focus-visible + .ds-sw{box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-seg{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;color:#c3c8d1;text-align:center}
+.ds-seg-input:checked + .ds-seg{background:var(--accent);color:#0e1013}
+.ds-seg-input:focus-visible + .ds-seg{box-shadow:0 0 0 2px var(--accent-soft)}
+.ds-step:hover{background:#1e222a !important;color:#e6e8ec !important}
+.ds-field:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-soft)}
+.ds-num[disabled]{color:#6b717c;cursor:not-allowed}
+.ds-reqs[data-locked=on]{opacity:.55;pointer-events:none}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;background:#22262d;outline:none;margin:0;cursor:pointer}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.45);border:3px solid #16181d}
 input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid #16181d}
@@ -312,7 +327,7 @@ function homeHeader(
   guild: SessionGuild,
   brand: string,
   cards: PickerCard[],
-  active: "overview" | "simulator" | "verify",
+  active: "overview" | "simulator" | "verify" | "designer",
 ): RawHtml {
   return html`
     <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
@@ -329,7 +344,7 @@ function homeHeader(
       </div>
       <nav style="display:flex; align-items:center; gap:6px;">
         ${navItem("Overview", "/app", active === "overview")}
-        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Raffles</a>
+        ${navItem("Designer", "/app/designer", active === "designer")}
         ${navItem("Simulator", "/app/simulator", active === "simulator")}
         ${active === "verify"
           ? html`<span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</span>`
@@ -402,7 +417,7 @@ function rafflesEmpty(guildName: string): RawHtml {
       </div>
       <div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">No raffles running</div>
       <p style="margin:0 auto 18px; font-size:13.5px; color:#8b93a0; max-width:36ch; line-height:1.55;">Nothing is live or scheduled in ${guildName} right now. Design one to get started.</p>
-      <a href="#" class="hovbtn" style="display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700;"><span style="font-size:15px; line-height:1;">＋</span>Design a raffle</a>
+      <a href="/app/designer" class="hovbtn" style="display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700;"><span style="font-size:15px; line-height:1;">＋</span>Design a raffle</a>
     </div>
   `;
 }
@@ -488,7 +503,7 @@ export function homePage(session: Session, guild: SessionGuild, view: HomeView, 
           <h1 class="serif" style="font-weight:600; font-size:29px; letter-spacing:-.02em; margin:0 0 5px;">${guild.name}</h1>
           <p style="margin:0; font-size:14px; color:#8b93a0;">What ${brand} is running here right now.</p>
         </div>
-        <a href="#" class="hovbtn" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:11px; padding:11px 18px; font-size:14px; font-weight:700; box-shadow:0 6px 20px var(--accent-soft);"><span style="font-size:16px; line-height:1;">＋</span>Design a raffle</a>
+        <a href="/app/designer" class="hovbtn" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:11px; padding:11px 18px; font-size:14px; font-weight:700; box-shadow:0 6px 20px var(--accent-soft);"><span style="font-size:16px; line-height:1;">＋</span>Design a raffle</a>
       </div>
 
       <div class="home-grid" style="display:grid; grid-template-columns:1.62fr 1fr; gap:18px; align-items:start;">
@@ -1219,6 +1234,596 @@ export function verifyUnavailablePage(
     </div>
   `;
   return shell(`Draw verification — ${raffleName}`, body);
+}
+
+// ---------------------------------------------------------------------------
+// Raffle designer
+// ---------------------------------------------------------------------------
+
+/** A collapsible composer section (open by default). */
+function dsSection(title: string, sub: string, body: RawHtml): RawHtml {
+  return html`
+    <details open style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:16px 18px;">
+      <summary style="display:flex; align-items:center; justify-content:space-between;">
+        <span style="display:flex; align-items:center; gap:9px;"><span style="font-weight:700; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">${title}</span><span style="font-size:11px; color:#585e68;">${sub}</span></span>
+        <span style="color:#6b717c; font-size:11px;">▾</span>
+      </summary>
+      <div style="margin-top:15px;">${body}</div>
+    </details>
+  `;
+}
+
+/** A labelled text field. */
+function dsText(id: string, label: string, placeholder: string): RawHtml {
+  return html`
+    <div>
+      <label for="${id}" style="display:block; font-weight:600; font-size:13px; color:#c3c8d1; margin:0 0 6px;">${label}</label>
+      <input id="${id}" class="ds-field" placeholder="${placeholder}" autocomplete="off" style="width:100%; background:#101216; border:1px solid #2a2f37; color:#e6e8ec; border-radius:9px; padding:10px 12px; font-size:14px; outline:none;">
+    </div>
+  `;
+}
+
+/** A switch row: title, sub-label, and a toggle. */
+function dsToggle(id: string, title: string, sub: string, checked: boolean): RawHtml {
+  return html`
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 12px; background:#101216; border:1px solid #23272e; border-radius:10px; cursor:pointer;">
+      <span style="min-width:0;"><span style="display:block; font-weight:600; font-size:13.5px; color:#dfe2e7;">${title}</span><span style="display:block; font-size:11.5px; color:#6b717c;">${sub}</span></span>
+      <input id="${id}" class="ds-sw-input" type="checkbox"${checked ? raw(" checked") : raw("")}><span class="ds-sw"></span>
+    </label>
+  `;
+}
+
+/** A −/+ numeric stepper. `elig` fields drive the live pool refresh. */
+function dsStepper(
+  name: string,
+  label: string,
+  unit: string,
+  hint: string,
+  value: number,
+  min: number,
+  max: number,
+  elig: boolean,
+): RawHtml {
+  return html`
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin:0 0 6px;">
+        <label for="ds-${name}" style="font-weight:600; font-size:13px; color:#c3c8d1;">${label}</label>
+        <span style="font-size:11px; color:#6b717c;">${unit}</span>
+      </div>
+      <div style="display:flex; align-items:stretch; background:#101216; border:1px solid #2a2f37; border-radius:9px; overflow:hidden;">
+        <button type="button" class="ds-step" data-step="${name}" data-dir="-1" aria-label="Decrease ${label}" style="width:34px; border:none; background:#171a20; color:#9aa0aa; font-size:17px; cursor:pointer;">−</button>
+        <input class="ds-num" id="ds-${name}" name="${name}" inputmode="numeric" value="${value}" data-min="${min}" data-max="${max}"${elig ? raw(' data-elig="1"') : raw("")} style="flex:1; min-width:0; background:none; border:none; color:#e6e8ec; text-align:center; font-weight:600; font-size:15px; outline:none;">
+        <button type="button" class="ds-step" data-step="${name}" data-dir="1" aria-label="Increase ${label}" style="width:34px; border:none; background:#171a20; color:#9aa0aa; font-size:16px; cursor:pointer;">+</button>
+      </div>
+      <div style="font-size:11px; color:#6b717c; margin-top:5px;">${hint}</div>
+    </div>
+  `;
+}
+
+/** A two-option segmented control backed by radio inputs. */
+function dsSegment(
+  name: string,
+  options: { id: string; value: string; label: string }[],
+  active: string,
+): RawHtml {
+  return html`
+    <div style="display:flex; background:#101216; border:1px solid #2a2f37; border-radius:9px; padding:3px;">
+      ${options.map(
+        (o) => html`<input id="${o.id}" class="ds-seg-input" type="radio" name="${name}" value="${o.value}"${o.value === active
+          ? raw(" checked")
+          : raw("")}><label class="ds-seg" for="${o.id}" style="flex:1;">${o.label}</label>`,
+      )}
+    </div>
+  `;
+}
+
+/** The pool panel body: headline, message histogram, and exclusion chips. */
+function dsPoolBody(pool: DesignerView["pool"]): RawHtml {
+  if (!pool.hasCandidates) {
+    return html`<div style="padding:20px 4px; font-size:13px; color:#8b93a0; text-align:center;">No members have counted activity in this window yet — there's nothing to size the pool against.</div>`;
+  }
+  const H = 80;
+  const th = Math.max(0, Math.min(100, pool.thresholdPct)).toFixed(1);
+  return html`
+    <div style="font-size:18px; color:#dfe2e7; letter-spacing:-.01em; margin-bottom:3px;">Opens to <span class="serif" style="font-weight:600; font-size:22px; color:var(--accent);">~${pool.eligible}</span> of ${pool.considered} active members.</div>
+    <div style="font-size:12.5px; color:#8b93a0; margin-bottom:16px;">${pool.pct}% of active members clear this bar.</div>
+    <div style="position:relative; height:${H}px; margin-bottom:6px;">
+      <div style="position:absolute; inset:0; display:flex; align-items:flex-end; gap:3px;">
+        ${pool.bins.map(
+          (b) => html`<div style="flex:1; height:${Math.max(
+            2,
+            Math.round((b.heightPct / 100) * (H - 6)),
+          )}px; background:${b.clears ? "var(--accent)" : "#363b44"}; border-radius:3px 3px 0 0; transform-origin:bottom; animation:barrise .4s ease;"></div>`,
+        )}
+      </div>
+      <div style="position:absolute; top:-2px; bottom:0; left:${th}%; width:2px; background:var(--accent); box-shadow:0 0 0 1px rgba(14,16,19,.6);"></div>
+      <div style="position:absolute; top:-9px; left:${th}%; transform:translateX(-50%); font-size:9px; font-weight:700; color:var(--accent); white-space:nowrap; background:#16181d; padding:0 4px; font-family:'JetBrains Mono',monospace;">${pool.reqMessages} msg</div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:9.5px; color:#585e68; font-family:'JetBrains Mono',monospace; margin-bottom:14px;"><span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50+</span></div>
+    <div style="font-size:10.5px; color:#585e68; text-align:center; margin-bottom:16px; margin-top:-8px;">members by messages sent in the activity window</div>
+    ${pool.reasons.length > 0
+      ? html`<div style="border-top:1px solid #23272e; padding-top:13px;"><div style="font-size:11px; color:#6b717c; margin-bottom:9px;">Why the rest are excluded</div><div style="display:flex; flex-wrap:wrap; gap:7px;">${pool.reasons.map(
+          (r) => html`<span style="display:inline-flex; align-items:center; gap:6px; background:#101216; border:1px solid #262a31; border-radius:20px; padding:5px 11px 5px 9px; font-size:12px; color:#a7adb7;"><span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:#dfe2e7;">${r.count}</span>${r.label}</span>`,
+        )}</div></div>`
+      : html`<div style="border-top:1px solid #23272e; padding-top:13px; font-size:12.5px; color:#8b93a0; display:flex; align-items:center; gap:8px;"><span style="color:var(--ok);">✓</span>Everyone active in the server meets these requirements.</div>`}
+  `;
+}
+
+/** The Discord-style announcement preview, with ids the client updates live. */
+function dsEmbed(brand: string, view: DesignerView): RawHtml {
+  return html`
+    <section>
+      <div style="font-size:12px; color:#8b93a0; margin:0 0 9px; display:flex; align-items:center; gap:7px;"><span style="font-weight:600; color:#c3c8d1;">Announcement</span><span>· how it appears in ${view.serverName}</span></div>
+      <div style="background:#313338; border-radius:14px; padding:14px 16px 16px; border:1px solid #232529;">
+        <div style="display:flex; gap:12px;">
+          <div style="flex:none; width:40px; height:40px; border-radius:50%; background:linear-gradient(155deg, var(--accent), var(--accent-2)); display:flex; align-items:center; justify-content:center; font-family:'Source Serif 4',serif; font-weight:600; font-size:19px; color:#0e1013;">${initial(
+            brand,
+          )}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
+              <span style="font-weight:600; font-size:15px; color:#f2f3f5;">${brand}</span>
+              <span style="background:var(--accent); color:#0e1013; font-size:9.5px; font-weight:700; letter-spacing:.03em; padding:1px 5px; border-radius:4px; text-transform:uppercase;">App</span>
+            </div>
+            <div style="background:#2b2d31; border-left:4px solid var(--accent); border-radius:4px 8px 8px 4px; padding:13px 16px 14px;">
+              <div id="dsp-title" class="serif" style="font-weight:600; font-size:17px; color:#6b717c; margin-bottom:7px; letter-spacing:-.01em;">Your raffle title</div>
+              <div id="dsp-desc-wrap" style="display:none; font-size:13.5px; color:#dbdee1; line-height:1.5; margin-bottom:13px; white-space:pre-wrap;"><span id="dsp-desc"></span></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:11px 16px; margin-bottom:13px;">
+                <div style="grid-column:1 / -1;"><div style="font-size:11.5px; font-weight:700; color:#f2f3f5; margin-bottom:2px;">🎟 Prize</div><div id="dsp-prize" style="font-size:13.5px; color:#dbdee1;">—</div></div>
+                <div><div style="font-size:11.5px; font-weight:700; color:#f2f3f5; margin-bottom:2px;">Opens</div><div id="dsp-start" style="font-size:13px; color:#dbdee1;">—</div></div>
+                <div><div style="font-size:11.5px; font-weight:700; color:#f2f3f5; margin-bottom:2px;">Closes</div><div id="dsp-end" style="font-size:13px; color:#dbdee1;">—</div></div>
+                <div><div style="font-size:11.5px; font-weight:700; color:#f2f3f5; margin-bottom:2px;">Hosted by</div><div style="font-size:13px; color:#dbdee1;">${view.moderator}</div></div>
+                <div><div style="font-size:11.5px; font-weight:700; color:#f2f3f5; margin-bottom:2px;">Entries</div><div style="font-size:13px; color:#dbdee1;">0</div></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px; padding-top:11px; border-top:1px solid #3a3d44;">
+                <span style="width:16px; height:16px; border-radius:4px; background:linear-gradient(155deg, var(--accent), var(--accent-2)); flex:none;"></span>
+                <span style="font-size:11.5px; color:#949ba4;">${brand} · <span id="dsp-elig">Active in the last ${view.defaults.reqDays} days.</span></span>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:9px;">
+              <span style="background:var(--accent); color:#0e1013; border-radius:8px; padding:9px 16px; font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:7px;">🎟 Enter Raffle</span>
+              <span style="background:#4e5058; color:#fff; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:600;">How it works</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+/** The designer data island: the guild's defaults, read by the client script. */
+function designerIsland(view: DesignerView): RawHtml {
+  const json = JSON.stringify({ defaults: view.defaults }).replace(/</g, "\\u003c");
+  return raw(`<script type="application/json" id="designer-data">${json}</script>`);
+}
+
+/**
+ * Progressive enhancement for the composer: live Discord-embed preview, a
+ * debounced eligible-pool refresh through /app/designer/pool (so tuning the bar
+ * never reloads and loses in-progress copy), the open-to-all / server-defaults
+ * interlocks, validity hints, and a localStorage draft so a refresh keeps work.
+ * The designer is an authoring tool, so unlike the verifier it assumes JS.
+ */
+const DESIGNER_SCRIPT = raw(`<script>
+(function(){
+  var root=document.getElementById('ds-root'); if(!root) return;
+  var defaults={}; try{ defaults=(JSON.parse(document.getElementById('designer-data').textContent)||{}).defaults||{}; }catch(e){}
+  var LSKEY='tombola.designer.'+(root.getAttribute('data-guild')||'x');
+  var $=function(id){ return document.getElementById(id); };
+  var ELIG=['req-messages','req-days','req-active-days','cooldown-days'];
+
+  function clampNum(el){
+    var v=parseInt(String(el.value).replace(/[^0-9]/g,''),10); if(isNaN(v)) v=0;
+    var mn=parseInt(el.getAttribute('data-min'),10), mx=parseInt(el.getAttribute('data-max'),10);
+    if(!isNaN(mn)) v=Math.max(mn,v); if(!isNaN(mx)) v=Math.min(mx,v);
+    return v;
+  }
+  function defForParam(n){
+    if(n==='req-messages') return defaults.reqMessages;
+    if(n==='req-days') return defaults.reqDays;
+    if(n==='req-active-days') return defaults.reqActiveDays;
+    if(n==='cooldown-days') return defaults.cooldownDays;
+    return null;
+  }
+
+  // ---- eligible-pool preview ----
+  var poolTimer=null;
+  function schedulePool(){ clearTimeout(poolTimer); poolTimer=setTimeout(refreshPool,260); }
+  function refreshPool(){
+    if($('ds-openall') && $('ds-openall').checked) return;
+    var p=new URLSearchParams();
+    ELIG.forEach(function(n){ var el=$('ds-'+n); if(el) p.set(n, String(clampNum(el))); });
+    fetch('/app/designer/pool?'+p.toString(),{headers:{'Accept':'application/json'}})
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(j){ if(j) renderPool(j); })
+      .catch(function(){});
+  }
+  function renderPool(pool){
+    var host=$('ds-pool'); if(!host) return;
+    if(!pool.hasCandidates){
+      host.innerHTML='<div style="padding:20px 4px; font-size:13px; color:#8b93a0; text-align:center;">No members have counted activity in this window yet.</div>';
+      return;
+    }
+    var H=80, bars='';
+    pool.bins.forEach(function(b){ var h=Math.max(2,Math.round((b.heightPct/100)*(H-6))); bars+='<div style="flex:1; height:'+h+'px; background:'+(b.clears?'var(--accent)':'#363b44')+'; border-radius:3px 3px 0 0;"></div>'; });
+    var reasons='';
+    if(pool.reasons.length){
+      var chips=''; pool.reasons.forEach(function(r){ chips+='<span style="display:inline-flex; align-items:center; gap:6px; background:#101216; border:1px solid #262a31; border-radius:20px; padding:5px 11px 5px 9px; font-size:12px; color:#a7adb7;"><span style="font-family:\\'JetBrains Mono\\',monospace; font-weight:600; color:#dfe2e7;">'+r.count+'</span>'+r.label+'</span>'; });
+      reasons='<div style="border-top:1px solid #23272e; padding-top:13px;"><div style="font-size:11px; color:#6b717c; margin-bottom:9px;">Why the rest are excluded</div><div style="display:flex; flex-wrap:wrap; gap:7px;">'+chips+'</div></div>';
+    } else {
+      reasons='<div style="border-top:1px solid #23272e; padding-top:13px; font-size:12.5px; color:#8b93a0; display:flex; align-items:center; gap:8px;"><span style="color:var(--ok);">\\u2713</span>Everyone active in the server meets these requirements.</div>';
+    }
+    var th=Math.max(0,Math.min(100,pool.thresholdPct)).toFixed(1);
+    host.innerHTML=
+      '<div style="font-size:18px; color:#dfe2e7; letter-spacing:-.01em; margin-bottom:3px;">Opens to <span class="serif" style="font-weight:600; font-size:22px; color:var(--accent);">~'+pool.eligible+'</span> of '+pool.considered+' active members.</div>'+
+      '<div style="font-size:12.5px; color:#8b93a0; margin-bottom:16px;">'+pool.pct+'% of active members clear this bar.</div>'+
+      '<div style="position:relative; height:'+H+'px; margin-bottom:6px;"><div style="position:absolute; inset:0; display:flex; align-items:flex-end; gap:3px;">'+bars+'</div>'+
+      '<div style="position:absolute; top:-2px; bottom:0; left:'+th+'%; width:2px; background:var(--accent); box-shadow:0 0 0 1px rgba(14,16,19,.6);"></div>'+
+      '<div style="position:absolute; top:-9px; left:'+th+'%; transform:translateX(-50%); font-size:9px; font-weight:700; color:var(--accent); white-space:nowrap; background:#16181d; padding:0 4px; font-family:\\'JetBrains Mono\\',monospace;">'+pool.reqMessages+' msg</div></div>'+
+      '<div style="display:flex; justify-content:space-between; font-size:9.5px; color:#585e68; font-family:\\'JetBrains Mono\\',monospace; margin-bottom:14px;"><span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50+</span></div>'+
+      '<div style="font-size:10.5px; color:#585e68; text-align:center; margin-bottom:16px; margin-top:-8px;">members by messages sent in the activity window</div>'+
+      reasons;
+  }
+
+  // ---- interlocks ----
+  function syncReqMode(){
+    var rm=root.querySelector('input[name=ds-reqmode]:checked');
+    var locked=!rm || rm.value==='defaults';
+    var box=$('ds-reqs'); if(box) box.setAttribute('data-locked', locked?'on':'off');
+    ELIG.forEach(function(n){ var el=$('ds-'+n); if(!el) return; el.disabled=locked; if(locked){ var dv=defForParam(n); if(dv!=null) el.value=String(dv); } });
+    var note=$('ds-defaults-note'); if(note) note.style.display=locked?'flex':'none';
+  }
+  function syncOpenAll(){
+    var on=$('ds-openall') && $('ds-openall').checked;
+    var wrap=$('ds-reqs-wrap'); if(wrap) wrap.style.display=on?'none':'';
+    var open=$('ds-pool-open'); if(open) open.style.display=on?'block':'none';
+    var pool=$('ds-pool'); if(pool) pool.style.display=on?'none':'';
+    if(!on) refreshPool();
+    syncEmbed();
+  }
+  function syncClaim(){ var row=$('ds-claim-row'); if(row) row.style.display=($('ds-claim')&&$('ds-claim').checked)?'flex':'none'; }
+
+  // ---- live embed + validity ----
+  function fmt(v){
+    if(!v) return null; var d=new Date(v); if(isNaN(d.getTime())) return null;
+    var dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    var mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    function p(n){ return (n<10?'0':'')+n; }
+    return dow+', '+mon+' '+d.getDate()+' · '+p(d.getHours())+':'+p(d.getMinutes());
+  }
+  function val(id){ var e=$(id); return e?e.value:''; }
+  function txt(id,v){ var e=$(id); if(e) e.textContent=v; }
+  function syncEmbed(){
+    var name=val('ds-name').trim();
+    var t=$('dsp-title'); if(t){ t.textContent=name||'Your raffle title'; t.style.color=name?'#f2f3f5':'#6b717c'; }
+    txt('dsp-prize', val('ds-prize').trim()||'—');
+    var desc=val('ds-desc'); var dw=$('dsp-desc-wrap');
+    if(dw){ if(desc.trim()){ txt('dsp-desc',desc); dw.style.display='block'; } else { dw.style.display='none'; } }
+    var s=fmt(val('ds-start')), e=fmt(val('ds-end'));
+    txt('dsp-start', s||'—'); txt('dsp-end', e||'—');
+    var on=$('ds-openall') && $('ds-openall').checked;
+    var rdEl=$('ds-req-days'); var rd=rdEl?clampNum(rdEl):defaults.reqDays;
+    txt('dsp-elig', on?'Open to everyone in this server.':('Active in the last '+rd+' days.'));
+    syncSchedule(); syncValidity();
+  }
+  function schedBad(){ var s=val('ds-start'), e=val('ds-end'); return !!(s&&e&&new Date(e).getTime()<=new Date(s).getTime()); }
+  function syncSchedule(){
+    var bad=schedBad(), s=val('ds-start'), e=val('ds-end');
+    var err=$('ds-sched-error'); if(err) err.style.display=bad?'flex':'none';
+    var ok=$('ds-sched-ok'); if(ok) ok.style.display=(!bad && s && e)?'flex':'none';
+  }
+  function syncValidity(){
+    var name=val('ds-name').trim(), prize=val('ds-prize').trim(), s=val('ds-start'), e=val('ds-end');
+    var reason='';
+    if(!name) reason='Add a raffle name to continue.';
+    else if(!prize) reason='Add a prize to continue.';
+    else if(!s || !e) reason='Set an opening and closing time.';
+    else if(schedBad()) reason='End time must be after the start.';
+    var ok=$('ds-status-ok'), bad=$('ds-status-bad');
+    if(ok) ok.style.display=reason?'none':'flex';
+    if(bad){ bad.style.display=reason?'flex':'none'; if(reason) txt('ds-status-reason',reason); }
+    var create=$('ds-create'); if(create) create.disabled=!!reason;
+  }
+
+  // ---- handoff (only when configured) ----
+  var handoff = root.getAttribute('data-handoff')==='on';
+  function chk(id){ var e=$(id); return !!(e&&e.checked); }
+  function intVal(id){ var e=$(id); return e?clampNum(e):0; }
+  function radioVal(name,dflt){ var e=root.querySelector('input[name='+name+']:checked'); return e?e.value:dflt; }
+  function collectSubmission(){
+    return {
+      name: val('ds-name'), prize: val('ds-prize'), description: (val('ds-desc').trim()||null),
+      start: val('ds-start'), end: val('ds-end'),
+      winnerCount: intVal('ds-winner-count'),
+      drawMode: radioVal('ds-drawmode','auto'),
+      isTest: chk('ds-test'),
+      claimWindowHours: chk('ds-claim') ? intVal('ds-claim-hours') : null,
+      openToAll: chk('ds-openall'), barPastWinners: chk('ds-barwin'),
+      reqMode: radioVal('ds-reqmode','defaults'),
+      reqMessages: intVal('ds-req-messages'), reqDays: intVal('ds-req-days'),
+      reqActiveDays: intVal('ds-req-active-days'), cooldownDays: intVal('ds-cooldown-days')
+    };
+  }
+  function showError(msg){ var e=$('ds-create-error'); if(e){ e.textContent=msg; e.style.display='flex'; } }
+  function showModal(token){ var t=$('ds-modal-token'); if(t) t.textContent=token; var m=$('ds-modal'); if(m) m.style.display='flex'; }
+  function closeModal(){ var m=$('ds-modal'); if(m) m.style.display='none'; }
+  function copyCmd(){
+    var token=($('ds-modal-token')||{}).textContent||''; var cmd='/raffle from-design '+token; var b=$('ds-modal-copy');
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(cmd).then(function(){ var o=b.textContent; b.textContent='Copied \\u2713'; setTimeout(function(){ b.textContent=o; },1600); },function(){}); }
+  }
+  function onCreate(){
+    var btn=$('ds-create'); if(!btn||btn.disabled) return;
+    var errEl=$('ds-create-error'); if(errEl) errEl.style.display='none';
+    var label=btn.innerHTML; btn.disabled=true; btn.textContent='Handing off…';
+    fetch('/app/designer/stage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectSubmission())})
+      .then(function(r){ return r.json().then(function(j){ return {status:r.status,body:j}; },function(){ return {status:r.status,body:{}}; }); })
+      .then(function(res){
+        btn.innerHTML=label; syncValidity();
+        if(res.status===200 && res.body && res.body.token){ showModal(res.body.token); }
+        else { showError(res.body && res.body.message ? res.body.message : "Couldn't hand off — please try again."); }
+      })
+      .catch(function(){ btn.innerHTML=label; syncValidity(); showError("Couldn't reach the server — please try again."); });
+  }
+  if(handoff){
+    if($('ds-create')) $('ds-create').addEventListener('click', onCreate);
+    if($('ds-modal-close')) $('ds-modal-close').addEventListener('click', closeModal);
+    if($('ds-modal-copy')) $('ds-modal-copy').addEventListener('click', copyCmd);
+    if($('ds-modal')) $('ds-modal').addEventListener('click', function(ev){ if(ev.target===$('ds-modal')) closeModal(); });
+  }
+
+  // ---- draft persistence ----
+  var FIELDS=['ds-name','ds-prize','ds-desc','ds-start','ds-end','ds-req-messages','ds-req-days','ds-req-active-days','ds-cooldown-days','ds-winner-count','ds-claim-hours'];
+  function save(){
+    try{
+      var o={}; FIELDS.forEach(function(id){ var e=$(id); if(e) o[id]=e.value; });
+      ['ds-openall','ds-barwin','ds-test','ds-claim'].forEach(function(id){ var e=$(id); if(e) o[id]=e.checked; });
+      var rm=root.querySelector('input[name=ds-reqmode]:checked'); if(rm) o.reqmode=rm.value;
+      var dm=root.querySelector('input[name=ds-drawmode]:checked'); if(dm) o.drawmode=dm.value;
+      localStorage.setItem(LSKEY, JSON.stringify(o));
+    }catch(e){}
+  }
+  function restore(){
+    var raw; try{ raw=localStorage.getItem(LSKEY); }catch(e){ return; } if(!raw) return;
+    var o; try{ o=JSON.parse(raw); }catch(e){ return; }
+    FIELDS.forEach(function(id){ if(o[id]!=null && $(id)) $(id).value=o[id]; });
+    ['ds-openall','ds-barwin','ds-test','ds-claim'].forEach(function(id){ if(o[id]!=null && $(id)) $(id).checked=!!o[id]; });
+    if(o.reqmode){ var r=$('ds-mode-'+(o.reqmode==='custom'?'cust':'def')); if(r) r.checked=true; }
+    if(o.drawmode){ var d=$('ds-draw-'+(o.drawmode==='manual'?'manual':'auto')); if(d) d.checked=true; }
+  }
+
+  // ---- wiring ----
+  root.addEventListener('click',function(ev){
+    var b=ev.target.closest ? ev.target.closest('.ds-step') : null; if(!b) return;
+    var el=$('ds-'+b.getAttribute('data-step')); if(!el || el.disabled) return;
+    var v=clampNum(el)+parseInt(b.getAttribute('data-dir'),10);
+    var mn=parseInt(el.getAttribute('data-min'),10), mx=parseInt(el.getAttribute('data-max'),10);
+    if(!isNaN(mn)) v=Math.max(mn,v); if(!isNaN(mx)) v=Math.min(mx,v);
+    el.value=String(v); onField(el);
+  });
+  function onField(el){ save(); if(el.getAttribute('data-elig')) schedulePool(); syncEmbed(); }
+  root.querySelectorAll('.ds-num').forEach(function(el){
+    el.addEventListener('input',function(){ save(); if(el.getAttribute('data-elig')) schedulePool(); syncEmbed(); });
+    el.addEventListener('change',function(){ el.value=String(clampNum(el)); onField(el); });
+  });
+  ['ds-name','ds-prize','ds-desc','ds-start','ds-end'].forEach(function(id){ var el=$(id); if(el) el.addEventListener('input',function(){ save(); syncEmbed(); }); });
+  if($('ds-openall')) $('ds-openall').addEventListener('change',function(){ save(); syncOpenAll(); });
+  if($('ds-claim')) $('ds-claim').addEventListener('change',function(){ save(); syncClaim(); });
+  ['ds-barwin','ds-test'].forEach(function(id){ var el=$(id); if(el) el.addEventListener('change',save); });
+  root.querySelectorAll('input[name=ds-reqmode]').forEach(function(el){ el.addEventListener('change',function(){ save(); syncReqMode(); schedulePool(); }); });
+  root.querySelectorAll('input[name=ds-drawmode]').forEach(function(el){ el.addEventListener('change',save); });
+
+  restore(); syncReqMode(); syncClaim(); syncOpenAll(); syncEmbed();
+})();
+</script>`);
+
+/** The raffle designer: compose a raffle with live embed + eligible-pool previews. */
+export function designerPage(
+  session: Session,
+  guild: SessionGuild,
+  view: DesignerView,
+  cards: PickerCard[],
+  handoffEnabled: boolean,
+): string {
+  const brand = resolveDisplayName({});
+  const d = view.defaults;
+  const minAgeNote =
+    d.minAccountAgeDays > 0
+      ? html`Minimum account age is a server-wide setting (${d.minAccountAgeDays} day${d.minAccountAgeDays === 1
+          ? ""
+          : "s"}). Change it with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle config set min-account-age-days</code>.`
+      : html`No minimum account age is set server-wide. Set one with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle config set min-account-age-days</code> if you want an anti-alt floor.`;
+
+  const eligibilityBody = html`
+    <div style="display:flex; flex-direction:column; gap:2px; margin-bottom:15px;">
+      ${dsToggle("ds-openall", "Open to everyone", "Skip all activity checks — anyone in the server can enter.", false)}
+      ${dsToggle("ds-barwin", "Bar past winners", "Exclude anyone who has already won a raffle here.", true)}
+    </div>
+    <div id="ds-reqs-wrap">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <span style="font-weight:600; font-size:13px; color:#c3c8d1;">Requirements</span>
+        ${dsSegment(
+          "ds-reqmode",
+          [
+            { id: "ds-mode-def", value: "defaults", label: "Server defaults" },
+            { id: "ds-mode-cust", value: "custom", label: "Custom" },
+          ],
+          "defaults",
+        )}
+      </div>
+      <div id="ds-reqs" class="ds-reqs" data-locked="on" style="display:grid; grid-template-columns:1fr 1fr; gap:13px;">
+        ${dsStepper("req-messages", "Messages required", "messages", "in the activity window", d.reqMessages, 0, 500, true)}
+        ${dsStepper("req-days", "Activity window", "days", "how far back we look", d.reqDays, 1, 90, true)}
+        ${dsStepper("req-active-days", "Distinct active days", "days", "days with ≥1 message", d.reqActiveDays, 0, 30, true)}
+        ${dsStepper("cooldown-days", "Win cooldown", "days", "since their last win", d.cooldownDays, 0, 365, true)}
+      </div>
+      <div id="ds-defaults-note" style="display:flex; align-items:center; gap:8px; margin-top:11px; font-size:12px; color:#6b717c;"><span style="color:var(--accent); font-size:12px;">🔒</span>These come from this server's saved defaults. Switch to Custom to override them for this raffle.</div>
+      <div style="display:flex; align-items:flex-start; gap:8px; margin-top:9px; font-size:12px; color:#6b717c;"><span style="color:#585e68; font-size:12px;">ℹ</span><span>${minAgeNote}</span></div>
+    </div>
+  `;
+
+  const drawBody = html`
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:13px; align-items:start;">
+      ${dsStepper("winner-count", "Number of winners", "winners", "", view.initialWinnerCount, 1, 50, false)}
+      <div>
+        <label style="display:block; font-weight:600; font-size:13px; color:#c3c8d1; margin:0 0 6px;">Draw mode</label>
+        ${dsSegment(
+          "ds-drawmode",
+          [
+            { id: "ds-draw-auto", value: "auto", label: "Auto at close" },
+            { id: "ds-draw-manual", value: "manual", label: "Manual" },
+          ],
+          view.initialDrawMode,
+        )}
+      </div>
+    </div>
+    <div style="margin-top:15px;">
+      ${dsToggle("ds-test", "Test raffle", "Badged and prize-free — for a dry run. Eligibility is unaffected.", false)}
+    </div>
+    <div style="margin-top:13px;">
+      ${dsToggle("ds-claim", "Claim window", "Winners must claim in time or the prize is re-drawn.", view.initialClaimHours !== null)}
+      <div id="ds-claim-row" style="display:none; align-items:center; gap:10px; margin-top:10px; padding-left:2px;">
+        <span style="font-size:13px; color:#a7adb7;">Winners have</span>
+        <div style="width:150px;">${dsStepper("claim-hours", "", "hours", "", view.initialClaimHours ?? 24, 1, 336, false)}</div>
+        <span style="font-size:13px; color:#a7adb7;">hours to claim</span>
+      </div>
+    </div>
+  `;
+
+  const noChannelBanner = view.hasAnnounceChannel
+    ? html``
+    : html`
+        <div style="display:flex; align-items:center; gap:13px; background:rgba(212,162,76,.07); border:1px solid rgba(212,162,76,.26); border-radius:13px; padding:13px 15px; margin-bottom:14px;">
+          <span style="flex:none; width:30px; height:30px; border-radius:9px; background:rgba(212,162,76,.14); color:var(--warn); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700;">!</span>
+          <div style="flex:1; min-width:0;"><div style="font-size:13.5px; font-weight:600; color:#e8dcc4;">No announce channel is set</div><div style="font-size:12.5px; color:#a99a7d; margin-top:1px;">A raffle has nowhere to post until you set one in Discord with <code style="font-family:'JetBrains Mono',monospace;">/raffle config set announce-channel</code>.</div></div>
+        </div>
+      `;
+
+  // The create bar goes live only when the handoff is configured; otherwise it
+  // stays an honest preview-sandbox affordance (Phase A behaviour).
+  const statusBlock = html`
+    <div style="min-width:0;">
+      <div id="ds-status-ok" style="display:none; font-size:12.5px; color:#8b93a0; align-items:center; gap:7px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>${handoffEnabled
+        ? "Ready — you'll get a code to run in Discord."
+        : "Ready — the Discord hand-off arrives in the next update."}</div>
+      <div id="ds-status-bad" style="display:flex; font-size:12.5px; color:var(--danger); align-items:center; gap:7px;"><span style="width:15px; height:15px; border-radius:50%; border:1.5px solid var(--danger); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">!</span><span id="ds-status-reason">Add a raffle name to continue.</span></div>
+      ${handoffEnabled
+        ? html`<div id="ds-create-error" style="display:none; font-size:12.5px; color:var(--danger); align-items:center; gap:7px; margin-top:4px;"></div>`
+        : ""}
+    </div>
+  `;
+  const createBar = handoffEnabled
+    ? html`
+        <div style="margin-top:6px; background:#14171d; border:1px solid #262a31; border-radius:14px; padding:13px 15px; display:flex; align-items:center; justify-content:space-between; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
+          ${statusBlock}
+          <button type="button" id="ds-create" class="hovbtn" disabled style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; cursor:pointer;"><span style="font-size:14px;">↗</span>Create in Discord</button>
+        </div>
+        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">When you're happy, this stages the raffle and hands you a one-time code to run in ${guild.name} with <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code>. Nothing is published until you confirm there. Your work is kept in this browser.</p>
+      `
+    : html`
+        <div style="margin-top:6px; background:#14171d; border:1px solid #262a31; border-radius:14px; padding:13px 15px; display:flex; align-items:center; justify-content:space-between; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
+          ${statusBlock}
+          <button type="button" disabled title="Publishing to Discord arrives in the next update" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; opacity:.5; cursor:not-allowed;"><span style="font-size:14px;">↗</span>Create in Discord</button>
+        </div>
+        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">This is a live preview sandbox. Handing off to Discord — staging the raffle as a pending spec you confirm in-server with <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code> — lands in the next update. Your work is kept in this browser.</p>
+      `;
+
+  const handoffModal = handoffEnabled
+    ? html`
+        <div id="ds-modal" style="display:none; position:fixed; inset:0; z-index:40; background:rgba(6,7,9,.66); align-items:center; justify-content:center; padding:24px;">
+          <div style="width:472px; max-width:100%; background:#16181d; border:1px solid #2a2f37; border-radius:18px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.6);">
+            <div style="height:8px; background:linear-gradient(155deg, var(--accent), var(--accent-2));"></div>
+            <div style="padding:24px 26px 26px;">
+              <div style="display:flex; align-items:center; gap:9px; margin-bottom:6px;">
+                <span style="width:26px; height:26px; border-radius:8px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; color:var(--accent); font-size:14px;">↗</span>
+                <h2 class="serif" style="font-weight:600; font-size:20px; margin:0; letter-spacing:-.01em;">One step left — run this in Discord</h2>
+              </div>
+              <p style="font-size:13.5px; color:#a7adb7; line-height:1.55; margin:0 0 18px;">Run this command in <span style="color:#dfe2e7; font-weight:600;">${guild.name}</span>. ${brand} will show you a summary and ask you to confirm before the raffle is created — <span style="color:#dfe2e7;">nothing is published from here.</span></p>
+              <div style="background:#0c0e11; border:1px solid #262a31; border-radius:12px; padding:16px 18px; margin-bottom:12px;">
+                <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:9px;">Your command</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                  <code style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:#e6e8ec; overflow-x:auto; white-space:nowrap;"><span style="color:var(--accent);">/raffle from-design</span> <span id="ds-modal-token">…</span></code>
+                  <button type="button" id="ds-modal-copy" style="flex:none; background:var(--accent); color:#0e1013; border:none; border-radius:9px; padding:8px 13px; font-size:12.5px; font-weight:700; cursor:pointer;">Copy</button>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:7px; font-size:11.5px; color:#6b717c; margin-bottom:20px;"><span style="font-size:12px;">◷</span>This code expires in 24h · single use · tied to your moderator account</div>
+              <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" id="ds-modal-close" class="hovbtn" style="background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; cursor:pointer;">Done</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+    : html``;
+
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "designer")}
+    <div id="ds-root" data-guild="${guild.id}" data-handoff="${handoffEnabled ? "on" : "off"}" style="max-width:1380px; margin:0 auto; padding:26px 24px 96px;">
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><span>New raffle</span></div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+          <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0 0 4px;">Raffle Designer</h1>
+          <p style="margin:0; font-size:14px; color:#8b93a0; max-width:60ch;">Build the whole raffle on one screen. Everything you set is mirrored in the previews on the right — what you see is what your members will get.</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; flex:none; font-size:11.5px; color:#6b717c; background:#16181d; border:1px solid #23272e; border-radius:20px; padding:6px 12px 6px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Preview sandbox · nothing is published yet</div>
+      </div>
+
+      <div class="ds-grid" style="display:grid; grid-template-columns:1fr 500px; gap:26px; align-items:start;">
+        <main style="min-width:0; display:flex; flex-direction:column; gap:14px;">
+          ${noChannelBanner}
+          ${dsSection(
+            "Basics",
+            "name · prize · description",
+            html`<div style="display:flex; flex-direction:column; gap:14px;">
+              ${dsText("ds-name", "Name", "Summer Vinyl Giveaway")}
+              ${dsText("ds-prize", "Prize", "A record of your choice")}
+              <div>
+                <label for="ds-desc" style="display:block; font-weight:600; font-size:13px; color:#c3c8d1; margin:0 0 6px;">Description <span style="color:#585e68; font-weight:400;">· markdown supported</span></label>
+                <textarea id="ds-desc" rows="3" placeholder="A short note that appears in the announcement…" style="width:100%; background:#101216; border:1px solid #2a2f37; border-radius:9px; color:#e6e8ec; padding:10px 12px; font-size:14px; line-height:1.5; outline:none; resize:vertical;"></textarea>
+              </div>
+            </div>`,
+          )}
+          ${dsSection(
+            "Schedule",
+            view.timezone,
+            html`
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <div>
+                  <label for="ds-start" style="display:block; font-weight:600; font-size:13px; color:#c3c8d1; margin:0 0 6px;">Opens</label>
+                  <input id="ds-start" type="datetime-local" style="width:100%; background:#101216; border:1px solid #2a2f37; color:#e6e8ec; border-radius:9px; padding:9px 11px; font-size:13.5px; outline:none; color-scheme:dark;">
+                </div>
+                <div>
+                  <label for="ds-end" style="display:block; font-weight:600; font-size:13px; color:#c3c8d1; margin:0 0 6px;">Closes</label>
+                  <input id="ds-end" type="datetime-local" style="width:100%; background:#101216; border:1px solid #2a2f37; color:#e6e8ec; border-radius:9px; padding:9px 11px; font-size:13.5px; outline:none; color-scheme:dark;">
+                </div>
+              </div>
+              <div id="ds-sched-error" style="display:none; align-items:center; gap:7px; margin-top:9px; font-size:12.5px; color:var(--danger);"><span style="width:15px; height:15px; border-radius:50%; border:1.5px solid var(--danger); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">!</span>End is before start — members would never be able to enter.</div>
+              <div id="ds-sched-ok" style="display:none; align-items:center; gap:8px; margin-top:11px; padding:9px 12px; background:#101216; border:1px solid #23272e; border-radius:9px; font-size:12.5px; color:#a7adb7;"><span style="color:var(--accent); font-size:13px;">◷</span>Times are read in the server timezone.</div>
+              <p style="margin:9px 0 0; font-size:11.5px; color:#6b717c;">Shown in the server timezone · ${view.timezone}</p>
+            `,
+          )}
+          ${dsSection("Eligibility", "who can enter", eligibilityBody)}
+          ${dsSection("Draw", "how winners are picked", drawBody)}
+          ${createBar}
+        </main>
+
+        <aside class="ds-aside" style="flex:none; max-width:500px; display:flex; flex-direction:column; gap:16px; position:sticky; top:82px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#6b717c; font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px rgba(70,184,119,.18);"></span>Live preview</div>
+          ${dsEmbed(brand, view)}
+          <section style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:16px 18px 18px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <span style="font-weight:700; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">Eligible pool</span>
+              <span style="font-size:11px; color:#6b717c;">activity-bar preview</span>
+            </div>
+            <div id="ds-pool">${dsPoolBody(view.pool)}</div>
+            <div id="ds-pool-open" style="display:none; padding:14px; background:#101216; border:1px dashed #2f3540; border-radius:10px; font-size:13px; color:#8b93a0; text-align:center;">No activity requirements — every member in the server can enter.</div>
+          </section>
+        </aside>
+      </div>
+    </div>
+    ${handoffModal}
+    ${designerIsland(view)}
+    ${DESIGNER_SCRIPT}
+  `;
+  return shell("Raffle Designer — Moderator Dashboard", body);
 }
 
 // ---------------------------------------------------------------------------

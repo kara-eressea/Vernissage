@@ -12,13 +12,17 @@ import {
   MessageFlags,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  type MessageComponentInteraction,
 } from "discord.js";
 import type { Database } from "better-sqlite3";
 import { isModerator } from "../../core/permissions.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 
+/** An interaction we can read a member's moderator standing from. */
+type ModeratableInteraction = ChatInputCommandInteraction | MessageComponentInteraction;
+
 /** Role ids the invoking member holds, across both member shapes discord.js hands us. */
-export function memberRoleIds(interaction: ChatInputCommandInteraction): string[] {
+export function memberRoleIds(interaction: ModeratableInteraction): string[] {
   const member = interaction.member;
   if (!member) {
     return [];
@@ -32,7 +36,7 @@ export function memberRoleIds(interaction: ChatInputCommandInteraction): string[
 
 /** Whether the interaction's member passes the moderator gate for this guild. */
 export function isModeratorInteraction(
-  interaction: ChatInputCommandInteraction,
+  interaction: ModeratableInteraction,
   modRole: string | null,
 ): boolean {
   return isModerator({

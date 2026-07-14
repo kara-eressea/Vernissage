@@ -99,6 +99,22 @@ The reason is logged.
 /raffle cancel raffle:42 reason:"Prize fell through"
 ```
 
+### `/raffle from-design <token>`
+Create a raffle from a code produced by the moderator **dashboard's Raffle
+Designer**. Compose the raffle visually on the web, click "Create in Discord", and
+the dashboard hands you a short code (e.g. `gentle-harbor-4821`). Running the
+command shows a summary and a **Confirm** button; only on confirm is the raffle
+created and scheduled — exactly as if you'd built it in the wizard. Nothing is
+published until you confirm.
+
+The code is single-use, expires after 24 hours, and only the moderator who
+composed it can redeem it (see design.md "Raffle Designer handoff"). This command
+appears only when the handoff is enabled on the deployment.
+
+```
+/raffle from-design token:gentle-harbor-4821
+```
+
 ### `/raffle draw <raffle>`
 Draw a closed raffle now. Needed for raffles set to manual draw, or to force one
 that has not auto-drawn yet. Idempotent — an already-drawn raffle reports so. The

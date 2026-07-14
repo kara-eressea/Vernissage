@@ -254,6 +254,46 @@ richer previews than Discord can offer, then hands the finished thing back to
 Discord to create. It is the most human-friendly way to build a raffle: a visual
 composer instead of a multi-step wizard, with everything visible at once.
 
+### What shipped (Phase A: composer + previews)
+
+The read-only half is built (`/app/designer`, `src/web/designer.ts` +
+`designerPage`): the four-section composer (Basics, Schedule, Eligibility, Draw),
+the live Discord-embed preview, and the live eligible-pool preview. The pool
+preview reuses `simulateEligiblePool` verbatim via a JSON endpoint
+(`/app/designer/pool`), so tuning the bar updates the histogram without a reload
+(which would wipe the in-progress name/prize/schedule) and can never drift from
+the real gate. Honest adaptations to how the bot actually stores a raffle:
+
+- **Minimum account age is shown read-only**, not as a per-raffle dial — it is a
+  server-wide default (`default_min_account_age_days`), so it can't be overridden
+  per raffle. It is still fed into the pool math.
+- **Description is a plain markdown textarea** (the bot stores a plain string;
+  Discord renders the markdown). The mock's formatting toolbar was decorative.
+- **"Save draft" is client-side** (`localStorage` autosave), because the web tier
+  never writes; a refresh keeps the work, but nothing is persisted server-side.
+- **Role gating** (`required_role_id`/`excluded_role_id`) is omitted in Phase A;
+  the composer has no member/role data to populate a picker. Follow-up.
+- A **Test-raffle toggle** (`is_test`) is included, which the wizard has and the
+  mock lacked.
+- The designer **assumes JavaScript** — it is an authoring tool, not a public
+  trust surface like the verifier, so there is no no-JS fallback.
+
+### What shipped (Phase B: the claim-token handoff)
+
+The write-path half is built. "Create in Discord" POSTs the composed raffle to
+`POST /app/designer/stage`, which forwards it (with the moderator + guild identity
+from the session, under the shared secret) to the bot's authenticated handoff
+listener (`src/handoff/server.ts`) — the web tier still writes nothing. The bot
+re-validates via the shared `buildPendingSpec`/`validateDraft`, stages it in
+`pending_raffles` under a friendly token (`src/core/friendlyToken.ts`), and audits
+`pending_raffle_staged`. The dashboard shows the token in a modal; the moderator
+runs `/raffle from-design <token>`, and the Confirm button redeems it through the
+shared `confirmAndSchedule` seam (`src/discord/raffleScheduling.ts`) that the
+creation wizard's Confirm also uses. Enabled only when `DESIGNER_HANDOFF_SECRET`
+is set on both processes; otherwise the button stays the Phase-A preview sandbox
+and the bot opens no inbound socket. Full details in design.md "Raffle Designer
+handoff".
+
 ### The previews are the point
 
 Because the entry-card formatter and the eligibility check are already pure
@@ -292,17 +332,22 @@ command:
    stage the composed settings as a *pending raffle spec*, keyed by a short,
    unguessable, single-use token.
 3. The dashboard shows a tiny command to run in the server, e.g.
-   `/raffle create-from a7f3k9`.
+   `/raffle from-design gentle-harbor-4821`.
 4. The bot, on that command, **re-authorizes** (is the caller a moderator in this
    guild?), **re-validates** the spec through the same wizard validation,
    **shows a confirmation summary** ("You're about to create *Summer Vinyl*,
    prize *A record*, opens *Fri 18:00*, eligible ~48 members — confirm?"), and
    only then creates the raffle and writes the audit row.
 
-The token is a random single-use credential — **not** a hash of the settings (a
-content hash would be guessable and collision-prone). It expires (say 24h), is
-scoped to the guild and the composing moderator, and is consumed on redemption,
-so a stale or leaked token cannot quietly create a raffle.
+The token is a single-use credential — **not** a hash of the settings (a content
+hash would be guessable and collision-prone). It is rendered as a **friendly
+phrase** (`adjective-noun-NNNN`, e.g. `gentle-harbor-4821`) so it reads
+aloud and pastes cleanly; its entropy is only a light backstop, because the real
+security is that you must be a moderator of *that* guild to *see* the token in the
+dashboard and a moderator of that guild to *redeem* it in Discord. It expires
+(24h), is scoped to the guild and bound to the composing moderator (only they can
+redeem it), and is consumed on redemption, so a stale, leaked, or already-used
+token cannot quietly create a raffle.
 
 ### Why this stays faithful to the principles
 
@@ -327,7 +372,7 @@ carefully contained:
 ### The honest cost
 
 This is more moving parts than the simulator: a `pending_raffle` table, an
-authenticated bot endpoint, a new `/raffle create-from` command, token
+authenticated bot endpoint, a new `/raffle from-design` command, token
 lifecycle/pruning, and the redemption confirmation UX. The lighter alternative —
 a Designer that only *previews* and then prefills `/raffle create name: prize:`,
 leaving the rest to the wizard — keeps the dashboard purely read-only but makes
@@ -458,10 +503,12 @@ conscious decision, not a side effect of wanting nicer charts.
    high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
    data we already keep.
-5. **Raffle Designer.** The one feature that reaches past read-only, so it comes
-   after the read-only surface has proven itself: the visual composer with live
-   entry-card and eligible-pool previews, plus the claim-token handoff (staging
-   table, bot endpoint, `/raffle create-from`, redemption confirmation).
+5. **Raffle Designer.** ✅ *Built* (`/app/designer`). The one feature that reaches
+   past read-only, built after the read-only surface proved itself. Phase A: the
+   visual composer with live entry-card and eligible-pool previews (read-only).
+   Phase B: the claim-token handoff (staging table, bot endpoint,
+   `/raffle from-design`, redemption confirmation), enabled by
+   `DESIGNER_HANDOFF_SECRET`.
 6. **Tier-2 member fetch** (role/tenure fidelity, per-draft dry-run) and **audit
    export**, if and when they earn their keep.
 
