@@ -1,151 +1,73 @@
 /**
  * Server-rendered pages for the dashboard auth shell.
  *
- * Deliberately plain, structural HTML: this is the plumbing (sequencing step 1
- * in docs/dashboard.md), so the markup is honest scaffolding a visual design can
- * later replace, not a finished look. Every page shares one dark-first layout so
- * the chrome (name, server switcher, nav) is defined once. All dynamic values go
- * through the escaping `html` tag.
+ * These implement the visual design from the Claude Design project
+ * "Discord Raffle Moderator Dashboard" (HomeOverview.dc.html): a dark,
+ * trust-forward look with a per-guild brand mark, a server switcher, and the
+ * home overview (live raffles, the eligible pool, recent-activity spark, and
+ * config-health banners). The design's demo state-switcher is intentionally
+ * omitted; its states map onto real routes and data instead — login and the
+ * picker are their own routes, and the home's ready/empty states are driven by
+ * whether the guild has live raffles.
+ *
+ * All dynamic values go through the escaping `html` tag. Presentation is derived
+ * upstream in home.ts; this file is markup and light formatting only.
  */
 
 import { html, raw, type RawHtml } from "./html.js";
-import type { HomeView } from "./home.js";
+import type { HomeView, PickerCard } from "./home.js";
 import { resolveDisplayName } from "./naming.js";
 import type { Session, SessionGuild } from "./session.js";
 
-/** Format a UTC ISO timestamp as a compact, readable UTC string for the web. */
-function formatUtc(iso: string | null): string {
-  if (!iso) return "—";
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(ms)) + " UTC";
-}
+/** The one accent theme (the design's teal default), exposed as CSS variables. */
+const THEME = {
+  accent: "#3fb6a8",
+  accent2: "#54cabb",
+  accentSoft: "rgba(63,182,168,0.16)",
+  ok: "#46b877",
+  danger: "#e5687a",
+  warn: "#d4a24c",
+};
 
-/** A small letter-badge fallback when a guild has no icon. */
-function guildBadge(guild: SessionGuild): RawHtml {
-  if (guild.icon) {
-    const src = `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64`;
-    return html`<img class="badge" src="${src}" alt="" width="28" height="28" />`;
-  }
-  const letter = (guild.name.trim()[0] ?? "?").toUpperCase();
-  return html`<span class="badge badge-letter">${letter}</span>`;
-}
+const FONTS_HREF =
+  "https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&display=swap";
 
-const STYLES = raw(`
-  :root {
-    color-scheme: dark;
-    --bg: #0f1115; --panel: #181b22; --panel-2: #1f232c; --border: #2a2f3a;
-    --text: #e6e8ec; --muted: #9aa1ad; --accent: #5865f2; --good: #3ba55d;
-    --warn: #d9822b; --radius: 10px;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  }
-  a { color: inherit; }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 20px 64px; }
-  header.chrome {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
-  }
-  header.chrome .name { font-weight: 700; font-size: 18px; margin-right: auto; }
-  header.chrome nav { display: flex; gap: 4px; flex-wrap: wrap; }
-  header.chrome nav a {
-    text-decoration: none; color: var(--muted); padding: 6px 10px;
-    border-radius: 8px; font-size: 14px;
-  }
-  header.chrome nav a[aria-current="page"], header.chrome nav a:hover {
-    color: var(--text); background: var(--panel-2);
-  }
-  .switcher { display: flex; align-items: center; gap: 8px; }
-  .switcher select {
-    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 8px; font: inherit;
-  }
-  .badge { border-radius: 6px; vertical-align: middle; }
-  .badge-letter {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; background: var(--accent); color: #fff;
-    font-weight: 700; font-size: 14px;
-  }
-  h1 { font-size: 22px; margin: 24px 0 4px; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em;
-       color: var(--muted); margin: 32px 0 12px; }
-  .panel { background: var(--panel); border: 1px solid var(--border);
-           border-radius: var(--radius); padding: 16px; }
-  .grid { display: grid; gap: 12px; }
-  .stat { font-size: 34px; font-weight: 700; }
-  .stat .of { color: var(--muted); font-weight: 400; font-size: 18px; }
-  .muted { color: var(--muted); }
-  .card { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
-  .card + .card { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
-  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px;
-          background: var(--panel-2); color: var(--muted); }
-  .warn { border-left: 3px solid var(--warn); padding: 10px 14px; background: var(--panel-2);
-          border-radius: 6px; margin-bottom: 8px; }
-  .btn {
-    display: inline-block; text-decoration: none; background: var(--accent); color: #fff;
-    padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;
-  }
-  .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-  .spark { display: flex; align-items: flex-end; gap: 3px; height: 64px; }
-  .spark .bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
-  .login { max-width: 420px; margin: 12vh auto; text-align: center; }
-  .login p { color: var(--muted); }
-  .picker-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
-  .picker-row + .picker-row { border-top: 1px solid var(--border); }
-  footer { color: var(--muted); font-size: 13px; margin-top: 48px; }
-`);
+const BASE_CSS = `
+*{box-sizing:border-box}
+body{margin:0;background:#0e1013}
+a{color:#98a0ff;text-decoration:none}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+.dd-panel{animation:fadeup .14s ease}
+.root{min-height:100vh;background:radial-gradient(1200px 620px at 78% -10%,#14171d 0%,#0e1013 62%);color:#e6e8ec;font-family:'Source Sans 3',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.serif{font-family:'Source Serif 4',serif}
+.hovcard:hover{border-color:#343a44 !important;background:#191c22 !important}
+.hovrow:hover{background:#1c2027 !important}
+.hovnav:hover{color:#c3c8d1 !important}
+.hovbtn:hover{background:var(--accent-2) !important;color:#0e1013 !important}
+.hovout:hover{border-color:#343a44 !important;color:#c3c8d1 !important}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes barrise{from{transform:scaleY(.3);opacity:.4}to{transform:none;opacity:1}}
+@media (max-width:820px){.home-grid{grid-template-columns:1fr !important}}
+`;
 
-/** Options for the shared page frame. */
-interface LayoutOptions {
-  title: string;
-  /** The signed-in session, when there is one (drives the account chrome). */
-  session?: Session;
-  /** The selected guild, when inside one (drives name + nav + switcher). */
-  guild?: SessionGuild;
-  /** Which nav item is current, if any. */
-  current?: "home";
-  body: RawHtml;
-}
-
-/** The one shared page frame. Guild-less pages omit the nav and switcher. */
-function layout(opts: LayoutOptions): string {
-  const displayName = resolveDisplayName(opts.guild ? {} : null);
-  const inGuild = Boolean(opts.guild);
-  const chrome = inGuild
-    ? html`
-        <header class="chrome">
-          <span class="name">${displayName}</span>
-          <nav>
-            <a href="/app" ${opts.current === "home" ? raw('aria-current="page"') : ""}>Home</a>
-          </nav>
-          ${renderSwitcher(opts.session, opts.guild)}
-          <a class="pill" href="/logout">Sign out</a>
-        </header>
-      `
-    : html``;
-
+/** Wrap page content in the full HTML document, fonts, and accent variables. */
+function shell(title: string, body: RawHtml): string {
   return `<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeTitle(opts.title)}</title>
-  <style>${STYLES.value}</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeTitle(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="${FONTS_HREF}" rel="stylesheet">
+<style>${BASE_CSS}</style>
 </head>
 <body>
-  ${chrome.value}
-  <div class="wrap">${opts.body.value}</div>
+<div class="root" style="--accent:${THEME.accent}; --accent-2:${THEME.accent2}; --accent-soft:${THEME.accentSoft}; --ok:${THEME.ok}; --danger:${THEME.danger}; --warn:${THEME.warn};">
+${body.value}
+</div>
 </body>
 </html>`;
 }
@@ -154,141 +76,449 @@ function escapeTitle(title: string): string {
   return title.replace(/[<>&]/g, (c) => (c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;"));
 }
 
-/** The persistent server switcher, shown only when the session has >1 guild. */
-function renderSwitcher(session: Session | undefined, guild: SessionGuild | undefined): RawHtml {
-  if (!session || !guild || session.guilds.length < 2) {
-    return html``;
+// ---------------------------------------------------------------------------
+// Small presentation helpers
+// ---------------------------------------------------------------------------
+
+const GUILD_COLORS = ["#c98b52", "#7c86f2", "#54a6d4", "#46b877", "#d4a24c", "#c85e8a", "#4fb6a8"];
+
+/** A stable avatar colour for a guild with no icon, derived from its id. */
+function guildColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return GUILD_COLORS[h % GUILD_COLORS.length]!;
+}
+
+/** First letter of a name, uppercased (avatar fallback). */
+function initial(name: string): string {
+  return (name.trim()[0] ?? "?").toUpperCase();
+}
+
+/** Up to two initials from a display name (moderator avatar). */
+function modInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const ini = parts.map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  return ini || "?";
+}
+
+/** A guild avatar: the real Discord icon when present, else a coloured initial. */
+function guildAvatar(guild: SessionGuild, size: number, radius: number, font: number): RawHtml {
+  if (guild.icon) {
+    const src = `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64`;
+    return html`<img src="${src}" alt="" width="${size}" height="${size}" style="flex:none; border-radius:${radius}px; object-fit:cover;" />`;
   }
+  return html`<span style="flex:none; width:${size}px; height:${size}px; border-radius:${radius}px; background:${guildColor(
+    guild.id,
+  )}; display:flex; align-items:center; justify-content:center; font-family:'Source Serif 4',serif; font-weight:600; font-size:${font}px; color:#0e1013;">${initial(
+    guild.name,
+  )}</span>`;
+}
+
+/** The moderator's initials avatar. */
+function modAvatar(name: string): RawHtml {
+  return html`<div style="flex:none; width:30px; height:30px; border-radius:50%; background:#2a2f37; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#c3c8d1;">${modInitials(
+    name,
+  )}</div>`;
+}
+
+/** The name + subtitle + avatar block on the right of the chrome. */
+function modBlock(name: string, subtitle: string): RawHtml {
   return html`
-    <form class="switcher" method="get" action="/app/select">
-      ${guildBadge(guild)}
-      <select name="guild" onchange="this.form.submit()">
-        ${session.guilds.map(
-          (g) =>
-            html`<option value="${g.id}" ${g.id === guild.id ? raw("selected") : ""}>${g.name}</option>`,
-        )}
-      </select>
-      <noscript><button class="btn secondary" type="submit">Go</button></noscript>
-    </form>
+    <div style="display:flex; align-items:center; gap:9px;">
+      <div style="text-align:right; line-height:1.15;">
+        <div style="font-size:12px; font-weight:600;">${name}</div>
+        <div style="font-size:10.5px; color:#6b717c;">${subtitle}</div>
+      </div>
+      ${modAvatar(name)}
+    </div>
   `;
 }
+
+/** The small ticket brand mark used in the chrome. */
+function headerMark(): RawHtml {
+  return html`<div style="position:relative; width:30px; height:30px; border-radius:9px; background:linear-gradient(155deg, var(--accent), var(--accent-2)); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 10px var(--accent-soft);">
+    <div style="position:relative; width:15px; height:10px; border-radius:2.5px; background:#0e1013;"><div style="position:absolute; top:2px; bottom:2px; left:50%; border-left:1.5px dashed rgba(255,255,255,.3);"></div></div>
+  </div>`;
+}
+
+/** Compact UTC date label, e.g. "Jul 12, 18:00". */
+function dateLabel(iso: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "—";
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(ms)) + " UTC"
+  );
+}
+
+/** Map the raw draw mode to a friendly label and icon. */
+function drawMode(mode: string): { label: string; icon: string } {
+  if (mode === "manual") return { label: "Manual", icon: "✋" };
+  if (mode === "auto") return { label: "Auto at close", icon: "◷" };
+  return { label: mode, icon: "◷" };
+}
+
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
 
 /** The unauthenticated front door. Names no bot; one action. */
 export function loginPage(): string {
   const body = html`
-    <div class="login">
-      <h1>Moderator Dashboard</h1>
-      <p>Moderators only — you'll only see servers you help run.</p>
-      <p style="margin-top:28px"><a class="btn" href="/login">Sign in with Discord</a></p>
+    <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden;">
+      <div style="position:absolute; top:0; left:0; right:0; height:5px; background:repeating-linear-gradient(90deg, #1a1d23 0 9px, transparent 9px 18px); opacity:.7;"></div>
+      <div style="width:100%; max-width:406px; display:flex; flex-direction:column; align-items:center; text-align:center; animation:fadeup .5s ease;">
+        <div style="position:relative; width:64px; height:64px; border-radius:18px; background:linear-gradient(155deg, var(--accent), var(--accent-2)); display:flex; align-items:center; justify-content:center; box-shadow:0 14px 38px var(--accent-soft); margin-bottom:26px;">
+          <div style="position:relative; width:32px; height:21px; border-radius:5px; background:#0e1013;">
+            <div style="position:absolute; top:50%; left:-4px; width:8px; height:8px; border-radius:50%; background:var(--accent); transform:translateY(-50%);"></div>
+            <div style="position:absolute; top:50%; right:-4px; width:8px; height:8px; border-radius:50%; background:var(--accent-2); transform:translateY(-50%);"></div>
+            <div style="position:absolute; top:3px; bottom:3px; left:50%; border-left:2px dashed rgba(255,255,255,.28);"></div>
+          </div>
+        </div>
+        <h1 class="serif" style="font-weight:600; font-size:30px; letter-spacing:-.02em; margin:0 0 30px;">Moderator Dashboard</h1>
+        <a href="/login" class="hovbtn" style="display:flex; align-items:center; justify-content:center; gap:11px; width:100%; background:#5865f2; color:#fff; border:none; border-radius:12px; padding:14px 18px; font-size:15px; font-weight:600; box-shadow:0 8px 24px rgba(88,101,242,.34);">
+          <span style="width:22px; height:22px; border-radius:6px; background:rgba(255,255,255,.16); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;">◆</span>
+          Sign in with Discord
+        </a>
+        <p style="margin:18px 0 0; font-size:13px; color:#8b93a0; line-height:1.55; max-width:34ch; display:flex; align-items:center; gap:7px;">
+          <span style="flex:none; color:#6b717c; font-size:12px;">🔒</span>Moderators only — you'll only see servers you help run.
+        </p>
+      </div>
     </div>
   `;
-  return layout({ title: "Sign in — Moderator Dashboard", body });
+  return shell("Sign in — Moderator Dashboard", body);
 }
 
-/** Shown when a signed-in visitor manages none of the allowlisted guilds. */
-export function noAccessPage(): string {
-  const body = html`
-    <div class="login">
-      <h1>No servers to show</h1>
-      <p>
-        You're signed in, but you don't manage any server this dashboard covers.
-        Access needs the Manage Server permission on an allowlisted server.
-      </p>
-      <p style="margin-top:28px"><a class="btn secondary" href="/logout">Sign out</a></p>
-    </div>
+// ---------------------------------------------------------------------------
+// Guild picker
+// ---------------------------------------------------------------------------
+
+/** A minimal guild-less header (login-adjacent screens). */
+function guildlessHeader(session: Session): RawHtml {
+  return html`
+    <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${headerMark()}
+        <span style="font-weight:700; font-size:15px; letter-spacing:-.01em;">Moderator Dashboard</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        ${modBlock(session.username, "Signed in with Discord")}
+        <a href="/logout" class="hovout" style="background:none; border:1px solid #262a31; color:#8b93a0; border-radius:8px; padding:6px 11px; font-size:12px; font-weight:600;">Sign out</a>
+      </div>
+    </header>
   `;
-  return layout({ title: "No access — Moderator Dashboard", body });
 }
 
 /** The guild picker, shown when a moderator manages more than one guild. */
-export function pickerPage(session: Session): string {
+export function pickerPage(session: Session, cards: PickerCard[]): string {
   const body = html`
-    <h1>Choose a server</h1>
-    <p class="muted">You manage more than one server this dashboard covers.</p>
-    <div class="panel" style="margin-top:16px">
-      ${session.guilds.map(
-        (g) => html`
-          <div class="picker-row">
-            ${guildBadge(g)}
-            <span style="margin-right:auto">${g.name}</span>
-            <a class="btn secondary" href="/app/select?guild=${g.id}">Open</a>
+    ${guildlessHeader(session)}
+    <div style="max-width:620px; margin:0 auto; padding:52px 22px 80px; animation:fadeup .4s ease;">
+      <h1 class="serif" style="font-weight:600; font-size:26px; letter-spacing:-.015em; margin:0 0 6px;">Choose a server</h1>
+      <p style="margin:0 0 26px; font-size:14px; color:#8b93a0;">
+        You moderate ${session.guilds.length} servers. Pick one to open its dashboard.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        ${session.guilds.map((g, i) => {
+          const card = cards.find((c) => c.id === g.id);
+          return html`
+            <a href="/app/select?guild=${g.id}" class="hovcard" style="display:flex; align-items:center; gap:15px; width:100%; text-align:left; background:#16181d; border:1px solid #23272e; border-radius:14px; padding:15px 17px; color:inherit;">
+              ${guildAvatar(g, 44, 13, 18)}
+              <span style="flex:1; min-width:0;">
+                <span style="display:block; font-size:15px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${g.name}</span>
+                <span style="display:block; font-size:12.5px; color:#8b93a0; margin-top:2px;">${card?.statLabel ?? ""}</span>
+              </span>
+              <span style="flex:none; color:#585e68; font-size:18px;">→</span>
+            </a>
+          `;
+        })}
+      </div>
+      <p style="margin:24px 0 0; font-size:12px; color:#585e68; display:flex; align-items:center; gap:7px;">
+        <span style="color:#6b717c;">🔒</span>Only servers where you have Manage Server appear here.
+      </p>
+    </div>
+  `;
+  return shell("Choose a server — Moderator Dashboard", body);
+}
+
+// ---------------------------------------------------------------------------
+// Home overview
+// ---------------------------------------------------------------------------
+
+/** The server-switcher dropdown in the home chrome (a no-JS <details>). */
+function switcher(guild: SessionGuild, cards: PickerCard[]): RawHtml {
+  return html`
+    <details style="position:relative;">
+      <summary style="display:flex; align-items:center; gap:8px; background:#16181d; border:1px solid #262a31; border-radius:9px; padding:6px 10px 6px 8px; color:#c3c8d1;">
+        ${guildAvatar(guild, 18, 5, 10)}
+        <span style="font-size:13px; font-weight:600; white-space:nowrap;">${guild.name}</span>
+        <span style="color:#6b717c; font-size:11px;">▾</span>
+      </summary>
+      <div class="dd-panel" style="position:absolute; top:calc(100% + 8px); left:0; width:288px; background:#16181d; border:1px solid #2a2f37; border-radius:13px; padding:6px; box-shadow:0 20px 50px rgba(0,0,0,.55); z-index:40;">
+        <div style="font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; padding:7px 9px 6px;">Your servers</div>
+        ${cards.map((c) => {
+          const isCurrent = c.id === guild.id;
+          return html`
+            <a href="/app/select?guild=${c.id}" class="hovrow" style="display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:${isCurrent
+              ? "#1c2027"
+              : "transparent"}; border:none; border-radius:9px; padding:9px; color:inherit;">
+              ${guildAvatar({ id: c.id, name: c.name, icon: c.icon }, 26, 8, 11)}
+              <span style="flex:1; min-width:0;">
+                <span style="display:block; font-size:13px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name}</span>
+                <span style="display:block; font-size:11px; color:#6b717c;">${c.statLabel}</span>
+              </span>
+              ${isCurrent
+                ? html`<span style="flex:none; color:var(--accent); font-size:13px; font-weight:700;">✓</span>`
+                : ""}
+            </a>
+          `;
+        })}
+        <div style="height:1px; background:#23272e; margin:6px 4px;"></div>
+        <a href="/logout" class="hovrow" style="display:block; padding:9px; border-radius:9px; font-size:13px; font-weight:600; color:#c3c8d1;">Sign out</a>
+      </div>
+    </details>
+  `;
+}
+
+/** The home chrome: brand, switcher, nav, and the moderator block. */
+function homeHeader(session: Session, guild: SessionGuild, brand: string, cards: PickerCard[]): RawHtml {
+  return html`
+    <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          ${headerMark()}
+          <div style="display:flex; flex-direction:column; line-height:1.05;">
+            <span style="font-weight:700; font-size:15px; letter-spacing:-.01em;">${brand}</span>
+            <span style="font-size:11px; color:#6b717c;">Moderator Dashboard</span>
+          </div>
+        </div>
+        <div style="width:1px; height:24px; background:#242830;"></div>
+        ${switcher(guild, cards)}
+      </div>
+      <nav style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22;">Overview</span>
+        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Raffles</a>
+        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Simulator</a>
+        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>
+        <div style="width:1px; height:24px; background:#242830; margin:0 6px;"></div>
+        ${modBlock(session.username, "Moderator")}
+      </nav>
+    </header>
+  `;
+}
+
+/** The config-health banners (one per warning), each dismissible for this view. */
+function banners(view: HomeView): RawHtml {
+  if (view.warnings.length === 0) return html``;
+  return html`
+    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
+      ${view.warnings.map(
+        (w) => html`
+          <div data-banner style="display:flex; align-items:center; gap:13px; background:rgba(212,162,76,.07); border:1px solid rgba(212,162,76,.26); border-radius:13px; padding:13px 15px; animation:fadeup .3s ease;">
+            <span style="flex:none; width:30px; height:30px; border-radius:9px; background:rgba(212,162,76,.14); color:var(--warn); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700;">!</span>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:13.5px; font-weight:600; color:#e8dcc4;">${w.title}</div>
+              <div style="font-size:12.5px; color:#a99a7d; margin-top:1px;">${w.detail}</div>
+            </div>
+            <button type="button" onclick="this.closest('[data-banner]').remove()" style="flex:none; width:26px; height:26px; border-radius:7px; background:none; border:none; color:#8a7e64; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
           </div>
         `,
       )}
     </div>
   `;
-  return layout({ title: "Choose a server — Moderator Dashboard", session, body });
 }
 
-/** Render the recent-activity spark as zero-filled bars. */
-function renderSpark(view: HomeView): RawHtml {
-  const max = view.spark.reduce((m, p) => Math.max(m, p.count), 0);
-  const bars = view.spark.map((p) => {
-    const pct = max === 0 ? 0 : Math.round((p.count / max) * 100);
-    return html`<div class="bar" style="height:${pct}%" title="${p.day}: ${p.count}"></div>`;
+/** A single live/scheduled raffle card. */
+function raffleCard(r: HomeView["liveRaffles"][number]): RawHtml {
+  const status = r.isLive
+    ? { label: "Live", color: "var(--ok)", dot: "var(--ok)", halo: "rgba(70,184,119,.16)", progress: "var(--accent)" }
+    : { label: "Scheduled", color: "#8b93a0", dot: "#6b717c", halo: "rgba(107,113,124,.14)", progress: "#2f343d" };
+  const mode = drawMode(r.drawMode);
+  const entries = r.isLive || r.entrants > 0 ? String(r.entrants) : "—";
+  return html`
+    <a href="#" class="hovcard" style="display:block; background:#16181d; border:1px solid #23272e; border-radius:14px; padding:16px 18px; color:inherit;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:9px;">
+        <span style="display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:${status.color};"><span style="width:7px; height:7px; border-radius:50%; background:${status.dot}; box-shadow:0 0 0 3px ${status.halo};"></span>${status.label}</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:#a7adb7; background:#101216; border:1px solid #262a31; border-radius:20px; padding:4px 10px;"><span style="color:#6b717c; font-size:11px;">${mode.icon}</span>${mode.label}</span>
+      </div>
+      <div class="serif" style="font-weight:600; font-size:17px; color:#e6e8ec; letter-spacing:-.01em; margin-bottom:11px;">${r.name}</div>
+      <div style="display:flex; align-items:center; gap:18px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:12.5px; color:#8b93a0; margin-bottom:6px;"><span style="color:#c3c8d1;">${dateLabel(
+            r.startsAt,
+          )}</span> <span style="color:#585e68;">→</span> <span style="color:#c3c8d1;">${dateLabel(r.endsAt)}</span></div>
+          <div style="height:5px; border-radius:5px; background:#23272e; overflow:hidden;"><div style="height:100%; width:${r.progressPct}%; background:${status.progress}; border-radius:5px;"></div></div>
+          <div style="font-size:11px; color:#585e68; margin-top:5px;">${r.timeNote}</div>
+        </div>
+        <div style="flex:none; text-align:right;">
+          <div class="serif" style="font-weight:600; font-size:22px; color:#e6e8ec; line-height:1;">${entries}</div>
+          <div style="font-size:11px; color:#6b717c; margin-top:3px;">entries</div>
+        </div>
+      </div>
+    </a>
+  `;
+}
+
+/** The empty state for the "what's live now" column. */
+function rafflesEmpty(guildName: string): RawHtml {
+  return html`
+    <div style="background:#16181d; border:1px dashed #2f3540; border-radius:16px; padding:46px 32px; text-align:center;">
+      <div style="width:48px; height:48px; border-radius:14px; background:#101216; border:1px solid #23272e; display:flex; align-items:center; justify-content:center; margin:0 auto 15px;">
+        <div style="position:relative; width:22px; height:15px; border-radius:4px; border:1.5px solid #585e68;"><div style="position:absolute; top:2px; bottom:2px; left:50%; border-left:1.5px dashed #4c525c;"></div></div>
+      </div>
+      <div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">No raffles running</div>
+      <p style="margin:0 auto 18px; font-size:13.5px; color:#8b93a0; max-width:36ch; line-height:1.55;">Nothing is live or scheduled in ${guildName} right now. Design one to get started.</p>
+      <a href="#" class="hovbtn" style="display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700;"><span style="font-size:15px; line-height:1;">＋</span>Design a raffle</a>
+    </div>
+  `;
+}
+
+/** The eligible-pool panel. */
+function poolPanel(view: HomeView): RawHtml {
+  const { hasDefaults, eligible, considered, reqSummary } = view.pool;
+  if (!hasDefaults) {
+    return html`
+      <section style="background:linear-gradient(160deg,#181b21,#14171d); border:1px solid #23272e; border-radius:16px; padding:20px 22px;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0; margin-bottom:14px;">The pool right now</div>
+        <p style="margin:0; font-size:13.5px; color:#a7adb7; line-height:1.55;">Set a default activity requirement in Discord (<span style="color:#c3c8d1;">req-messages</span> and <span style="color:#c3c8d1;">req-days</span>) to see who's eligible.</p>
+      </section>
+    `;
+  }
+  const pct = considered > 0 ? Math.round((eligible / considered) * 100) : 0;
+  return html`
+    <section style="background:linear-gradient(160deg,#181b21,#14171d); border:1px solid #23272e; border-radius:16px; padding:20px 22px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0; margin-bottom:14px;">The pool right now</div>
+      <div style="display:flex; align-items:baseline; gap:9px; margin-bottom:4px;">
+        <span class="serif" style="font-weight:600; font-size:44px; letter-spacing:-.02em; color:var(--accent); line-height:.9;">~${eligible}</span>
+        <span style="font-size:15px; color:#8b93a0;">of ${considered} active members</span>
+      </div>
+      <div style="font-size:13px; color:#a7adb7; margin-bottom:14px;">eligible today · ${pct}% of the recently active</div>
+      <div style="height:6px; border-radius:6px; background:#23272e; overflow:hidden; margin-bottom:15px;"><div style="height:100%; width:${pct}%; background:var(--accent); border-radius:6px;"></div></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:14px; border-top:1px solid #23272e;">
+        <div style="font-size:11.5px; color:#6b717c; line-height:1.45;">Under the server default bar<br /><span style="color:#8b93a0;">${reqSummary}</span></div>
+        <a href="#" style="flex:none; font-size:12.5px; font-weight:600; white-space:nowrap;">tune this →</a>
+      </div>
+    </section>
+  `;
+}
+
+/** The recent-activity spark panel. */
+function activityPanel(view: HomeView): RawHtml {
+  const { spark, weekMessages, trendPct, trendUp } = view.activity;
+  const max = spark.reduce((m, p) => Math.max(m, p.count), 0);
+  const bars = spark.map((p, i) => {
+    const h = max === 0 ? 2 : Math.max(2, Math.round((p.count / max) * 58));
+    const color = i >= spark.length - 7 ? "var(--accent)" : "#2f343d";
+    return html`<div title="${p.day}: ${p.count}" style="flex:1; height:${h}px; min-height:2px; background:${color}; border-radius:2px; transform-origin:bottom; animation:barrise .5s ease;"></div>`;
   });
-  return html`<div class="spark">${bars}</div>`;
+  const arrow = trendUp ? "▲" : "▼";
+  const trendColor = trendUp ? "var(--accent)" : "var(--danger)";
+  const chipBg = trendUp ? "var(--accent-soft)" : "rgba(229,104,122,.13)";
+  const word =
+    weekMessages === 0 ? "it's quiet here" : trendUp ? "the server is warming up" : "the server is cooling off";
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:16px; padding:20px 22px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:3px;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">Recent activity</div>
+        <span style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:${trendColor};">${arrow} ${Math.abs(
+          trendPct,
+        )}%</span>
+      </div>
+      <div style="font-size:12.5px; color:#6b717c; margin-bottom:16px;">Guild messages · last 4 weeks</div>
+      <div style="display:flex; align-items:flex-end; gap:2px; height:58px; margin-bottom:9px;">${bars}</div>
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#4c525c; font-family:'JetBrains Mono',monospace; margin-bottom:14px;"><span>4 wks ago</span><span>this week</span></div>
+      <div style="display:flex; align-items:center; gap:9px; padding-top:14px; border-top:1px solid #23272e;">
+        <span style="flex:none; width:28px; height:28px; border-radius:9px; background:${chipBg}; color:${trendColor}; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700;">${arrow}</span>
+        <div style="font-size:12.5px; color:#a7adb7; line-height:1.4;"><span style="color:#e6e8ec; font-weight:600;">${weekMessages.toLocaleString(
+          "en-US",
+        )}</span> messages this week — ${word}.</div>
+      </div>
+    </section>
+  `;
 }
 
 /** The home overview a moderator lands on inside a guild. */
-export function homePage(session: Session, guild: SessionGuild, view: HomeView): string {
-  const poolStat = view.pool.hasDefaults
-    ? html`<span class="stat">~${view.pool.eligible} <span class="of">of ${view.pool.considered} recently active</span></span>`
-    : html`<span class="muted">Set a default activity requirement to see the eligible pool.</span>`;
+export function homePage(session: Session, guild: SessionGuild, view: HomeView, cards: PickerCard[]): string {
+  const brand = resolveDisplayName({});
+  const hasRaffles = view.liveRaffles.length > 0;
+  const liveCountLabel = `${view.liveCount} live · ${view.scheduledCount} scheduled`;
 
   const body = html`
-    <h1>${guild.name}</h1>
+    ${homeHeader(session, guild, brand, cards)}
+    <div style="max-width:1120px; margin:0 auto; padding:26px 24px 84px;">
+      ${banners(view)}
 
-    ${view.warnings.length > 0
-      ? html`<div style="margin-top:16px">${view.warnings.map((w) => html`<div class="warn">${w.message}</div>`)}</div>`
-      : ""}
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px;">
+        <div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#585e68; margin-bottom:7px;">Overview</div>
+          <h1 class="serif" style="font-weight:600; font-size:29px; letter-spacing:-.02em; margin:0 0 5px;">${guild.name}</h1>
+          <p style="margin:0; font-size:14px; color:#8b93a0;">What ${brand} is running here right now.</p>
+        </div>
+        <a href="#" class="hovbtn" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border-radius:11px; padding:11px 18px; font-size:14px; font-weight:700; box-shadow:0 6px 20px var(--accent-soft);"><span style="font-size:16px; line-height:1;">＋</span>Design a raffle</a>
+      </div>
 
-    <h2>What's live now</h2>
-    <div class="panel">
-      ${view.liveRaffles.length === 0
-        ? html`<p class="muted" style="margin:0">No raffles running or scheduled.</p>`
-        : view.liveRaffles.map(
-            (r) => html`
-              <div class="card">
-                <div>
-                  <div style="font-weight:600">${r.name}</div>
-                  <div class="muted" style="font-size:13px">
-                    Opens ${formatUtc(r.startsAt)} → closes ${formatUtc(r.endsAt)}
-                  </div>
-                </div>
-                <div style="text-align:right">
-                  <span class="pill">${r.status}</span>
-                  <div class="muted" style="font-size:13px; margin-top:4px">
-                    ${r.entrants} ${r.entrants === 1 ? "entry" : "entries"} · ${r.drawMode ?? "auto"}
-                  </div>
-                </div>
-              </div>
-            `,
-          )}
+      <div class="home-grid" style="display:grid; grid-template-columns:1.62fr 1fr; gap:18px; align-items:start;">
+        <div style="display:flex; flex-direction:column; gap:13px;">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;">
+            <div style="display:flex; align-items:baseline; gap:10px;">
+              <h2 class="serif" style="font-weight:600; font-size:18px; margin:0; letter-spacing:-.01em;">What's live now</h2>
+              ${hasRaffles ? html`<span style="font-size:12px; color:#6b717c;">${liveCountLabel}</span>` : ""}
+            </div>
+            ${hasRaffles ? html`<a href="#" style="font-size:12.5px; font-weight:600;">All raffles →</a>` : ""}
+          </div>
+          ${hasRaffles
+            ? html`<div style="display:flex; flex-direction:column; gap:12px;">${view.liveRaffles.map(raffleCard)}</div>`
+            : rafflesEmpty(guild.name)}
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:18px;">
+          ${poolPanel(view)}
+          ${activityPanel(view)}
+        </div>
+      </div>
     </div>
-
-    <h2>The pool right now</h2>
-    <div class="panel">${poolStat}</div>
-
-    <h2>Recent activity</h2>
-    <div class="panel">
-      ${renderSpark(view)}
-      <p class="muted" style="font-size:13px; margin:12px 0 0">Guild-wide messages counted, last 28 days.</p>
-    </div>
-
-    <footer>Read-only overview. Every change still happens in Discord.</footer>
   `;
-  return layout({ title: `${guild.name} — Moderator Dashboard`, session, guild, current: "home", body });
+  return shell(`${guild.name} — Moderator Dashboard`, body);
+}
+
+// ---------------------------------------------------------------------------
+// Utility pages
+// ---------------------------------------------------------------------------
+
+/** Shown when a signed-in visitor manages none of the allowlisted guilds. */
+export function noAccessPage(): string {
+  const body = html`
+    <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">
+      <div style="width:100%; max-width:440px; text-align:center; animation:fadeup .4s ease;">
+        <h1 class="serif" style="font-weight:600; font-size:26px; letter-spacing:-.015em; margin:0 0 10px;">No servers to show</h1>
+        <p style="margin:0 0 26px; font-size:14px; color:#8b93a0; line-height:1.6;">
+          You're signed in, but you don't manage any server this dashboard covers. Access needs the
+          Manage Server permission on an allowlisted server.
+        </p>
+        <a href="/logout" class="hovout" style="display:inline-block; background:none; border:1px solid #262a31; color:#8b93a0; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:600;">Sign out</a>
+      </div>
+    </div>
+  `;
+  return shell("No access — Moderator Dashboard", body);
 }
 
 /** A minimal error page for unexpected failures (e.g. a failed OAuth exchange). */
 export function errorPage(message: string): string {
   const body = html`
-    <div class="login">
-      <h1>Something went wrong</h1>
-      <p>${message}</p>
-      <p style="margin-top:28px"><a class="btn secondary" href="/">Back to start</a></p>
+    <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">
+      <div style="width:100%; max-width:440px; text-align:center; animation:fadeup .4s ease;">
+        <h1 class="serif" style="font-weight:600; font-size:26px; letter-spacing:-.015em; margin:0 0 10px;">Something went wrong</h1>
+        <p style="margin:0 0 26px; font-size:14px; color:#8b93a0; line-height:1.6;">${message}</p>
+        <a href="/" class="hovout" style="display:inline-block; background:none; border:1px solid #262a31; color:#8b93a0; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:600;">Back to start</a>
+      </div>
     </div>
   `;
-  return layout({ title: "Error — Moderator Dashboard", body });
+  return shell("Error — Moderator Dashboard", body);
 }

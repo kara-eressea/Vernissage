@@ -16,7 +16,7 @@ import { randomBytes } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { WebConfig } from "./config.js";
 import type { Database } from "../db/index.js";
-import { buildHomeView } from "./home.js";
+import { buildHomeView, buildPickerCards } from "./home.js";
 import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
@@ -236,13 +236,15 @@ export function createServer(deps: ServerDeps): Server {
       sendHtml(res, 200, noAccessPage());
       return;
     }
+    const now = new Date().toISOString();
+    const cards = buildPickerCards(db, session.guilds, now);
     const guild = selectedGuild(session);
     if (!guild) {
-      sendHtml(res, 200, pickerPage(session));
+      sendHtml(res, 200, pickerPage(session, cards));
       return;
     }
-    const view = buildHomeView(db, guild.id, new Date().toISOString());
-    sendHtml(res, 200, homePage(session, guild, view));
+    const view = buildHomeView(db, guild.id, now);
+    sendHtml(res, 200, homePage(session, guild, view, cards));
   }
 
   function handleSelect(res: ServerResponse, session: Session | null, url: URL): void {
