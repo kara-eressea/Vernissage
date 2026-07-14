@@ -11,7 +11,9 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/src/index.js",
+    "start:web": "node dist/src/web/index.js",
     "dev": "tsx src/index.ts",
+    "dev:web": "tsx src/web/index.ts",
     "deploy-commands": "tsx src/deploy-commands.ts",
     "test": "vitest run",
     "test:watch": "vitest"

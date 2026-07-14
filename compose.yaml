@@ -18,5 +18,35 @@ services:
     # No ports are published on purpose: the bot only makes outbound connections
     # to Discord and does not accept any incoming traffic.
 
+  # Optional moderator dashboard. Comment this whole service out if you don't run
+  # it. It reuses the same image but starts the web entrypoint, and opens the
+  # SAME database read-only (sharing the volume), so a web bug can never take the
+  # bot down or contend for the write lock. It needs the dashboard variables in
+  # .env (DISCORD_CLIENT_SECRET, DASHBOARD_BASE_URL, DASHBOARD_SESSION_SECRET —
+  # see .env.example).
+  dashboard:
+    build: .
+    restart: unless-stopped
+    init: true
+    command: ["node", "dist/src/web/index.js"]
+    env_file: .env
+    environment:
+      # Same file the bot writes; the dashboard opens it read-only.
+      DATABASE_PATH: /data/vernissage.db
+    volumes:
+      - vernissage-data:/data
+    # Publish only on the loopback interface: a reverse proxy (Caddy/nginx) on the
+    # host terminates TLS and forwards to this port. Change 8080 on the LEFT to
+    # match your proxy's upstream; the RIGHT must match DASHBOARD_PORT (default
+    # 8080). Do NOT bind 0.0.0.0 — the dashboard expects TLS to be terminated in
+    # front of it. Example Caddyfile:
+    #     tombola.example.com {
+    #         reverse_proxy 127.0.0.1:8080
+    #     }
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - bot
+
 volumes:
   vernissage-data:

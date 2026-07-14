@@ -22,14 +22,8 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { snapshotEligibleUsers, type SnapshotCandidate } from "../../../core/eligibilitySnapshot.js";
 import { userMention } from "../../../core/format.js";
-import { activityWindow } from "../../../core/time.js";
-import { listGuildCountsInWindow } from "../../../db/repositories/activity.js";
-import { isBlacklisted } from "../../../db/repositories/blacklist.js";
-import { getGuild } from "../../../db/repositories/guilds.js";
-import { countRafflesSince } from "../../../db/repositories/raffles.js";
-import { getUserWins } from "../../../db/repositories/wins.js";
+import { computeEligiblePool } from "../../../eligibility/service.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
@@ -57,10 +51,9 @@ export async function handleEligible(
     return;
   }
 
-  const guild = getGuild(ctx.db, guildId);
-  const reqMessages = guild?.default_req_messages ?? 0;
-  const reqDays = guild?.default_req_days ?? 0;
-  if (reqMessages < 1 || reqDays < 1) {
+  const now = new Date().toISOString();
+  const pool = computeEligiblePool(ctx.db, guildId, now);
+  if (!pool.hasDefaults) {
     await interaction.reply({
       content:
         "Set a default activity requirement first with `/raffle config set req-messages:… req-days:…`. " +
@@ -70,40 +63,8 @@ export async function handleEligible(
     return;
   }
 
-  const now = new Date().toISOString();
-  const window = activityWindow(now, reqDays);
-  const active = listGuildCountsInWindow(ctx.db, guildId, window.startDay, window.endDay);
-
-  const defaults = {
-    minAccountAgeDays: guild?.default_min_account_age_days ?? null,
-    cooldownDays: guild?.default_cooldown_days ?? null,
-    cooldownCount: guild?.default_cooldown_count ?? null,
-    reqMessages,
-    reqActiveDays: guild?.default_req_active_days ?? 0,
-    reqDays,
-  };
-
-  const candidates: SnapshotCandidate[] = active.map((u) => {
-    const wins = getUserWins(ctx.db, guildId, u.userId);
-    const latestWonAt = wins.reduce<string | null>(
-      (latest, w) => (latest === null || w.wonAt > latest ? w.wonAt : latest),
-      null,
-    );
-    const rafflesSinceLastWin =
-      latestWonAt === null ? 0 : countRafflesSince(ctx.db, guildId, latestWonAt);
-    return {
-      userId: u.userId,
-      dailyCounts: u.counts,
-      wins,
-      rafflesSinceLastWin,
-      blacklisted: isBlacklisted(ctx.db, guildId, u.userId, now),
-    };
-  });
-
-  const { considered, eligibleUserIds } = snapshotEligibleUsers(candidates, defaults, now);
-
   await interaction.reply({
-    content: formatEligibleReport(eligibleUserIds, considered, defaults),
+    content: formatEligibleReport(pool.eligibleUserIds, pool.considered, pool.defaults),
     flags: MessageFlags.Ephemeral,
     // A read-out only — never ping the members it names.
     allowedMentions: { parse: [] },

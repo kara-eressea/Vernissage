@@ -61,6 +61,17 @@ export function hasEntry(db: Database, raffleId: number, userId: string): boolea
   return row !== undefined;
 }
 
+/** How many active (not removed) entries a raffle currently has. */
+export function countActiveEntries(db: Database, raffleId: number): number {
+  const row = db
+    .prepare(
+      `SELECT count(*) AS n FROM entries
+       WHERE raffle_id = ? AND removed_at IS NULL`,
+    )
+    .get(raffleId) as { n: number };
+  return row.n;
+}
+
 /**
  * The frozen list of active entrant ids for a raffle, sorted ascending. This is
  * the exact ordering hashed and published at close.

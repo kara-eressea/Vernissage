@@ -33,7 +33,7 @@ export const ENV = {
 } as const;
 
 /** Parse a comma-separated guild-id list: trim, drop blanks, de-duplicate. */
-function parseGuildIds(raw: string | undefined): string[] {
+export function parseGuildIds(raw: string | undefined): string[] {
   if (!raw) {
     return [];
   }

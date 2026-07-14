@@ -199,9 +199,43 @@ port. Because of that:
   this bot does not conflict with it, because the bot does not listen on those
   ports or any others.
 
-The provided `compose.yaml` does not publish any ports, which is correct and
-intentional. The container still reaches Discord through normal outbound
-networking.
+The provided `compose.yaml`'s **bot** service does not publish any ports, which
+is correct and intentional. The container still reaches Discord through normal
+outbound networking.
+
+This is true of the bot itself. The **optional moderator dashboard** (below) is
+the one exception: it is a web service, so it does listen — and it expects a
+reverse proxy in front of it.
+
+### Optional: the moderator dashboard
+
+`compose.yaml` also defines a `dashboard` service — a separate, **read-only**
+web app for moderators (Discord login, a home overview of live raffles, the
+eligible-pool count, and recent activity). It is entirely optional; comment the
+service out if you don't want it, and the bot runs exactly as before.
+
+If you do run it:
+
+- It opens the **same** database read-only (sharing the volume), so it can never
+  take the bot down or corrupt data. The bot stays the sole writer.
+- It never holds the bot token. It needs its own OAuth2 credentials and a
+  session secret — set `DISCORD_CLIENT_SECRET`, `DASHBOARD_BASE_URL`, and
+  `DASHBOARD_SESSION_SECRET` in `.env` (see `.env.example`), and add
+  `<DASHBOARD_BASE_URL>/auth/callback` as an OAuth2 redirect in the Developer
+  Portal.
+- It expects TLS to be terminated by a **reverse proxy** (Caddy or nginx) in
+  front of it; the service publishes only on `127.0.0.1:8080` for the proxy to
+  forward to. A minimal Caddyfile:
+
+  ```
+  tombola.example.com {
+      reverse_proxy 127.0.0.1:8080
+  }
+  ```
+
+- For now, sign-in requires the **Manage Server** permission (or guild
+  ownership) on an allowlisted server; a moderator who only holds the configured
+  mod-role can't sign in yet. See [docs/dashboard.md](docs/dashboard.md).
 
 ### Run only one instance
 

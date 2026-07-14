@@ -1,10 +1,30 @@
 # Vernissage — Moderator Dashboard (design note)
 
-**Status: exploratory / not built.** This is a forward-looking note, not a
-description of shipped behaviour. Nothing here is a commitment; it captures the
-shape a read-only moderator dashboard would take so the idea is ready to pick up
-later. It deliberately stays inside the project's existing values (auditable,
-fair, privacy-preserving) — see [design.md](design.md) for those.
+**Status: partially built.** Sequencing step 1 (the read-only auth shell —
+Discord login, guild/mod gating, the guild picker/switcher, and the home
+overview) is implemented under `src/web/`; everything past it (verifier,
+simulator, history, Designer) remains a forward-looking note, not shipped
+behaviour. This document captures the whole shape so the rest is ready to pick
+up. It deliberately stays inside the project's existing values (auditable, fair,
+privacy-preserving) — see [design.md](design.md) for those.
+
+**What shipped in step 1, and where it refines this note.** The auth shell is a
+separate process (`src/web/`, run with `npm run start:web`), zero new
+dependencies (Node's `http`/`crypto`), opening the SQLite file read-only. Two
+Tier-1 details refine what follows:
+- **Scopes and authorization.** The OAuth flow uses `identify` **and** `guilds`
+  (not `identify` alone): without the bot token the web process cannot read a
+  member's roles, so it authorizes from the `guilds` scope's permission bits —
+  allowlist ∩ (guild owner **or** Manage Server), the bootstrap tier of
+  `isModerator`. This under-grants safely: a moderator whose only authority is
+  the configured mod-role (no Manage Server) cannot sign in until the Tier-2
+  member fetch closes the gap. Better to exclude a real moderator than admit a
+  non-moderator.
+- **Displayed name.** The isolated web process has no gateway, so it cannot read
+  `guild.members.me.nickname` yet; in-guild screens fall back to "Tombola" (the
+  user-facing name, never the "Vernissage" codename) until the bot persists its
+  per-guild nickname for the dashboard to read. Guild-less screens still name no
+  bot, as below.
 
 ## Why a dashboard at all
 
@@ -53,11 +73,12 @@ add new behaviour to it.
   then can't stop message counting, and a read-only connection sidesteps write
   contention entirely.
 - **Auth: Discord OAuth2 for identity, existing logic for authorization.** The
-  OAuth flow needs only the `identify` scope — enough to learn *who* the visitor
-  is. Whether they are a moderator is then answered by the bot's existing check
-  (`ensureModerator`: the configured mod role or Manage Server, scoped per
-  guild). The hard part of "moderator-gated" is already written; OAuth just
-  supplies a trusted user id and a signed session cookie carries it.
+  OAuth flow learns *who* the visitor is (`identify`) and *which servers they are
+  in* (`guilds`). Moderator status mirrors the bot's `isModerator` decision
+  (owner or Manage Server, scoped per guild); a signed session cookie carries the
+  result. Tier-1 evaluates that from the `guilds` scope's permission bits so the
+  web process needs no bot token — at the cost of not seeing the configured
+  mod-role, which the Tier-2 member fetch restores (see the step-1 note above).
 - **Server-rendered pages.** For a read-only tool, plain server-rendered HTML
   avoids a frontend build and a client-side API surface. A little client-side JS
   is worth it only where interactivity earns it (the simulator's live re-query,
