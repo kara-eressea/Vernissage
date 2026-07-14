@@ -16,9 +16,11 @@ Two pressures point at a presentation layer rather than more configuration:
   defensible on its own, but together they are hard to hold in your head. Past a
   point the right answer is a place to *see* what a set of values does, not
   another knob.
-- **The auditable pitch.** The provably-fair draw is designed for third-party
-  verification, but today that verification lives in audit-channel text. A web
-  view can make "anyone can check this" real instead of aspirational.
+- **The auditable pitch.** The provably-fair draw is meant to be independently
+  verifiable, but today that verification lives in raw audit-channel text. A web
+  view can make "you can check this yourself" real instead of aspirational — for
+  the server's own members (the verifier is gated to the raffle's guild, not
+  public; see "beyond the simulator").
 
 The through-line: the dashboard should make the existing system **legible**, not
 add new behaviour to it.
@@ -59,13 +61,13 @@ add new behaviour to it.
 - **Server-rendered pages.** For a read-only tool, plain server-rendered HTML
   avoids a frontend build and a client-side API surface. A little client-side JS
   is worth it only where interactivity earns it (the simulator's live re-query,
-  the public verifier's in-browser hash check).
+  the verifier's in-browser hash check).
 - **The displayed name follows the bot, per guild.** Rather than hardcode a
   product name, resolve the bot's nickname on the currently-selected guild
   (`guild.members.me.nickname`), falling back to the bot's global display name and
   then a static default. Because the dashboard is per-guild, its chrome then calls
   the bot exactly what that community calls it, and the member-facing surfaces
-  (the entry-card preview, the public verification page) show the same name
+  (the entry-card preview, the verification page) show the same name
   members see — no "Tombola here, Vernissage there" special-casing. The guild-less
   moments (the login/landing screen, before a server is picked) name no bot at all
   — just "Moderator Dashboard" — which also keeps the internal codename off every
@@ -278,14 +280,19 @@ flagged by whether they lean on data we already store:
   about in chat: no announce channel set, no counted channels configured, an
   activity window shorter than the distinct-days floor it requires, a cooldown
   longer than any raffle ever runs. Catch mis-config before a raffle, not after.
-- **A public verification page (medium; the strongest trust win).** An
-  *unauthenticated* read-only view of a finished raffle: the entrant-list hash,
-  the revealed secret, the derived seed, the winners, and the check itself —
-  `SHA-256(secret) == commitment`, `seed = SHA-256(hash + secret)` — recomputed
-  **in the visitor's browser** so a green "verified" badge needs no trust in us
-  at all. This is arguably the highest-value page on the whole dashboard for the
-  auditable pitch, and it needs no login, which can make it the *simplest* thing
-  to ship first.
+- **A draw-verification page (medium; the strongest trust win).** A read-only view
+  of a finished raffle: the entrant-list hash, the revealed secret, the derived
+  seed, the winners, and the check itself — `SHA-256(secret) == commitment`,
+  `seed = SHA-256(hash + secret)` — recomputed **in the viewer's browser** so a
+  green "verified" badge needs no trust in the operator. It is **gated, not
+  public**: a private, single-server bot should not expose what raffles run on a
+  server to the world, so this sits behind Discord login and is limited to that
+  raffle's server (members of the guild, or mods only — a one-line choice on the
+  auth gate). Gating costs nothing in trust: the provably-fair guarantee already
+  lives in the audit channel, which members can read and recompute by hand; this
+  page is the friendly UI over that same data, for the server's own people. What
+  it gives up is *outside* third-party verification — a reasonable privacy trade
+  for a private bot.
 - **Per-draft raffle dry-run (medium; needs Tier-2 member fetch).** The simulator
   aimed at a *specific* draft's real settings — role gates, tenure, prior-winner
   bar included — so a moderator can preview the actual pool a configured raffle
@@ -315,10 +322,11 @@ conscious decision, not a side effect of wanting nicer charts.
 
 ## Suggested sequencing
 
-1. **Public verification page.** No auth, high trust payoff, reuses the draw
-   formatting and the pure verification math. The smallest first brick.
-2. **Read-only mod shell + OAuth `identify` + `ensureModerator` gating.** The
-   frame everything authenticated hangs on.
+1. **Read-only auth shell + OAuth `identify` + guild/mod gating.** The frame
+   everything hangs on: Discord login, a guild-membership check, and the
+   `ensureModerator` check for mod-only pages.
+2. **Draw-verification page.** High trust payoff, reuses the draw formatting and
+   the pure verification math; behind the shell (gated to the raffle's server).
 3. **Eligibility simulator (Tier 1) + generate-the-command.** The feature that
    motivated this, and the cheapest high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
