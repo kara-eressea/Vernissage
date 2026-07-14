@@ -527,7 +527,7 @@ function simControls(view: SimulatorView): RawHtml {
         <section style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:18px 20px 20px;">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
             <span style="font-weight:700; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">Entry requirements</span>
-            <a href="/app/simulator" style="font-size:11.5px; font-weight:600;">Reset</a>
+            <a href="/app/simulator" class="hovnav" style="font-size:11.5px; font-weight:600; color:#8b93a0;">Reset</a>
           </div>
           <p style="margin:0 0 16px; font-size:11.5px; color:#585e68;">Adjust the bar, then re-run to see who clears it.</p>
           <div style="display:flex; flex-direction:column; gap:20px;">
@@ -753,7 +753,7 @@ export function simulatorPage(
   const body = html`
     ${homeHeader(session, guild, brand, cards, "simulator")}
     <div style="max-width:1280px; margin:0 auto; padding:26px 24px 84px;">
-      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app">${guild.name}</a><span>/</span><span>Eligibility simulator</span></div>
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><span>Eligibility simulator</span></div>
       <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px; flex-wrap:wrap;">
         <div>
           <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0 0 4px;">Eligibility Simulator</h1>
