@@ -11,8 +11,8 @@ fair, privacy-preserving) — see [design.md](design.md) for those.
 Two pressures point at a presentation layer rather than more configuration:
 
 - **Config legibility.** The eligibility gate has grown a fair number of dials
-  (message floor, distinct active days, window length, anchor mode, account age,
-  server tenure, cooldowns, role gates, prior-winner bar). Each one is
+  (message floor, distinct active days, window length, account age, server
+  tenure, cooldowns, role gates, prior-winner bar). Each one is
   defensible on its own, but together they are hard to hold in your head. Past a
   point the right answer is a place to *see* what a set of values does, not
   another knob.
@@ -25,10 +25,14 @@ add new behaviour to it.
 
 ## Guiding principles
 
-1. **Read-only.** The dashboard never writes to the database. Every state change
-   continues to flow through Discord slash commands, which already write the
-   audit trail. This is not a limitation to work around — it is the design (see
-   "Generate the command, don't run it" below).
+1. **Read-only where it counts.** The dashboard never mutates *live* state —
+   raffles, config, entries, wins. Every state change continues to flow through
+   Discord slash commands, which already write the audit trail. This is not a
+   limitation to work around — it is the design (see "Generate the command, don't
+   run it" below). There is exactly one deliberate, contained exception, the
+   Raffle Designer's handoff (see that section): it stages an *inert* proposal
+   that does nothing until a moderator redeems it in Discord, and even that write
+   is made by the bot, not the dashboard.
 2. **Reuse the core, don't reimplement it.** Eligibility, cooldowns, window
    math, and the draw are already pure functions with no Discord or DB
    dependency. The dashboard calls the *same* functions the bot does, so a report
@@ -137,6 +141,100 @@ numbers — the "never show the activity bar to members" rule governs
 member-facing surfaces, and `/raffle eligible` and `/raffle config show` already
 print these figures to moderators.
 
+## The Raffle Designer: compose, preview, hand off
+
+The simulator tunes *config*; the Designer composes a *whole raffle* — name,
+prize, description, schedule, eligibility, draw settings — on one screen, with
+richer previews than Discord can offer, then hands the finished thing back to
+Discord to create. It is the most human-friendly way to build a raffle: a visual
+composer instead of a multi-step wizard, with everything visible at once.
+
+### The previews are the point
+
+Because the entry-card formatter and the eligibility check are already pure
+functions, the Designer can show, live as the moderator edits:
+
+- **A real entry-card preview** — exactly what members will see in the announce
+  channel, rendered by the same `announceFormat` code the bot posts, so the
+  vague-activity subtext, prize line, schedule, and host all look real before
+  anything is published.
+- **An eligible-pool readout** — pipe the raffle's activity/cooldown settings
+  straight into the simulator: "this raffle would open to ~48 of 213 members,"
+  with the same distribution chart and reason breakdown. A moderator sees who the
+  raffle would actually reach *before* opening it — something no Discord surface
+  can show today.
+- **Inline validation** — the wizard's existing per-step checks (end before
+  start, X of 0, open-to-all combined with a role gate, …) run on the page, so
+  mistakes surface while composing rather than step-by-step in the wizard.
+
+These are strictly better than the current wizard preview, and they cost little:
+they reuse the card formatter, the simulator, and the validation rules verbatim.
+
+### The handoff problem, and the claim-token solution
+
+Config was easy to carry back to Discord because it is one flat command. Raffle
+creation is not: it is deliberately a *stateful wizard* (`/raffle create` builds
+a draft incrementally, with friendly timezone-aware schedule input and "nothing
+published until you confirm"), and there is **no single command that fully
+specifies a raffle**. Pasting ~18 options into one command would work
+technically but throws away everything the wizard is *for*.
+
+So the Designer carries the raffle across as a **claim token**, not a giant
+command:
+
+1. The moderator composes the raffle on the web and clicks "Create in Discord."
+2. The dashboard asks the **bot** (not the database directly — see below) to
+   stage the composed settings as a *pending raffle spec*, keyed by a short,
+   unguessable, single-use token.
+3. The dashboard shows a tiny command to run in the server, e.g.
+   `/raffle create-from a7f3k9`.
+4. The bot, on that command, **re-authorizes** (is the caller a moderator in this
+   guild?), **re-validates** the spec through the same wizard validation,
+   **shows a confirmation summary** ("You're about to create *Summer Vinyl*,
+   prize *A record*, opens *Fri 18:00*, eligible ~48 members — confirm?"), and
+   only then creates the raffle and writes the audit row.
+
+The token is a random single-use credential — **not** a hash of the settings (a
+content hash would be guessable and collision-prone). It expires (say 24h), is
+scoped to the guild and the composing moderator, and is consumed on redemption,
+so a stale or leaked token cannot quietly create a raffle.
+
+### Why this stays faithful to the principles
+
+This is the one place the dashboard reaches past pure read-only, and it is
+carefully contained:
+
+- **The staged spec is inert.** It sits in its own `pending_raffle` table and
+  changes nothing a member, an entry, or the draw can see. Until a moderator
+  redeems it in Discord, it is just a parked proposal; the worst a dashboard bug
+  can do is leave unredeemed rows (pruned on a TTL, like other transient state).
+- **The dashboard never writes the database directly.** The bot is the sole DB
+  writer; the dashboard POSTs the spec to an authenticated endpoint on the bot,
+  which performs the staging write. This keeps single-writer discipline (no
+  two-process SQLite contention, no schema write-coupling) and means "the
+  dashboard needs DB write access" is really "the dashboard calls one bot
+  endpoint."
+- **The trust boundary and the audit trail stay in Discord.** Authorization,
+  validation, the human confirmation, and the audit row all happen at redemption,
+  exactly as if the moderator had built the raffle in the wizard — because from
+  the bot's side, they did. The dashboard proposes; Discord disposes.
+
+### The honest cost
+
+This is more moving parts than the simulator: a `pending_raffle` table, an
+authenticated bot endpoint, a new `/raffle create-from` command, token
+lifecycle/pruning, and the redemption confirmation UX. The lighter alternative —
+a Designer that only *previews* and then prefills `/raffle create name: prize:`,
+leaving the rest to the wizard — keeps the dashboard purely read-only but makes
+the moderator re-enter most fields. The trade is **best-in-class UX with a
+contained, bot-mediated write** versus **purest read-only with some double
+entry**. Given the write is inert, funneled through the bot, and gated by a human
+confirmation, the token handoff is the better build if the Designer is a priority.
+
+Bonus: the same staging table backs "save this as a template" almost for free —
+stage a spec and *don't* consume its token, so a moderator can reuse a proven
+raffle setup instead of rebuilding it.
+
 ## Beyond the simulator — what else this surface unlocks
 
 Once there is an authenticated read-only view over the same data and pure
@@ -214,15 +312,23 @@ conscious decision, not a side effect of wanting nicer charts.
    motivated this, and the cheapest high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
    data we already keep.
-5. **Tier-2 member fetch** (role/tenure fidelity, per-draft dry-run) and **audit
+5. **Raffle Designer.** The one feature that reaches past read-only, so it comes
+   after the read-only surface has proven itself: the visual composer with live
+   entry-card and eligible-pool previews, plus the claim-token handoff (staging
+   table, bot endpoint, `/raffle create-from`, redemption confirmation).
+6. **Tier-2 member fetch** (role/tenure fidelity, per-draft dry-run) and **audit
    export**, if and when they earn their keep.
 
 ## What this is deliberately not
 
-- **Not a second write path.** No editing config or raffles from the web; the
-  generate-the-command pattern gives the editing UX without the write surface. If
-  that ever changes, it is a separate, carefully-scoped decision (CSRF,
-  validation parity with the wizard, audit writes, write-race handling).
+- **Not a live write path.** The dashboard never edits config, raffles, entries,
+  or wins from the web; the generate-the-command pattern gives the editing UX
+  without the write surface. The Raffle Designer's handoff is the single, narrow
+  exception — and even it does not mutate live state: it stages an *inert*
+  proposal, via the bot, that a moderator must redeem (and confirm) in Discord.
+  Any move beyond that — the dashboard mutating live state directly — would be a
+  separate, carefully-scoped decision (CSRF, validation parity, audit writes,
+  write-race handling).
 - **Not a member-facing surface.** It is moderator-gated, so it may show exact
   activity numbers; nothing here relaxes the rule that members never see the bar.
 - **Not anomaly detection.** Judging "this looks like farming" stays with
