@@ -88,6 +88,28 @@ export function listGuildCountsInWindow(
 }
 
 /**
+ * Guild-wide message totals per UTC day within an inclusive range, ascending by
+ * day. Days with no counted activity are simply absent (no zero rows are
+ * stored), so callers that need a dense series fill the gaps. Backs the
+ * dashboard's recent-activity spark; only counts, never content.
+ */
+export function dailyGuildTotals(
+  db: Database,
+  guildId: string,
+  startDay: string,
+  endDay: string,
+): DailyCount[] {
+  return db
+    .prepare(
+      `SELECT day, SUM(count) AS count FROM activity
+       WHERE guild_id = ? AND day >= ? AND day <= ?
+       GROUP BY day
+       ORDER BY day ASC`,
+    )
+    .all(guildId, startDay, endDay) as DailyCount[];
+}
+
+/**
  * Delete all activity rows for days strictly before `cutoffDay`. Returns the
  * number of rows removed.
  */
