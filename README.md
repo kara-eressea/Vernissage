@@ -158,6 +158,28 @@ not need to clone the repository.
        volumes:
          - vernissage-data:/data
 
+     # Optional moderator dashboard (a read-only web UI). Delete this whole
+     # service if you don't want it — the bot runs fine without it. It reuses the
+     # same image, opens the same database read-only, and needs the dashboard
+     # values in .env (DISCORD_CLIENT_SECRET, DASHBOARD_BASE_URL,
+     # DASHBOARD_SESSION_SECRET — see .env.example). It publishes only on the
+     # loopback interface for a reverse proxy (Caddy/nginx) to terminate TLS in
+     # front of it — see "Optional: the moderator dashboard" below.
+     dashboard:
+       image: ghcr.io/kara-eressea/vernissage:latest
+       restart: unless-stopped
+       init: true
+       command: ["node", "dist/src/web/index.js"]
+       env_file: .env
+       environment:
+         DATABASE_PATH: /data/vernissage.db
+       volumes:
+         - vernissage-data:/data
+       ports:
+         - "127.0.0.1:8080:8080"
+       depends_on:
+         - bot
+
    volumes:
      vernissage-data:
    ```
