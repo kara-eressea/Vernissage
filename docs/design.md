@@ -42,11 +42,14 @@ messages itself via the gateway, starting from the moment it is installed.
   - Ignore messages from bots and webhooks.
 - Anti-spam judgment calls beyond this are left to moderators, who can
   blacklist offenders.
-- Window anchor modes (per raffle): "anchored" evaluates the Y days ending
-  at raffle start, so post-announcement activity cannot create eligibility;
-  this is the default and the main anti-spam measure. "rolling" evaluates
-  the Y days ending at the entry attempt. Both are evaluated at entry time;
-  only the window endpoint differs.
+- Activity window: the Y-day window always ends at the raffle's start, so
+  post-announcement activity cannot create eligibility. This anchoring is the
+  main anti-spam measure and is not configurable — every raffle is judged on the
+  same window, evaluated at entry time. (A per-raffle "rolling" window ending at
+  the entry attempt was removed: it let members qualify by posting after the
+  announcement, the opposite of the gate's purpose, and was an easy
+  mis-configuration. The `/raffle eligible` snapshot, which has no raffle start,
+  necessarily ends its window at "now" — see "Listing the eligible pool".)
 - With daily buckets the resolution is one UTC calendar day. If hour
   precision is ever needed, switch the activity table to hourly buckets;
   the check logic is unchanged.
@@ -129,10 +132,9 @@ automatic at close or manually triggered by a mod (configurable per raffle).
      so measured activity reflects sustained participation rather than one
      session. Both X and K are server defaults a raffle may override
      (`req_messages`/`req_days`/`req_active_days`); K of 0 imposes no spread
-     floor (volume-only, the old behavior). The window anchor is set per raffle:
-     "anchored" measures the Y days before raffle start (default, prevents
-     qualifying by spamming after the announcement), "rolling" measures the Y
-     days before the entry attempt.
+     floor (volume-only, the old behavior). The activity window always ends at
+     the raffle's start, so activity after the announcement never counts (there
+     is no per-raffle anchor choice).
    - User has not already entered.
 
 All of these are evaluated at entry time and short-circuit on the first failure,
@@ -151,7 +153,14 @@ non-gameable gates (account age, tenure, cooldown) are stated exactly.
 - Two modes, either or both:
   - Time-based: cannot enter for Z days after a win.
   - Count-based: must skip the next N raffles after a win.
-- Checked at entry time against the wins table.
+- Checked at entry time against the wins table, but the time-based mode is judged
+  as of the raffle's start (like the activity window), not the entry attempt: a
+  raffle that opens while a member is still cooling down is closed to them for its
+  whole run, even if the cooldown lapses before they click Enter — so a cooldown
+  can't be beaten by waiting out the last days of it inside an already-open
+  raffle. (The count-based mode needs no such anchoring: a still-open raffle has
+  not been drawn, so it never counts toward "raffles skipped since the win",
+  which already keeps the next raffle closed to a fresh winner.)
 - "Raffles since last win" (the count mode) means raffles in the guild whose
   draw has completed (status `drawn` or `completed`) and whose start time is
   after the user's most recent non-rerolled win. A rerolled (disqualified) win
@@ -238,9 +247,9 @@ non-gameable gates (account age, tenure, cooldown) are stated exactly.
   requirement — `default_req_messages` across `default_req_active_days` distinct
   days within `default_req_days` (the distinct-day floor **is** applied, since
   the daily buckets are stored).
-- The activity window is **rolling**, ending now — a real raffle usually anchors
-  its window to its start, but a no-raffle snapshot has no start to anchor to, so
-  "the last Y days" is the only meaningful reading.
+- The activity window **ends now** — a real raffle anchors its window to its
+  start, but a no-raffle snapshot has no start to anchor to, so "the last Y days"
+  ending now is the only meaningful reading.
 - It is a DB-only view: candidates are enumerated from the `activity` table, so
   it needs a default activity requirement to apply and it cannot see members who
   have never sent a counted message. Enumerating the full membership would need a
@@ -410,7 +419,9 @@ raffles (
   req_messages    INTEGER,          -- X
   req_days        INTEGER,          -- Y (window length)
   req_active_days INTEGER,          -- K, distinct active days required; null/0 = no spread floor
-  window_anchor   TEXT DEFAULT 'start', -- 'start' (raffle start) or 'rolling' (entry time)
+  -- DEPRECATED (schema v16): the "rolling" option was removed; the activity
+  -- window always ends at the raffle start. Retained, unused, always 'start'.
+  window_anchor   TEXT DEFAULT 'start',
   open_to_all     INTEGER DEFAULT 0, -- 1 = skip every gate but blacklist + creator self-exclusion
   -- DEPRECATED (v15): min_account_age_days, new_member_exempt, new_member_days are
   -- retained but unused — account age is now a server-wide default and the
@@ -542,13 +553,25 @@ wizard_state (
   the scheduler's next tick.
 - Winner selection when entrant count is 0: raffle marked drawn with no
   winner, logged.
+- Draw succeeds but a post fails: the draw's database writes (wins, the `drawn`
+  status, the audit_log row, and the revealed secret) all commit in one
+  transaction *before* any Discord post, and posts are best-effort and never
+  throw. So a failed announcement leaves the result recorded and verifiable but
+  unpublished. A crash *before* the commit leaves the raffle `closed`, and the
+  startup reconcile re-commits and (for auto raffles) re-draws it. A post that
+  fails *after* the commit is recovered with `/raffle announce <raffle>`, which
+  re-publishes the winner announcement and audit result from the stored winners,
+  seed, and secret without re-selecting — it draws no new winner and changes no
+  state, so it is safe to run repeatedly.
 - Multiple concurrent raffles per guild: supported; entry button binds to a
   specific raffle id.
 - Rate limits: batch activity writes (in-memory counter flushed every N
   seconds) to keep database write volume low on busy servers.
 
 ## Out of scope for v1 (future ideas)
-- Web dashboard for configuration and public audit viewing.
+- Web dashboard for configuration and public audit viewing — a read-only,
+  moderator-gated shape (with an eligibility simulator and a public draw
+  verifier) is sketched in [dashboard.md](dashboard.md).
 - drand integration if fallback commit-reveal is used first.
 - Export of audit history as CSV/JSON via command.
 
@@ -563,9 +586,8 @@ functions, and formats replies.
 - Unit tests for eligibility: each check (open state, blacklist, creator,
   open-to-all short-circuit, role gates, account age, server tenure, cooldown,
   prior-winner bar, the activity gate — X messages and K distinct active days —
-  in both anchor modes, duplicate entry) with passing and failing cases,
-  including boundary values (exactly X messages, exactly K days, window edges at
-  UTC midnight).
+  duplicate entry) with passing and failing cases, including boundary values
+  (exactly X messages, exactly K days, window edges at UTC midnight).
 - Draw tests: deterministic given a seed (fixed seed in, same winner out),
   correct multi-winner iteration without duplicates, reroll re-selecting over
   the frozen committed list from the same base seed with disqualified ids

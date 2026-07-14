@@ -11,10 +11,10 @@
  * skipped — like the entry snapshot it has no member join dates. What it does
  * apply are the guild-wide bars it can evaluate from stored data: not
  * blacklisted, account old enough, off any win cooldown, and the default
- * activity requirement (X messages across K distinct days) — measured over a
- * *rolling* window ending now (there is no raffle start to anchor to). See
- * design.md "Listing the eligible pool" for why it approximates rather than
- * mirrors a specific raffle.
+ * activity requirement (X messages across K distinct days) — measured over the
+ * window ending now (there is no raffle start to anchor to, so "now" is the only
+ * meaningful window end). See design.md "Listing the eligible pool" for why it
+ * approximates rather than mirrors a specific raffle.
  */
 
 import { checkEligibility } from "./eligibility.js";
@@ -50,8 +50,7 @@ export interface SnapshotCandidate {
 /**
  * Project a candidate into the pure `EligibilityInput`, filling the per-raffle
  * fields with their no-raffle neutral values: an open status (so the gate runs),
- * no role gates, no prior-winner bar, no new-member exemption, and a rolling
- * window anchored at `now`.
+ * no role gates, no prior-winner bar, and the activity window anchored at `now`.
  */
 export function buildSnapshotInput(
   candidate: SnapshotCandidate,
@@ -78,7 +77,8 @@ export function buildSnapshotInput(
     reqMessages: defaults.reqMessages,
     reqActiveDays: defaults.reqActiveDays,
     reqDays: defaults.reqDays,
-    windowAnchor: "rolling",
+    // No raffle to anchor to, so the activity window and cooldown are judged as
+    // of `now` — "the last Y days" ending right now.
     raffleStart: now,
     joinedAt: null,
     dailyCounts: candidate.dailyCounts,

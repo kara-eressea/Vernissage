@@ -42,10 +42,10 @@ function candidate(overrides: Partial<SnapshotCandidate> = {}): SnapshotCandidat
 }
 
 describe("buildSnapshotInput", () => {
-  it("neutralizes the per-raffle gates and uses a rolling window", () => {
+  it("neutralizes the per-raffle gates and anchors the window at now", () => {
     const input = buildSnapshotInput(candidate(), DEFAULTS, NOW);
     expect(input.status).toBe("open");
-    expect(input.windowAnchor).toBe("rolling");
+    expect(input.raffleStart).toBe(NOW);
     expect(input.requiredRoleId).toBeNull();
     expect(input.excludedRoleId).toBeNull();
     expect(input.excludePriorWinners).toBe(false);
@@ -72,8 +72,8 @@ describe("snapshotEligibleUsers", () => {
     expect(result).toEqual({ considered: 1, eligibleUserIds: [] });
   });
 
-  it("only counts activity inside the rolling window ending now", () => {
-    // 20 messages, but 20 days before NOW — outside the 14-day rolling window.
+  it("only counts activity inside the window ending now", () => {
+    // 20 messages, but 20 days before NOW — outside the 14-day window ending now.
     const stale = candidate({ dailyCounts: [{ day: "2026-06-24", count: 20 }] });
     expect(snapshotEligibleUsers([stale], DEFAULTS, NOW).eligibleUserIds).toEqual([]);
   });

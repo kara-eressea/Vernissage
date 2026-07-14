@@ -41,7 +41,6 @@ function seedOpenRaffle(overrides: RaffleFieldPatch = {}): number {
     ends_at: "2026-07-30T00:00:00.000Z",
     req_messages: 5,
     req_days: 1,
-    window_anchor: "start",
     winner_count: 1,
     draw_mode: "auto",
     ...overrides,

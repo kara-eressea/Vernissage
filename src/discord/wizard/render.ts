@@ -168,27 +168,6 @@ function footerRow(step: WizardStep, raffleId: number): ActionRowBuilder<ButtonB
 // the open dropdown) explains what picking it means. Labels and descriptions
 // cap at 100 characters.
 
-function anchorSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(buildWizardId("eligibility", "anchor", raffle.raffle_id))
-    .setPlaceholder("Activity window anchor")
-    .addOptions(
-      {
-        label: "Activity window: before the raffle starts",
-        description: "Recommended — everyone is judged on the same window; activity after opening doesn't count.",
-        value: "start",
-        default: raffle.window_anchor === "start",
-      },
-      {
-        label: "Activity window: rolling, before each entry",
-        description: "The window is measured back from the moment each member enters.",
-        value: "rolling",
-        default: raffle.window_anchor === "rolling",
-      },
-    );
-  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
-}
-
 function openToAllSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBuilder> {
   const menu = new StringSelectMenuBuilder()
     .setCustomId(buildWizardId("eligibility", "opentoall", raffle.raffle_id))
@@ -380,7 +359,6 @@ export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: s
       return {
         content: "**Step 3 of 5 — Eligibility**\nWho can enter. Set the activity numbers, or use guild defaults.",
         components: rows(
-          anchorSelect(raffle),
           openToAllSelect(raffle),
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             button("eligibility", "nums", id, "Set activity numbers", ButtonStyle.Primary),

@@ -23,7 +23,6 @@ const validDraft: RaffleDraftFields = {
   req_messages: 20,
   req_days: 14,
   req_active_days: null,
-  window_anchor: "start",
   open_to_all: 0,
   exclude_prior_winners: 0,
   required_role_id: null,
@@ -76,7 +75,6 @@ describe("validateEligibility", () => {
     req_messages: 20,
     req_days: 14,
     req_active_days: null as number | null,
-    window_anchor: "start",
     open_to_all: 0 as number | null,
     required_role_id: null as string | null,
     excluded_role_id: null as string | null,
@@ -95,10 +93,6 @@ describe("validateEligibility", () => {
     expect(validateEligibility({ ...base, req_active_days: 20 }).ok).toBe(false);
     expect(validateEligibility({ ...base, req_active_days: 3 }).ok).toBe(true);
     expect(validateEligibility({ ...base, req_active_days: -1 }).ok).toBe(false);
-  });
-
-  it("rejects an unknown window anchor", () => {
-    expect(validateEligibility({ ...base, window_anchor: "sideways" }).ok).toBe(false);
   });
 
   it("open-to-everyone waives the activity requirement", () => {

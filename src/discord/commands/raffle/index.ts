@@ -21,7 +21,7 @@ import type { CommandContext } from "../index.js";
 import type { Command } from "../types.js";
 import { addBanSubcommands, handleBan, handleBanlist, handleUnban } from "./blacklist.js";
 import { addConfigGroup, handleConfig } from "./config.js";
-import { addDrawSubcommands, handleDraw, handleReroll } from "./draw.js";
+import { addDrawSubcommands, handleAnnounce, handleDraw, handleReroll } from "./draw.js";
 import { addEligibleSubcommand, handleEligible } from "./eligible.js";
 import {
   addEntrySubcommands,
@@ -93,6 +93,9 @@ async function dispatch(
       return;
     case "draw":
       await handleDraw(interaction, ctx);
+      return;
+    case "announce":
+      await handleAnnounce(interaction, ctx);
       return;
     case "reroll":
       await handleReroll(interaction, ctx);

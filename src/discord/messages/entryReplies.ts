@@ -56,7 +56,7 @@ export function entryFailureMessage(
         cooldownCount: input.cooldown.cooldownCount,
         wins: input.wins,
         rafflesSinceLastWin: input.rafflesSinceLastWin,
-        now: input.now,
+        now: input.raffleStart,
       });
       const parts: string[] = [];
       if (status.endsAt && Date.parse(status.endsAt) > Date.parse(input.now)) {
@@ -73,7 +73,10 @@ export function entryFailureMessage(
     case "insufficient_activity":
       // Deliberately no have/need numbers, mirroring the public card: exact
       // figures (message and active-day floors) would let members farm to the bar.
-      return "You haven't been active enough here recently to enter yet — keep chatting!";
+      // Activity is measured up to the raffle's start, so say so plainly rather
+      // than inviting a futile burst of messages now ("keep chatting" would
+      // mislead — posting after it opened can't help this raffle).
+      return "Sorry, you're not eligible for this raffle — you weren't active enough here before it started. Staying active will help you qualify for future ones.";
     case "already_entered":
       return "You're already entered into this raffle. Changed your mind? Use `/raffle withdraw`.";
   }
@@ -86,7 +89,7 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
     cooldownCount: input.cooldown.cooldownCount,
     wins: input.wins,
     rafflesSinceLastWin: input.rafflesSinceLastWin,
-    now: input.now,
+    now: input.raffleStart,
   });
 
   const lines = [`**Your status for ${raffleName ?? "the raffle"}**`];

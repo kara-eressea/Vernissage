@@ -89,7 +89,6 @@ function toDraftFields(r: RaffleRow): RaffleDraftFields {
     req_messages: r.req_messages,
     req_days: r.req_days,
     req_active_days: r.req_active_days,
-    window_anchor: r.window_anchor,
     open_to_all: r.open_to_all,
     exclude_prior_winners: r.exclude_prior_winners,
     required_role_id: r.required_role_id,
@@ -297,10 +296,6 @@ export function createWizard(deps: WizardDeps): Wizard {
     action: string,
   ): Promise<void> {
     const id = raffle.raffle_id;
-    if (action === "anchor" && interaction.isStringSelectMenu()) {
-      updateRaffleFields(db, id, { window_anchor: interaction.values[0] });
-      return rerender(interaction, id, "eligibility");
-    }
     if (action === "opentoall" && interaction.isStringSelectMenu()) {
       updateRaffleFields(db, id, { open_to_all: interaction.values[0] === "on" ? 1 : 0 });
       return rerender(interaction, id, "eligibility");
@@ -518,7 +513,6 @@ export function createWizard(deps: WizardDeps): Wizard {
   function applyEligibilityDefaults(raffle: RaffleRow): void {
     const guild = getGuild(db, raffle.guild_id);
     updateRaffleFields(db, raffle.raffle_id, {
-      window_anchor: raffle.window_anchor ?? "start",
       req_messages: raffle.req_messages ?? guild?.default_req_messages ?? null,
       req_days: raffle.req_days ?? guild?.default_req_days ?? null,
       req_active_days: raffle.req_active_days ?? guild?.default_req_active_days ?? null,

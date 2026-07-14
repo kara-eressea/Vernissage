@@ -12,7 +12,6 @@ const base: ResolvedRaffleSettings = {
   req_messages: 20,
   req_days: 14,
   req_active_days: null,
-  window_anchor: "start",
   open_to_all: 0,
   min_account_age_days: null,
   min_server_age_days: null,
@@ -39,16 +38,8 @@ describe("describeRaffle", () => {
     expect(text).toContain("2 winners");
   });
 
-  it("uses anchored phrasing for the 'start' window", () => {
-    expect(joined({ ...base, window_anchor: "start" })).toContain(
-      "in the 14 days before the raffle starts",
-    );
-  });
-
-  it("uses rolling phrasing for the 'rolling' window", () => {
-    const text = joined({ ...base, window_anchor: "rolling" });
-    expect(text).toContain("in the 14 days before they enter");
-    expect(text).not.toContain("before the raffle starts");
+  it("phrases the activity window as ending at the raffle start", () => {
+    expect(joined(base)).toContain("in the 14 days before the raffle starts");
   });
 
   it("describes the draw mode", () => {

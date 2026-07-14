@@ -234,7 +234,6 @@ describe("wizard confirm", () => {
       ends_at: "2099-01-08T00:00:00.000Z",
       req_messages: 20,
       req_days: 14,
-      window_anchor: "start",
       winner_count: 1,
       draw_mode: "auto",
     });

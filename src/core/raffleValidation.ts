@@ -24,7 +24,6 @@ export interface RaffleDraftFields {
   req_messages: number | null;
   req_days: number | null;
   req_active_days: number | null;
-  window_anchor: string | null;
   /** 1 = anyone not blacklisted may enter (every other gate waived). */
   open_to_all: number | null;
   exclude_prior_winners: number | null;
@@ -47,7 +46,6 @@ export interface GuildDefaults {
   default_min_server_age_days: number | null;
 }
 
-export const WINDOW_ANCHORS = ["start", "rolling"] as const;
 export const DRAW_MODES = ["auto", "manual"] as const;
 
 /** Step 1: a raffle needs at least a name and a prize. */
@@ -100,7 +98,6 @@ export function validateEligibility(
     | "req_messages"
     | "req_days"
     | "req_active_days"
-    | "window_anchor"
     | "open_to_all"
     | "required_role_id"
     | "excluded_role_id"
@@ -121,9 +118,6 @@ export function validateEligibility(
   }
   if (fields.req_days === null || fields.req_days < 1) {
     return err("The activity window must be at least 1 day.");
-  }
-  if (fields.window_anchor !== null && !(WINDOW_ANCHORS as readonly string[]).includes(fields.window_anchor)) {
-    return err("The window anchor must be 'start' or 'rolling'.");
   }
   if (fields.req_active_days !== null && fields.req_active_days < 0) {
     return err("The active-days requirement cannot be negative.");

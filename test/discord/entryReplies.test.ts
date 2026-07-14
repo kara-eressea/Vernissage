@@ -27,7 +27,6 @@ function input(overrides: Partial<EligibilityInput> = {}): EligibilityInput {
     reqMessages: 20,
     reqActiveDays: 0,
     reqDays: 14,
-    windowAnchor: "start",
     raffleStart: "2026-07-10T12:00:00.000Z",
     joinedAt: null,
     dailyCounts: [{ day: "2026-07-05", count: 8 }],
@@ -57,6 +56,14 @@ describe("entryFailureMessage", () => {
     // The message and active-day thresholds must never leak to members.
     expect(msg).not.toContain("20");
     expect(msg).not.toContain("8");
+  });
+
+  it("tells the member the activity window closed at the raffle's start", () => {
+    // The copy must set expectations, not invite a futile burst of messages that
+    // can't help this raffle (activity is always anchored to start).
+    const msg = entryFailureMessage("insufficient_activity", input(), false);
+    expect(msg.toLowerCase()).toContain("before it started");
+    expect(msg.toLowerCase()).not.toContain("keep chatting");
   });
 
   it("describes the win cooldown", () => {

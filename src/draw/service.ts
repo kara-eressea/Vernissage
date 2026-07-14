@@ -394,6 +394,86 @@ export async function executeDraw(
   return { ok: true, winners };
 }
 
+export type ReannounceOutcome =
+  | { ok: true; winners: string[] }
+  | { ok: false; reason: "not_found" | "not_drawn" | "missing_commitment" };
+
+/**
+ * Re-publish a drawn raffle's results from already-stored data, with no
+ * re-selection: the same winners, seed, and secret are re-posted to the audit
+ * channel and the public announcement channel, and the entry card's winner line
+ * is refreshed. The manual recovery lever for when the original draw committed to
+ * the database but a Discord post failed — posts are best-effort and never throw,
+ * so a failed announcement is otherwise silent (design.md "Auditability"). Draws
+ * no new winner and writes no new state, so it is idempotent and safe to run more
+ * than once. Only valid on a `drawn` raffle.
+ */
+export async function reannounceDraw(
+  db: Database,
+  announcer: DrawAnnouncer,
+  raffleId: number,
+  now: string,
+): Promise<ReannounceOutcome> {
+  const raffle = getRaffle(db, raffleId);
+  if (!raffle) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (raffle.status !== "drawn") {
+    return { ok: false, reason: "not_drawn" };
+  }
+  if (
+    raffle.entrants_hash === null ||
+    raffle.draw_secret === null ||
+    raffle.draw_commitment === null
+  ) {
+    // A drawn raffle is always committed; fail safe rather than post partial data.
+    return { ok: false, reason: "missing_commitment" };
+  }
+  const entrantsHash = raffle.entrants_hash;
+  const secret = raffle.draw_secret;
+  const commitment = raffle.draw_commitment;
+  const seed = deriveSeed(entrantsHash, secret);
+  const excluded = disqualifiedEntrants(raffle);
+
+  const liveWins = listWinsForRaffle(db, raffleId).filter((w) => w.rerolled === 0);
+  const winners = liveWins.map((w) => w.user_id);
+  // Re-post the *stored* deadline, not a fresh one from `now`: recomputing would
+  // silently extend the claim window past what the win rows actually record.
+  const claimDeadline = liveWins.find((w) => w.claim_deadline !== null)?.claim_deadline ?? null;
+
+  await announcer.postAudit(
+    raffle.guild_id,
+    formatResultPost({
+      raffleId,
+      raffleName: raffle.name,
+      winners,
+      entrantsHash,
+      commitment,
+      secret,
+      seed,
+      excluded,
+      isTest: raffle.is_test === 1,
+      now,
+    }),
+  );
+  const channelId = announceChannelFor(db, raffle);
+  if (channelId) {
+    await announcer.postAnnouncement(
+      channelId,
+      formatWinnerAnnouncement({
+        raffleName: raffle.name,
+        prize: raffle.prize,
+        winners,
+        claimDeadline,
+        isTest: raffle.is_test === 1,
+      }),
+    );
+  }
+  await refreshEntryMessage(db, announcer, raffleId, { phase: "drawn", winnerIds: winners });
+
+  return { ok: true, winners };
+}
+
 /**
  * Disqualify a winner and draw a replacement. Marks the win rerolled, then
  * re-selects `winner_count` winners from the same base seed with every

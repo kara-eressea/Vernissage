@@ -33,7 +33,6 @@ function baseInput(overrides: Partial<EligibilityInput> = {}): EligibilityInput 
     reqMessages: 10,
     reqActiveDays: 0,
     reqDays: 14,
-    windowAnchor: "start",
     raffleStart: "2026-07-14T12:00:00.000Z",
     joinedAt: null,
     dailyCounts: [{ day: "2026-07-10", count: 10 }],
@@ -171,6 +170,32 @@ describe("checkEligibility - prior-winner exclusion", () => {
   });
 });
 
+describe("checkEligibility - win cooldown anchored to the raffle start", () => {
+  // A 30-day cooldown from a 2026-07-10 win lifts 2026-08-09. The member tries to
+  // enter 2026-08-15, after the cooldown has lapsed in real time. The outcome
+  // turns only on when the raffle opened (its raffleStart), since the cooldown is
+  // judged as of the start. reqMessages 0 isolates the cooldown from the activity
+  // gate.
+  const scenario = {
+    cooldown: { cooldownDays: 30, cooldownCount: null },
+    wins: [{ raffleId: 1, wonAt: "2026-07-10T00:00:00.000Z" }],
+    reqMessages: 0,
+    now: "2026-08-15T00:00:00.000Z",
+  };
+
+  it("blocks a raffle that opened during the cooldown, even after it lapses", () => {
+    // Opened 2026-08-01, while the member was still cooling down.
+    const input = baseInput({ ...scenario, raffleStart: "2026-08-01T00:00:00.000Z" });
+    expect(checkEligibility(input)).toEqual({ ok: false, reason: "in_cooldown" });
+  });
+
+  it("admits a member whose raffle opened after the cooldown had lapsed", () => {
+    // Opened 2026-08-10, a day after the cooldown lifted.
+    const input = baseInput({ ...scenario, raffleStart: "2026-08-10T00:00:00.000Z" });
+    expect(checkEligibility(input)).toEqual({ ok: true });
+  });
+});
+
 describe("activity requirement boundaries", () => {
   it("accepts exactly the required message count", () => {
     expect(
@@ -188,24 +213,13 @@ describe("activity requirement boundaries", () => {
     ).toBe(false);
   });
 
-  it("anchored mode ignores activity after the raffle start day", () => {
-    // Messages the day after start must not count in anchored mode.
+  it("ignores activity after the raffle start day", () => {
+    // The window is anchored to the raffle's start, so messages the day after
+    // start must not count — post-announcement activity can't create eligibility.
     const input = baseInput({
-      windowAnchor: "start",
       dailyCounts: [{ day: "2026-07-15", count: 50 }],
     });
     expect(meetsActivityRequirement(input)).toBe(false);
-  });
-
-  it("rolling mode counts activity up to the entry attempt", () => {
-    // Same post-start messages DO count when the window is anchored at `now`.
-    const input = baseInput({
-      windowAnchor: "rolling",
-      raffleStart: "2026-07-14T12:00:00.000Z",
-      now: "2026-07-15T12:00:00.000Z",
-      dailyCounts: [{ day: "2026-07-15", count: 50 }],
-    });
-    expect(meetsActivityRequirement(input)).toBe(true);
   });
 
   it("counts a message on the exact UTC-midnight window edge", () => {

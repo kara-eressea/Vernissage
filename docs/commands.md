@@ -109,6 +109,19 @@ selection and its verification data are published per the
 /raffle draw raffle:42
 ```
 
+### `/raffle announce <raffle>`
+Re-post an already-drawn raffle's public winner announcement and audit result
+from stored data. Use it if the draw itself succeeded but a Discord post failed
+to go out (posts are best-effort, so a failure is silent). It re-selects nothing
+— the same winners, seed, and secret are re-published and the entry card's winner
+line is refreshed. Idempotent and state-free, so it is safe to run more than once;
+it never re-draws, extends a claim window, or changes who won. Only valid on a
+`drawn` raffle (for one not yet drawn, use `/raffle draw`).
+
+```
+/raffle announce raffle:42
+```
+
 ### `/raffle reroll <raffle> <winner> <reason>`
 Replace a disqualified winner. The replacement is re-selected from the *same*
 base seed with the disqualified winner excluded, so it stays verifiable from
@@ -175,7 +188,7 @@ hit — with these limits, because there is no raffle to read from:
   cannot see members who have never sent a counted message.
 - It applies the guild-wide bars it can measure from stored data — the activity
   requirement (messages **and** distinct active days), minimum account age, and
-  win cooldown — over a rolling window ending now. The **server-tenure** floor is
+  win cooldown — over the activity window ending now. The **server-tenure** floor is
   skipped (no member join dates without a live fetch), and the per-raffle gates
   (role gates, prior-winner bar, open-to-everyone) have no server default, so a
   specific raffle may narrow — or widen — the pool further.
@@ -275,8 +288,8 @@ The flow (all on one ephemeral message that updates in place):
    markup, so you see it in your own timezone before confirming (interpreted in
    the server's configured `timezone`). A start of `now` opens the raffle on
    the first scheduler sweep after you confirm.
-3. **Eligibility** — the window anchor and an **Open to everyone?** toggle via
-   menus, plus a modal for X messages / Y days / K separate active days. "Open
+3. **Eligibility** — an **Open to everyone?** toggle via a menu, plus a modal for
+   X messages / Y days / K separate active days. "Open
    to everyone" waives every requirement (see
    [Entry flow](design.md#entry-flow)) and can't be combined with a role gate.
    Minimum account age and server tenure are **server-wide** settings (in
