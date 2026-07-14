@@ -56,7 +56,7 @@ export interface ResultPost {
   commitment: string;
   /** The revealed secret. */
   secret: string;
-  /** The derived draw seed (SHA-256 of hash + secret). */
+  /** The derived draw seed (SHA-256 of the colon-joined `hash:secret`). */
   seed: string;
   /** Ids excluded from selection (left the guild or blacklisted at draw). */
   excluded?: string[];
@@ -84,7 +84,7 @@ export function formatResultPost(input: ResultPost): string {
     `**Entrant list hash:** \`${input.entrantsHash}\``,
     `**Revealed secret:** \`${input.secret}\``,
     `**Commitment check:** SHA-256(secret) must equal \`${input.commitment}\``,
-    `**Draw seed:** \`${input.seed}\` = SHA-256(hash + secret)`,
+    `**Draw seed:** \`${input.seed}\` = SHA-256(hash + ":" + secret) — hash and secret joined by a colon`,
   ];
   if (input.excluded && input.excluded.length > 0) {
     // Publishing the excluded ids keeps the draw verifiable: a checker must skip

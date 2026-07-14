@@ -19,6 +19,11 @@ import type { HomeView, PickerCard } from "./home.js";
 import { resolveDisplayName } from "./naming.js";
 import type { Session, SessionGuild } from "./session.js";
 import type { SimulatorView } from "./simulator.js";
+import type {
+  VerificationView,
+  VerifiableRaffleCard,
+  VerifyStep,
+} from "./verify.js";
 
 /** The one accent theme (the design's teal default), exposed as CSS variables. */
 const THEME = {
@@ -49,6 +54,7 @@ summary::-webkit-details-marker{display:none}
 .hovout:hover{border-color:#343a44 !important;color:#c3c8d1 !important}
 @keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes barrise{from{transform:scaleY(.3);opacity:.4}to{transform:none;opacity:1}}
+@keyframes popin{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
 @media (max-width:820px){.home-grid{grid-template-columns:1fr !important}}
 @media (max-width:900px){.sim-grid{grid-template-columns:1fr !important}.sim-controls{position:static !important}}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;background:#22262d;outline:none;margin:0;cursor:pointer}
@@ -306,7 +312,7 @@ function homeHeader(
   guild: SessionGuild,
   brand: string,
   cards: PickerCard[],
-  active: "overview" | "simulator",
+  active: "overview" | "simulator" | "verify",
 ): RawHtml {
   return html`
     <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
@@ -325,7 +331,9 @@ function homeHeader(
         ${navItem("Overview", "/app", active === "overview")}
         <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px;">Raffles</a>
         ${navItem("Simulator", "/app/simulator", active === "simulator")}
-        <a href="#" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>
+        ${active === "verify"
+          ? html`<span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</span>`
+          : html`<a href="/app/verify" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>`}
         <div style="width:1px; height:24px; background:#242830; margin:0 6px;"></div>
         ${modBlock(session.username, "Moderator")}
       </nav>
@@ -663,7 +671,9 @@ function simTable(view: SimulatorView): RawHtml {
                 <div class="hovrow" style="display:grid; grid-template-columns:2.4fr .9fr .9fr 1fr 1.8fr; align-items:center; padding:10px 20px; border-bottom:1px solid #1b1e24;">
                   <div style="display:flex; align-items:center; gap:11px; min-width:0;">
                     <span style="flex:none; width:30px; height:30px; border-radius:50%; background:${r.avatarColor};"></span>
-                    <span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span><span style="display:block; font-size:11px; color:#6b717c;">member</span></span>
+                    ${r.name
+                      ? html`<span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</span><span style="display:block; font-size:10.5px; color:#6b717c; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span></span>`
+                      : html`<span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span><span style="display:block; font-size:11px; color:#6b717c;">member</span></span>`}
                   </div>
                   <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${r.messages}</div>
                   <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${r.activeDays}</div>
@@ -773,6 +783,442 @@ export function simulatorPage(
     ${SIM_SCRIPT}
   `;
   return shell("Eligibility Simulator — Moderator Dashboard", body);
+}
+
+// ---------------------------------------------------------------------------
+// Draw verification
+// ---------------------------------------------------------------------------
+
+/** Compact date label for a nullable ISO string, e.g. "Jul 12, 18:00 UTC". */
+function verifyDate(iso: string | null): string {
+  return iso ? dateLabel(iso) : "—";
+}
+
+/** The 24px status pip on a proof step: pass, fail, or blocked. */
+function stepIcon(status: VerifyStep["status"]): RawHtml {
+  const map = {
+    ok: { icon: "✓", color: "#5ccc8a", bg: "rgba(70,184,119,.14)" },
+    fail: { icon: "✗", color: "#e58497", bg: "rgba(229,104,122,.14)" },
+    blocked: { icon: "–", color: "#585e68", bg: "#1c2027" },
+  } as const;
+  const s = map[status];
+  return html`<span style="flex:none; width:24px; height:24px; border-radius:50%; background:${s.bg}; color:${s.color}; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;">${s.icon}</span>`;
+}
+
+/** A mono hash value block with an optional copy button. */
+function hashBlock(value: string, copyId: string): RawHtml {
+  return html`
+    <div style="position:relative;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#c3c8d1; background:#0c0e11; border:1px solid #23272e; border-radius:9px; padding:10px 12px; word-break:break-all; line-height:1.5;">${value}</div>
+      <button type="button" class="v-copy hovout" data-copy="${value}" data-copyid="${copyId}" style="position:absolute; top:7px; right:7px; background:#16181d; border:1px solid #262a31; color:#8b93a0; border-radius:7px; padding:3px 9px; font-size:11px; font-weight:600; cursor:pointer;">Copy</button>
+    </div>
+  `;
+}
+
+/** One numbered row of the proof, with its status pip and body. */
+function stepRow(step: VerifyStep, body: RawHtml, last = false): RawHtml {
+  return html`
+    <div style="display:flex; gap:14px; padding:18px 0; border-top:1px solid #1e222a; ${last
+      ? "border-bottom:1px solid #1e222a;"
+      : ""}">
+      <div style="flex:none; width:26px; height:26px; border-radius:8px; background:#101216; border:1px solid #262a31; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; color:#6b717c;">${step.n}</div>
+      <div style="flex:1; min-width:0; opacity:${step.status === "blocked" ? ".5" : "1"};">
+        <div style="font-weight:600; font-size:14px; color:#dfe2e7;">${step.title}</div>
+        <div style="font-size:12px; color:#8b93a0; margin:2px 0 9px;">${step.desc}</div>
+        ${body}
+      </div>
+      <div data-vstep="${step.n}" style="flex:none; padding-top:1px;">${stepIcon(step.status)}</div>
+    </div>
+  `;
+}
+
+/** The hero verdict badge, title, and explanatory line. */
+function verifyHero(view: VerificationView): RawHtml {
+  const ok = view.state === "verified";
+  const badgeColor = ok ? "var(--ok)" : "var(--danger)";
+  const ring = ok ? "rgba(70,184,119,.5)" : "rgba(229,104,122,.5)";
+  const wash = ok ? "rgba(70,184,119,.28)" : "rgba(229,104,122,.26)";
+  const pillBg = ok ? "rgba(70,184,119,.13)" : "rgba(229,104,122,.12)";
+  const border = ok ? "rgba(70,184,119,.32)" : "rgba(229,104,122,.32)";
+  const heroWash = ok
+    ? "radial-gradient(700px 300px at 50% -30%, rgba(70,184,119,.10), transparent 70%)"
+    : "radial-gradient(700px 300px at 50% -30%, rgba(229,104,122,.09), transparent 70%)";
+  const title = ok ? "Verified" : "Does not verify";
+  const pill = ok ? "Provably fair" : "Check failed";
+  const lead = ok
+    ? html`This draw checks out. Every step below was recomputed from the public commit-reveal data — the winner follows deterministically from a secret the bot locked in <span style="color:#dfe2e7;">before</span> entries closed.`
+    : html`The recomputed values do <span style="color:#e58497;">not</span> match what the bot published before the draw. This result can't be trusted — flag it to the server owner.`;
+
+  const w0 = view.winners[0];
+  const winnerSlot: RawHtml =
+    view.winnerCount === 0
+      ? html`No eligible winner`
+      : view.winnerCount === 1 && w0
+        ? w0.name
+          ? html`${w0.name}`
+          : html`<span style="font-family:'JetBrains Mono',monospace;">${w0.userId}</span>`
+        : html`${view.winnerCount} winners`;
+
+  return html`
+    <section style="background:linear-gradient(165deg,#181b21,#131519); border:1px solid ${border}; border-radius:20px; padding:34px 30px 28px; text-align:center; position:relative; overflow:hidden;">
+      <div style="position:absolute; inset:0; background:${heroWash}; pointer-events:none;"></div>
+      <div style="position:relative;">
+        ${view.isTest
+          ? html`<div style="display:inline-block; margin-bottom:14px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--warn); background:rgba(212,162,76,.12); border:1px solid rgba(212,162,76,.3); border-radius:20px; padding:4px 11px;">🧪 Test raffle</div>`
+          : ""}
+        <div style="width:88px; height:88px; margin:0 auto 20px; border-radius:50%; background:radial-gradient(circle at 50% 42%, ${wash}, rgba(0,0,0,.02)); border:1px solid ${ring}; display:flex; align-items:center; justify-content:center; animation:popin .5s cubic-bezier(.2,.8,.3,1.2);">
+          <span style="font-size:42px; line-height:1; color:${badgeColor};">${ok ? "✓" : "✗"}</span>
+        </div>
+        <div style="display:inline-flex; align-items:center; gap:9px; margin-bottom:9px; flex-wrap:wrap; justify-content:center;">
+          <span class="serif" style="font-weight:600; font-size:30px; letter-spacing:-.02em; color:#e9ecef;">${title}</span>
+          <span style="font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:${badgeColor}; background:${pillBg}; border:1px solid ${ring}; border-radius:20px; padding:4px 11px;">${pill}</span>
+        </div>
+        <p style="margin:0 auto; max-width:52ch; font-size:14.5px; color:#a7adb7; line-height:1.55;">${lead}</p>
+
+        <div style="margin-top:24px; display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center; gap:0; background:#101216; border:1px solid #23272e; border-radius:14px; overflow:hidden; text-align:left;">
+          <div style="flex:1 1 200px; padding:14px 18px; border-right:1px solid #1e222a;">
+            <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:4px;">Raffle</div>
+            <div class="serif" style="font-weight:600; font-size:16px; color:#e6e8ec;">${view.raffleName}</div>
+          </div>
+          <div style="flex:1 1 150px; padding:14px 18px; border-right:1px solid #1e222a;">
+            <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:4px;">Drawn</div>
+            <div style="font-size:14px; color:#c3c8d1;">${verifyDate(view.drawnDate)}</div>
+          </div>
+          <div style="flex:0 1 110px; padding:14px 18px; border-right:1px solid #1e222a;">
+            <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:4px;">Entrants</div>
+            <div style="font-size:14px; color:#c3c8d1; font-family:'JetBrains Mono',monospace;">${view.entrantCount}</div>
+          </div>
+          <div style="flex:1 1 190px; padding:14px 18px; min-width:0;">
+            <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:4px;">Winner${view.winnerCount > 1 ? "s" : ""}</div>
+            <div style="font-size:13.5px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${winnerSlot}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; margin-top:14px; font-size:11.5px; color:#6b717c;">
+          <span style="width:6px; height:6px; border-radius:50%; background:#585e68;"></span>
+          <span id="verify-device">Recomputed from the published commit-reveal data.</span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+/** A winner's name over its id (the id stays visible — it's what's hashed). */
+function winnerName(w: { name: string | null; userId: string }): RawHtml {
+  if (w.name) {
+    return html`<span style="font-family:'Source Sans 3',sans-serif; color:#e6e8ec; font-weight:600;">${w.name}</span> <span style="color:#585e68;">${w.userId}</span>`;
+  }
+  return html`<span style="color:#e6e8ec; font-weight:600;">${w.userId}</span>`;
+}
+
+/** Step 5's body: the winner index (single) or the winner list (multi). */
+function winnerStepBody(view: VerificationView): RawHtml {
+  if (view.winnerCount === 0) {
+    return html`<div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8b93a0; background:#0c0e11; border:1px solid #23272e; border-radius:9px; padding:11px 13px;">No eligible entrant — the draw produced no winner.</div>`;
+  }
+  if (view.winnerCount === 1 && view.winners[0]) {
+    const w = view.winners[0];
+    return html`
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13.5px; color:#c3c8d1; background:#0c0e11; border:1px solid #23272e; border-radius:9px; padding:11px 13px; line-height:1.7;">
+        <div>seed mod ${view.entrantCount} = <span style="color:var(--accent); font-weight:600;">${w.index}</span></div>
+        <div style="color:#8b93a0;">→ entrant #<span style="color:#e6e8ec;">${w.index}</span> = ${winnerName(w)}</div>
+      </div>
+    `;
+  }
+  return html`
+    <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#c3c8d1; background:#0c0e11; border:1px solid #23272e; border-radius:9px; padding:11px 13px; line-height:1.7;">
+      <div style="color:#8b93a0; margin-bottom:4px;">${view.winnerCount} winners, iterating the seed:</div>
+      ${view.winners.map(
+        (w) => html`<div>#<span style="color:var(--accent); font-weight:600;">${w.index}</span> = ${winnerName(w)}</div>`,
+      )}
+    </div>
+  `;
+}
+
+/** The step-by-step proof panel. */
+function verifyProof(view: VerificationView): RawHtml {
+  const [s1, s2, s3, s4, s5] = view.steps as [
+    VerifyStep,
+    VerifyStep,
+    VerifyStep,
+    VerifyStep,
+    VerifyStep,
+  ];
+  const commitOp = view.commitment.match ? "=" : "≠";
+  const commitColor = view.commitment.match ? "#5ccc8a" : "#e58497";
+  const commitResult = view.commitment.match
+    ? "Match — the secret is the one that was committed to."
+    : "Mismatch — the revealed secret was not what the bot committed to.";
+  const pubBorder = view.commitment.match ? "#23272e" : "rgba(229,104,122,.4)";
+
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:16px; padding:20px 22px 8px; margin-top:16px;">
+      <div>
+        <h2 class="serif" style="font-weight:600; font-size:19px; margin:0; letter-spacing:-.01em;">The proof</h2>
+        <p style="margin:5px 0 0; font-size:13px; color:#8b93a0; line-height:1.5;">Every value below is recomputed from public data — the same values anyone can recompute from the audit channel.</p>
+      </div>
+      <div style="margin-top:6px;">
+        ${stepRow(s1, hashBlock(s1.value ?? "", "hash"))}
+        ${stepRow(s2, hashBlock(s2.value ?? "", "secret"))}
+        ${stepRow(
+          s3,
+          html`
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <span style="flex:none; width:118px; font-size:11px; color:#6b717c;">SHA-256(secret)</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#c3c8d1; background:#0c0e11; border:1px solid #23272e; border-radius:7px; padding:6px 10px; word-break:break-all; flex:1; min-width:0;">${view.commitment.selfValue}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px;">
+                <span style="flex:none; width:118px; font-size:11px; color:#6b717c;">published commit</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#c3c8d1; background:#0c0e11; border:1px solid ${pubBorder}; border-radius:7px; padding:6px 10px; word-break:break-all; flex:1; min-width:0;">${view.commitment.publishedValue}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:2px; font-size:12.5px; font-weight:600; color:${commitColor};"><span style="font-family:'JetBrains Mono',monospace; font-size:15px;">${commitOp}</span>${commitResult}</div>
+            </div>
+          `,
+        )}
+        ${stepRow(
+          s4,
+          html`
+            <div style="font-size:11.5px; color:#6b717c; margin-bottom:7px; font-family:'JetBrains Mono',monospace; word-break:break-all;">preimage = <span style="color:#8b93a0;">${view.seedPreimage}</span></div>
+            ${hashBlock(s4.value ?? "", "seed")}
+          `,
+        )}
+        ${stepRow(s5, winnerStepBody(view), true)}
+      </div>
+    </section>
+  `;
+}
+
+/** The "how this works" explainer (collapsed by default). */
+function verifyHowItWorks(): RawHtml {
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:4px 20px; margin-top:14px;">
+      <details>
+        <summary style="display:flex; align-items:center; justify-content:space-between; padding:16px 0;">
+          <span style="display:flex; align-items:center; gap:10px;"><span style="width:24px; height:24px; border-radius:7px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px;">?</span><span style="font-weight:600; font-size:14.5px; color:#dfe2e7;">How this works</span></span>
+          <span style="color:#6b717c; font-size:11px;">▾</span>
+        </summary>
+        <div style="padding:0 0 18px; font-size:13.5px; color:#a7adb7; line-height:1.65; max-width:70ch; display:flex; flex-direction:column; gap:11px;">
+          <p style="margin:0;"><span style="color:#dfe2e7; font-weight:600;">Commit, then reveal.</span> Before entries closed, the bot picked a random secret and published only its fingerprint — a SHA-256 hash called the <em>commitment</em>. It couldn't change the secret afterwards without the fingerprint no longer matching.</p>
+          <p style="margin:0;"><span style="color:#dfe2e7; font-weight:600;">The entrant list is frozen.</span> When the raffle closed, every entrant's id was sorted and hashed. That single hash pins down exactly who was in the draw — add, remove, or reorder anyone and it changes.</p>
+          <p style="margin:0;"><span style="color:#dfe2e7; font-weight:600;">The winner is forced by math.</span> The seed is the hash of the entrant list joined to the revealed secret by a colon, and the winner is that seed reduced to a position in the list. Because the secret was locked in first, nobody could aim the result at a chosen entrant.</p>
+          <p style="margin:0; color:#8b93a0;">This page redoes all of that — on the server, and again in your browser. You aren't trusting us that it's fair; you're watching it recompute.</p>
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+/** The full committed entrant list (collapsed), winners and excluded marked. */
+function verifyEntrantList(view: VerificationView): RawHtml {
+  const MAX = 500;
+  const shown = view.entrants.slice(0, MAX);
+  const overflow = view.entrants.length - shown.length;
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:14px; padding:4px 20px; margin-top:14px;">
+      <details>
+        <summary style="display:flex; align-items:center; justify-content:space-between; padding:16px 0;">
+          <span style="display:flex; align-items:center; gap:10px;"><span style="width:24px; height:24px; border-radius:7px; background:#101216; border:1px solid #262a31; color:#8b93a0; display:flex; align-items:center; justify-content:center; font-size:12px;">☰</span><span style="font-weight:600; font-size:14.5px; color:#dfe2e7;">Full entrant list</span><span style="font-size:11.5px; color:#585e68;">${view.entrantCount} ids · frozen at draw time</span></span>
+          <span style="color:#6b717c; font-size:11px;">▾</span>
+        </summary>
+        <div style="padding-bottom:18px;">
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:11px; font-size:11.5px; color:#8b93a0; flex-wrap:wrap;">
+            <span style="display:flex; align-items:center; gap:6px;"><span style="width:11px; height:11px; border-radius:3px; background:var(--accent);"></span>winning entrant</span>
+            ${view.excluded.length > 0
+              ? html`<span style="display:flex; align-items:center; gap:6px;"><span style="width:11px; height:11px; border-radius:3px; background:#3a2b30;"></span>removed by the draw failsafe (left or blacklisted)</span>`
+              : ""}
+          </div>
+          <div style="max-height:320px; overflow-y:auto; border:1px solid #23272e; border-radius:10px; background:#101216;">
+            ${shown.map((e) => {
+              const bg = e.isWinner ? "var(--accent-soft)" : "transparent";
+              const numColor = e.isWinner ? "var(--accent)" : "#585e68";
+              const idColor = e.isExcluded ? "#7a5c62" : e.isWinner ? "#e6e8ec" : "#8b93a0";
+              const strike = e.isExcluded ? "text-decoration:line-through;" : "";
+              return html`
+                <div style="display:flex; align-items:center; gap:12px; padding:7px 13px; border-bottom:1px solid #191c22; background:${bg};">
+                  <span style="flex:none; width:46px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:${numColor}; text-align:right;">#${e.index}</span>
+                  ${e.name
+                    ? html`<span style="display:flex; flex-direction:column; min-width:0;"><span style="font-size:12.5px; color:${idColor}; ${strike} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.name}</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#585e68;">${e.userId}</span></span>`
+                    : html`<span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:${idColor}; ${strike}">${e.userId}</span>`}
+                  ${e.isWinner
+                    ? html`<span style="margin-left:auto; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); border-radius:20px; padding:2px 9px;">winner</span>`
+                    : e.isExcluded
+                      ? html`<span style="margin-left:auto; font-size:11px; font-weight:600; color:#8a6b71;">excluded</span>`
+                      : ""}
+                </div>
+              `;
+            })}
+          </div>
+          ${overflow > 0
+            ? html`<div style="margin-top:10px; font-size:11.5px; color:#6b717c;">+${overflow} more not shown here — the in-browser check still hashes the full list.</div>`
+            : ""}
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+/** The public inputs the browser recomputes from, as an inline JSON island. */
+function recomputeIsland(view: VerificationView): RawHtml {
+  const json = JSON.stringify({ ...view.recompute, serverVerified: view.state === "verified" }).replace(
+    /</g,
+    "\\u003c",
+  );
+  return raw(`<script type="application/json" id="verify-data">${json}</script>`);
+}
+
+/**
+ * Progressive enhancement: independently recompute the whole draw in the browser
+ * with WebCrypto and confirm it agrees. On success the on-device line turns
+ * green; a disagreement (or a genuinely failed draw) is surfaced honestly.
+ */
+const VERIFY_SCRIPT = raw(`<script>
+(function(){
+  var el=document.getElementById('verify-data');
+  var line=document.getElementById('verify-device');
+  if(!el||!line) return;
+  var data; try{ data=JSON.parse(el.textContent); }catch(e){ return; }
+  var subtle=(window.crypto&&window.crypto.subtle)?window.crypto.subtle:null;
+  document.querySelectorAll('.v-copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=b.getAttribute('data-copy');
+      var done=function(){ var o=b.textContent; b.textContent='Copied \\u2713'; setTimeout(function(){ b.textContent=o; },1600); };
+      if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,function(){}); }
+    });
+  });
+  if(!subtle){ line.textContent='Verified from the published audit data (your browser can\\'t run the local check on an insecure connection).'; return; }
+  function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf),function(b){return ('0'+b.toString(16)).slice(-2);}).join(''); }
+  function sha(str){ return subtle.digest('SHA-256', new TextEncoder().encode(str)).then(hex); }
+  function seedIndex(seedHex,count){ return Number(BigInt('0x'+seedHex) % BigInt(count)); }
+  function selectWinners(ids,seed,count,excluded){
+    var n=ids.length; if(n===0||count<=0) return Promise.resolve([]);
+    var ex={}; excluded.forEach(function(id){ ex[id]=true; });
+    var elig=ids.filter(function(id){ return !ex[id]; }).length;
+    var target=Math.min(count,elig); if(target===0) return Promise.resolve([]);
+    var chosen={}, winners=[], cur=seed;
+    function step(){
+      if(winners.length>=target) return Promise.resolve(winners);
+      var idx=seedIndex(cur,n), id=ids[idx];
+      if(!chosen[idx]&&!ex[id]){ chosen[idx]=true; winners.push(id); }
+      return sha(cur).then(function(nx){ cur=nx; return step(); });
+    }
+    return step();
+  }
+  line.textContent='Recomputing on your device…';
+  Promise.all([ sha(data.ids.join('\\n')), sha(data.secret), sha(data.hash+':'+data.secret) ])
+    .then(function(r){
+      var hashOk=r[0]===data.hash, commitOk=r[1]===data.commitment, seedOk=r[2]===data.seed;
+      return selectWinners(data.ids, data.seed, data.winnerCount, data.excluded).then(function(w){
+        var winnersOk = w.length===data.winners.length && w.every(function(id,i){ return id===data.winners[i]; });
+        var verified = hashOk&&commitOk&&seedOk&&winnersOk;
+        if(verified===data.serverVerified){
+          if(verified){ line.textContent='\\u2713 Recomputed on your device — every step matches.'; line.style.color='#5ccc8a'; line.previousElementSibling.style.background='#46b877'; }
+          else { line.textContent='Recomputed on your device — it does not verify (same as above).'; line.style.color='#e58497'; line.previousElementSibling.style.background='#e5687a'; }
+        } else {
+          line.textContent='\\u26a0 Your browser computed a different result than the server. Do not trust this page.'; line.style.color='#e58497'; line.previousElementSibling.style.background='#e5687a';
+        }
+      });
+    })
+    .catch(function(){ /* leave the server-rendered verdict as-is */ });
+})();
+</script>`);
+
+/** The draw-verification detail page for one finished raffle. */
+export function verifyPage(
+  session: Session,
+  guild: SessionGuild,
+  view: VerificationView,
+  cards: PickerCard[],
+): string {
+  const brand = resolveDisplayName({});
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "verify")}
+    <div style="max-width:840px; margin:0 auto; padding:26px 22px 88px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:#6b717c; font-size:12px; margin-bottom:16px;">
+        <a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><a href="/app/verify" class="hovnav" style="color:#8b93a0;">Verify</a><span>/</span><span>${view.raffleName}</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; margin-left:auto; font-size:11px; color:#8b93a0; background:#16181d; border:1px solid #23272e; border-radius:20px; padding:5px 11px 5px 9px;"><span style="color:#8b93a0;">🔒</span>Moderators of ${guild.name}</span>
+      </div>
+      ${verifyHero(view)}
+      ${verifyProof(view)}
+      ${verifyHowItWorks()}
+      ${verifyEntrantList(view)}
+      <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; font-size:11.5px; color:#585e68; text-align:center;"><span style="color:var(--ok); font-size:12px;">✓</span>Recomputed from the public audit data — the same values anyone in ${guild.name} can recompute by hand.</div>
+    </div>
+    ${recomputeIsland(view)}
+    ${VERIFY_SCRIPT}
+  `;
+  return shell(`Draw verification — ${view.raffleName}`, body);
+}
+
+/** The verifier index: pick a finished raffle to verify. */
+export function verifyIndexPage(
+  session: Session,
+  guild: SessionGuild,
+  raffles: VerifiableRaffleCard[],
+  cards: PickerCard[],
+): string {
+  const brand = resolveDisplayName({});
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "verify")}
+    <div style="max-width:840px; margin:0 auto; padding:26px 22px 88px;">
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><span>Draw verification</span></div>
+      <div style="margin-bottom:22px;">
+        <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0 0 4px;">Draw verification</h1>
+        <p style="margin:0; font-size:14px; color:#8b93a0; max-width:70ch;">Pick a finished raffle to recompute its draw from the published commit-reveal data — the entrant hash, the revealed secret, the seed, and the winner. The check runs on the server <span style="color:#c3c8d1;">and again in your browser</span>.</p>
+      </div>
+      ${raffles.length === 0
+        ? html`
+            <div style="background:#16181d; border:1px dashed #2f3540; border-radius:16px; padding:56px 40px; text-align:center;">
+              <div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">No drawn raffles yet</div>
+              <p style="margin:0 auto; font-size:13.5px; color:#8b93a0; max-width:46ch; line-height:1.55;">Once a raffle in ${guild.name} has been drawn, it'll appear here for anyone to verify.</p>
+            </div>
+          `
+        : html`
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              ${raffles.map(
+                (r) => html`
+                  <a href="/app/verify?raffle=${r.id}" class="hovcard" style="display:flex; align-items:center; gap:15px; width:100%; text-align:left; background:#16181d; border:1px solid #23272e; border-radius:14px; padding:15px 17px; color:inherit;">
+                    <span style="flex:none; width:40px; height:40px; border-radius:11px; background:rgba(70,184,119,.12); border:1px solid rgba(70,184,119,.28); color:var(--ok); display:flex; align-items:center; justify-content:center; font-size:17px;">✓</span>
+                    <span style="flex:1; min-width:0;">
+                      <span style="display:flex; align-items:center; gap:8px;">
+                        <span class="serif" style="font-size:15.5px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</span>
+                        ${r.isTest
+                          ? html`<span style="flex:none; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--warn); background:rgba(212,162,76,.12); border:1px solid rgba(212,162,76,.28); border-radius:5px; padding:1px 6px;">Test</span>`
+                          : ""}
+                      </span>
+                      <span style="display:block; font-size:12.5px; color:#8b93a0; margin-top:3px; font-family:'JetBrains Mono',monospace;">${verifyDate(
+                        r.drawnDate,
+                      )} · ${r.entrantCount} entrants · ${r.winnerCount} winner${r.winnerCount === 1 ? "" : "s"}</span>
+                    </span>
+                    <span style="flex:none; color:#585e68; font-size:18px;">→</span>
+                  </a>
+                `,
+              )}
+            </div>
+          `}
+    </div>
+  `;
+  return shell("Draw verification — Moderator Dashboard", body);
+}
+
+/** Shown for a raffle that exists but isn't drawn yet (or lost its draw data). */
+export function verifyUnavailablePage(
+  session: Session,
+  guild: SessionGuild,
+  cards: PickerCard[],
+  raffleName: string,
+  message: string,
+): string {
+  const brand = resolveDisplayName({});
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "verify")}
+    <div style="max-width:640px; margin:0 auto; padding:56px 22px 88px; text-align:center;">
+      <div style="width:56px; height:56px; border-radius:16px; background:#101216; border:1px solid #23272e; display:flex; align-items:center; justify-content:center; margin:0 auto 18px; font-size:22px; color:#8b93a0;">⏳</div>
+      <h1 class="serif" style="font-weight:600; font-size:24px; letter-spacing:-.015em; margin:0 0 8px;">${raffleName}</h1>
+      <p style="margin:0 auto 24px; font-size:14px; color:#8b93a0; line-height:1.6; max-width:48ch;">${message}</p>
+      <a href="/app/verify" class="hovout" style="display:inline-block; background:none; border:1px solid #262a31; color:#8b93a0; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:600;">← All finished raffles</a>
+    </div>
+  `;
+  return shell(`Draw verification — ${raffleName}`, body);
 }
 
 // ---------------------------------------------------------------------------

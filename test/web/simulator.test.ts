@@ -168,4 +168,12 @@ describe("buildSimulatorView", () => {
     expect(view.rows).toHaveLength(0);
     expect(view.shownLabel).toBe("0 members");
   });
+
+  it("labels rows with cached names when a name map is supplied", () => {
+    const view = buildSimulatorView(result({ members }), "all", new Map([["111", "Alice"]]));
+    const byId = new Map(view.rows.map((r) => [r.userId, r]));
+    expect(byId.get("111")!.name).toBe("Alice");
+    // Ids without a cached name stay null (the row falls back to the id).
+    expect(byId.get("222")!.name).toBeNull();
+  });
 });

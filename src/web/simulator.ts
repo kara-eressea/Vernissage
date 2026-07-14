@@ -140,6 +140,8 @@ export interface CaptionView {
 
 export interface SimMemberRow {
   userId: string;
+  /** Cached display name, or null when the bot hasn't seen this member. */
+  name: string | null;
   messages: number;
   activeDays: number;
   eligible: boolean;
@@ -281,6 +283,7 @@ function sortMembers(members: SimulatedMember[]): SimulatedMember[] {
 export function buildSimulatorView(
   result: SimulationResult,
   filter: SimFilter,
+  names?: ReadonlyMap<string, string>,
 ): SimulatorView {
   const { settings, considered, eligible, members } = result;
 
@@ -310,6 +313,7 @@ export function buildSimulatorView(
   const sorted = sortMembers(filtered);
   const rows: SimMemberRow[] = sorted.slice(0, MAX_ROWS).map((m) => ({
     userId: m.userId,
+    name: names?.get(m.userId) ?? null,
     messages: m.messages,
     activeDays: m.activeDays,
     eligible: m.eligible,

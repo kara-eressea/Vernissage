@@ -19,6 +19,8 @@ import {
 import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
 import { writeAudit } from "../../../db/repositories/audit.js";
 import { hasEntry, removeEntry } from "../../../db/repositories/entries.js";
+import { upsertMemberName } from "../../../db/repositories/members.js";
+import { nameFromMember } from "../../memberNames.js";
 import { getGuild } from "../../../db/repositories/guilds.js";
 import {
   getGuildRaffle,
@@ -153,6 +155,7 @@ export async function handleEnter(
     interaction.user.id,
     roleIdsOf(interaction.member),
     joinedAtIso(interaction.member),
+    nameFromMember(interaction.user, interaction.member),
   );
 }
 
@@ -176,6 +179,7 @@ export async function handleEnterButton(
     interaction.user.id,
     roleIdsOf(interaction.member),
     joinedAtIso(interaction.member),
+    nameFromMember(interaction.user, interaction.member),
   );
 }
 
@@ -187,6 +191,7 @@ async function runEntry(
   userId: string,
   userRoleIds: string[],
   joinedAt: string | null,
+  name: { username: string | null; displayName: string | null },
 ): Promise<void> {
   const entryCtx: EntryContext = {
     raffle,
@@ -198,6 +203,19 @@ async function runEntry(
   };
   const { input, result } = attemptEntry(ctx.db, ctx.notifier, entryCtx);
   if (result.ok) {
+    // Cache the entrant's name so the dashboard can label them (an entrant may
+    // never have posted a counted message). Best-effort; never blocks the reply.
+    try {
+      upsertMemberName(ctx.db, {
+        guildId: raffle.guild_id,
+        userId,
+        username: name.username,
+        displayName: name.displayName,
+        updatedAt: entryCtx.now,
+      });
+    } catch (err) {
+      console.error(`Failed to cache entrant name for ${userId}:`, err);
+    }
     // Bump the Entries count on the public card; fire-and-forget so a slow or
     // failed edit never delays the member's confirmation.
     void refreshEntryMessage(ctx.db, ctx.notifier, raffle.raffle_id).catch((err) =>

@@ -19,7 +19,7 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -195,5 +195,20 @@ CREATE TABLE IF NOT EXISTS wizard_state (
   raffle_id  INTEGER PRIMARY KEY,
   step       TEXT NOT NULL,
   updated_at TEXT
+);
+
+-- A name cache so the dashboard can label ids for a layperson (the web process
+-- has no gateway or token to resolve names itself). Written by the bot as it
+-- sees a user — on a counted message and at raffle entry — and backfilled for
+-- past entrants at startup. This is identity metadata (handle + server display
+-- name), never message content; it is refreshed as a member is seen again and
+-- is scoped per guild like every other table (design.md "Member name cache").
+CREATE TABLE IF NOT EXISTS members (
+  guild_id     TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  username     TEXT,             -- Discord handle, e.g. "alice"
+  display_name TEXT,             -- server nickname, else global display name
+  updated_at   TEXT NOT NULL,
+  PRIMARY KEY (guild_id, user_id)
 );
 `;

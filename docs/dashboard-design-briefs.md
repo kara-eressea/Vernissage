@@ -208,7 +208,7 @@ recomputed):
   1. Entrant-list hash (SHA-256 of the frozen, sorted entrant ids): `dbbc47f2…`
   2. Revealed secret: `test-secret-…`
   3. Commitment check: SHA-256(secret) == published commitment `9a3f…` ✓
-  4. Draw seed = SHA-256(hash + secret): `4e1c…` ✓
+  4. Draw seed = SHA-256(hash + ":" + secret): `4e1c…` ✓
   5. Winner index = seed mod 213 = 87 → entrant #87 = @alice ✓
 Present it as "here's the math, and we just ran it for you" — truncate hashes with
 copy/expand, not a wall of hex.

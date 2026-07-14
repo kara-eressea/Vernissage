@@ -40,6 +40,9 @@ describe("formatResultPost", () => {
     expect(post).toContain("SECRET");
     expect(post).toContain("SEED");
     expect(post).toContain("<@a>");
+    // The published seed formula must state the exact colon-joined preimage
+    // deriveSeed actually hashes, so a verifier recomputing it literally agrees.
+    expect(post).toContain('SHA-256(hash + ":" + secret)');
   });
 
   it("states when there were no winners", () => {
