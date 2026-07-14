@@ -20,6 +20,12 @@ import { buildHomeView, buildPickerCards } from "./home.js";
 import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
+import { getGuild } from "../db/repositories/guilds.js";
+import {
+  simulateEligiblePool,
+  type SimulationSettings,
+} from "../eligibility/service.js";
+import { buildSimulatorView, resolveSimSettings, type SimFilter } from "./simulator.js";
 import {
   decodeSession,
   encodeSession,
@@ -31,7 +37,7 @@ import {
   type Session,
   type SessionGuild,
 } from "./session.js";
-import { errorPage, homePage, loginPage, noAccessPage, pickerPage } from "./views.js";
+import { errorPage, homePage, loginPage, noAccessPage, pickerPage, simulatorPage } from "./views.js";
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes to complete the OAuth round-trip
 
@@ -93,8 +99,16 @@ function clearCookie(name: string, config: WebConfig): string {
 export function createServer(deps: ServerDeps): Server {
   const { config, db } = deps;
   const loginLimiter = new RateLimiter(30, 60 * 1000);
-  // Periodically discard expired rate-limit windows so the map can't grow.
-  const sweepTimer = setInterval(() => loginLimiter.sweep(Date.now()), 5 * 60 * 1000);
+  // The simulator re-runs a DB scan per submit; keep a generous per-IP ceiling
+  // so live tuning is unhindered but a scripted flood can't hammer the read path
+  // (docs/dashboard.md "Security and operations").
+  const simLimiter = new RateLimiter(120, 60 * 1000);
+  // Periodically discard expired rate-limit windows so the maps can't grow.
+  const sweepTimer = setInterval(() => {
+    const t = Date.now();
+    loginLimiter.sweep(t);
+    simLimiter.sweep(t);
+  }, 5 * 60 * 1000);
   sweepTimer.unref();
 
   const server = createHttpServer((req, res) => {
@@ -168,6 +182,15 @@ export function createServer(deps: ServerDeps): Server {
 
     if (path === "/app/select") {
       handleSelect(res, session, url);
+      return;
+    }
+
+    if (path === "/app/simulator") {
+      if (!simLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleSimulator(res, session, url);
       return;
     }
 
@@ -245,6 +268,45 @@ export function createServer(deps: ServerDeps): Server {
     }
     const view = buildHomeView(db, guild.id, now);
     sendHtml(res, 200, homePage(session, guild, view, cards));
+  }
+
+  function handleSimulator(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      // No guild chosen yet: send them through the picker first.
+      redirect(res, "/app");
+      return;
+    }
+    const now = new Date().toISOString();
+    // Seed the sliders from the guild's stored defaults, then overlay any dialled
+    // values from the query. The count-based cooldown isn't a slider, so it rides
+    // along from config unchanged.
+    const g = getGuild(db, guild.id);
+    const base: SimulationSettings = {
+      reqMessages: g?.default_req_messages ?? 10,
+      reqDays: g?.default_req_days ?? 14,
+      reqActiveDays: g?.default_req_active_days ?? 0,
+      minAccountAgeDays: g?.default_min_account_age_days ?? 0,
+      cooldownDays: g?.default_cooldown_days ?? 0,
+      cooldownCount: g?.default_cooldown_count ?? null,
+    };
+    const settings = resolveSimSettings(base, url.searchParams);
+    const filterParam = url.searchParams.get("filter");
+    const filter: SimFilter =
+      filterParam === "eligible" || filterParam === "blocked" ? filterParam : "all";
+
+    const result = simulateEligiblePool(db, guild.id, settings, now);
+    const view = buildSimulatorView(result, filter);
+    const cards = buildPickerCards(db, session.guilds, now);
+    sendHtml(res, 200, simulatorPage(session, guild, view, cards));
   }
 
   function handleSelect(res: ServerResponse, session: Session | null, url: URL): void {

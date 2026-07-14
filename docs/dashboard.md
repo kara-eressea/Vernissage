@@ -2,11 +2,13 @@
 
 **Status: partially built.** Sequencing step 1 (the read-only auth shell —
 Discord login, guild/mod gating, the guild picker/switcher, and the home
-overview) is implemented under `src/web/`; everything past it (verifier,
-simulator, history, Designer) remains a forward-looking note, not shipped
-behaviour. This document captures the whole shape so the rest is ready to pick
-up. It deliberately stays inside the project's existing values (auditable, fair,
-privacy-preserving) — see [design.md](design.md) for those.
+overview) and the Tier-1 eligibility simulator (step 3) are implemented under
+`src/web/`; the rest (the draw-verification page, history/trends, the Designer)
+remains a forward-looking note, not shipped behaviour. The simulator was built
+before the verifier at the maintainer's request. This document captures the
+whole shape so the rest is ready to pick up. It deliberately stays inside the
+project's existing values (auditable, fair, privacy-preserving) — see
+[design.md](design.md) for those.
 
 **What shipped in step 1, and where it refines this note.** The auth shell is a
 separate process (`src/web/`, run with `npm run start:web`), zero new
@@ -145,6 +147,32 @@ powered by `snapshotEligibleUsers` / `buildSnapshotInput`
 settings. The simulator is that same machinery with one substitution: **feed it
 the values from a web form instead of the guild's stored defaults.**
 
+**What shipped (Tier 1), and where it refines this note.** The simulator lives
+at `/app/simulator`, driven by `simulateEligiblePool` in
+`src/eligibility/service.ts` — a sibling of `computeEligiblePool` that shares the
+same candidate-assembly and runs the same pure `checkEligibility`, so its
+who/why can never drift from the real gate. Three details are worth recording
+because they follow from the read-only, no-gateway architecture rather than the
+design mock:
+- **Re-runs are a GET round-trip, not client-side recompute.** The sliders form a
+  `GET /app/simulator?...` request that the server re-renders; a small
+  progressive-enhancement script auto-submits on release and updates the value
+  labels. This keeps the eligibility logic *only* on the server (principle 2) —
+  no second implementation in the browser to drift. It works with JS disabled via
+  a "Run simulation" button.
+- **The member table is keyed by user id.** The isolated web process has no
+  gateway or bot token, so it has no usernames/avatars — only the ids in the
+  `activity` table. Rows show the id, the in-window message and active-day counts,
+  the pass/fail status, and the first failing reason. Names arrive with the
+  Tier-2 member fetch. Account age *is* shown, since it derives from the id
+  snowflake with no fetch.
+- **The generated command uses the real option names.** It is built from the
+  actual `/raffle config set` options (`req-messages`, `req-days`,
+  `req-active-days`, `min-account-age-days`, `cooldown-days`) so it pastes back
+  verbatim — the design's shortened `min-age`/`cooldown` labels were mock-only.
+  The count-based cooldown isn't a slider; it rides along from config unchanged
+  and is omitted from the command (which only sets what the moderator tuned).
+
 - **"Who."** The eligible/ineligible split is the snapshot's existing output.
 - **"Why."** `checkEligibility` already returns a machine-readable reason for the
   first gate a candidate fails (`{ ok: false, reason: "insufficient_activity" }`,
@@ -163,6 +191,10 @@ move would need to clear. That is a modest, pure, testable companion to the
 existing function: evaluate every gate without short-circuiting and return the
 list of failures. It lives in core next to `checkEligibility` and is independently
 unit-tested; the entry flow keeps using the short-circuiting version.
+
+*Not yet built.* Tier 1 ships with the first-failing reason (the short-circuiting
+`checkEligibility`), which matches the single-reason column the design shows. The
+all-failures companion is a later refinement, not required for the current page.
 
 ### Generate the command, don't run it
 
