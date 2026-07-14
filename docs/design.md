@@ -569,7 +569,9 @@ wizard_state (
   seconds) to keep database write volume low on busy servers.
 
 ## Out of scope for v1 (future ideas)
-- Web dashboard for configuration and public audit viewing.
+- Web dashboard for configuration and public audit viewing — a read-only,
+  moderator-gated shape (with an eligibility simulator and a public draw
+  verifier) is sketched in [dashboard.md](dashboard.md).
 - drand integration if fallback commit-reveal is used first.
 - Export of audit history as CSV/JSON via command.
 
