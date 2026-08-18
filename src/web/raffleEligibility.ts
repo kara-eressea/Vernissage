@@ -62,6 +62,12 @@ export interface RaffleEligibilityView {
   isTest: boolean;
   /** e.g. "1 Jul – 14 Jul 2026 (14 days, ending when the raffle opened)". */
   windowLabel: string;
+  /**
+   * How the activity was measured: frozen when the raffle opened, or computed
+   * live. The gate reads the same thing, so this tells a moderator whether the
+   * numbers below are the exact ones the raffle judged.
+   */
+  measurement: { frozen: boolean; label: string };
   /** One-line recap of the bar this raffle applied. */
   barLabel: string;
   considered: number;
@@ -205,6 +211,17 @@ export function buildRaffleEligibilityView(
     status: report.status,
     isTest: report.isTest,
     windowLabel: `${dayLabel(report.window.startDay)} – ${dayLabel(report.window.endDay, true)} · ${report.settings.reqDays} days, ending when the raffle opened`,
+    measurement: report.frozenAt
+      ? {
+          frozen: true,
+          label:
+            "Locked when the raffle opened — these are the exact figures the gate judged. Messages sent after it opened do not count.",
+        }
+      : {
+          frozen: false,
+          label:
+            "Measured now, not locked — this raffle opened before eligibility was frozen at open, so same-day activity after it opened can be included here.",
+        },
     barLabel: describeBar(report.settings),
     considered: report.considered,
     eligible: report.eligible,

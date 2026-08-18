@@ -39,6 +39,15 @@ function dropPostV9Columns(db: BetterSqlite3.Database): void {
   );
 }
 
+/** Strip the v19 column (the frozen activity measurement's capture marker) to
+ * simulate a database that predates per-raffle activity snapshots. */
+function dropV19Columns(db: BetterSqlite3.Database): void {
+  db.exec(
+    `ALTER TABLE raffles DROP COLUMN activity_snapshot_at;
+     DROP TABLE IF EXISTS raffle_activity_snapshot`,
+  );
+}
+
 /** Strip the v15 columns (distinct-active-days floor, server-tenure default,
  * open-to-all escape hatch) to simulate a pre-v15 database. */
 function dropV15Columns(db: BetterSqlite3.Database): void {
@@ -97,6 +106,7 @@ describe("schema", () => {
     db.exec(`CREATE INDEX idx_entries_raffle ON entries (raffle_id)`);
     dropPostV9Columns(db);
     dropV15Columns(db);
+    dropV19Columns(db);
     db.pragma("user_version = 8");
 
     migrate(db);
@@ -117,6 +127,7 @@ describe("schema", () => {
     db.exec(`ALTER TABLE raffles DROP COLUMN draw_disqualified`);
     dropPostV9Columns(db);
     dropV15Columns(db);
+    dropV19Columns(db);
     db.prepare(`INSERT INTO raffles (guild_id, status) VALUES ('g1', 'closed')`).run();
     db.pragma("user_version = 7");
 
@@ -142,6 +153,7 @@ describe("schema", () => {
     // as 'auto' — validation then rejected the untouched select (see raffles.ts
     // createDraft). Simulate one and migrate.
     dropV15Columns(db);
+    dropV19Columns(db);
     db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', NULL)`).run();
     db.prepare(`INSERT INTO raffles (guild_id, status, draw_mode) VALUES ('g1', 'draft', 'manual')`).run();
     db.pragma("user_version = 13");

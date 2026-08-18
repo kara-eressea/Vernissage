@@ -24,9 +24,22 @@ import {
   type SnapshotDefaults,
 } from "../core/eligibilitySnapshot.js";
 import { activityWindow, MS_PER_DAY } from "../core/time.js";
-import type { DayWindow, EligibilityInput, IneligibleReason } from "../core/types.js";
+import type {
+  DailyCount,
+  DayWindow,
+  EligibilityInput,
+  IneligibleReason,
+} from "../core/types.js";
 import type { Database } from "../db/index.js";
-import { listGuildCountsInWindow } from "../db/repositories/activity.js";
+import {
+  getCountsInWindow,
+  listGuildCountsInWindow,
+} from "../db/repositories/activity.js";
+import {
+  listActivitySnapshot,
+  type ActivitySnapshotRow,
+  type FrozenActivity,
+} from "../db/repositories/activitySnapshot.js";
 import { listEntrants } from "../db/repositories/entries.js";
 import { isBlacklisted } from "../db/repositories/blacklist.js";
 import { getGuild } from "../db/repositories/guilds.js";
@@ -263,6 +276,12 @@ export interface RaffleEligibilityReport {
   isTest: boolean;
   /** The instant every gate is judged as of: the raffle's start. */
   anchoredAt: string;
+  /**
+   * When the activity measurement was frozen (the raffle's open instant), or
+   * null for a raffle still measured live — one that opened before snapshots
+   * existed. The report reads whichever the gate reads, so the two agree.
+   */
+  frozenAt: string | null;
   /** The activity window that anchor implies, as UTC days. */
   window: DayWindow;
   settings: RaffleEligibilitySettings;
@@ -305,12 +324,14 @@ export function evaluateRaffleEligibility(
   }
   const guild = getGuild(db, guildId);
   const anchoredAt = raffle.starts_at ?? now;
-  const reqDaysRaw = raffle.req_days ?? guild?.default_req_days ?? 0;
-  const reqDays = reqDaysRaw >= 1 ? reqDaysRaw : 1;
+  // Activity settings come straight off the raffle row, exactly as the entry gate
+  // reads them — the row already carries the values resolved at creation, so a
+  // guild-default fallback here would describe a bar the raffle never applied.
+  const reqDays = raffle.req_days !== null && raffle.req_days >= 1 ? raffle.req_days : 1;
   const settings: RaffleEligibilitySettings = {
-    reqMessages: raffle.req_messages ?? guild?.default_req_messages ?? 0,
+    reqMessages: raffle.req_messages ?? 0,
     reqDays,
-    reqActiveDays: raffle.req_active_days ?? guild?.default_req_active_days ?? 0,
+    reqActiveDays: raffle.req_active_days ?? 0,
     minAccountAgeDays: guild?.default_min_account_age_days ?? null,
     cooldownDays: raffle.cooldown_days ?? guild?.default_cooldown_days ?? null,
     cooldownCount: raffle.cooldown_count ?? guild?.default_cooldown_count ?? null,
@@ -321,12 +342,29 @@ export function evaluateRaffleEligibility(
   };
 
   const window = activityWindow(anchoredAt, reqDays);
-  const active = listGuildCountsInWindow(db, guildId, window.startDay, window.endDay);
   const entrants = new Set(listEntrants(db, raffleId));
-  const counts = new Map(active.map((u) => [u.userId, u.counts]));
-  // Everyone with counted activity in the window, plus anyone who entered (an
-  // open-to-all raffle can admit members with no counted activity at all).
-  const candidateIds = [...new Set([...counts.keys(), ...entrants])];
+
+  // Read whatever the gate reads. When the raffle froze its measurement at open,
+  // that is the truth for this raffle — recomputing from the daily buckets would
+  // quietly disagree with it, because the start-day bucket also holds messages
+  // sent after the doors opened.
+  const frozenAt = raffle.activity_snapshot_at;
+  const frozen = frozenAt ? new Map(
+    listActivitySnapshot(db, raffleId).map((r) => [r.userId, r]),
+  ) : null;
+  const counts = frozen
+    ? new Map<string, DailyCount[]>()
+    : new Map(
+        listGuildCountsInWindow(db, guildId, window.startDay, window.endDay).map((u) => [
+          u.userId,
+          u.counts,
+        ]),
+      );
+  // Everyone the measurement covers, plus anyone who entered (an open-to-all
+  // raffle can admit members with no counted activity at all).
+  const candidateIds = [
+    ...new Set([...(frozen ? frozen.keys() : counts.keys()), ...entrants]),
+  ];
 
   const members: RaffleEligibilityMember[] = candidateIds.map((userId) => {
     // Only wins that had already happened when this raffle started can have
@@ -360,6 +398,9 @@ export function evaluateRaffleEligibility(
       raffleStart: anchoredAt,
       joinedAt: null,
       dailyCounts: counts.get(userId) ?? [],
+      // A member absent from an existing snapshot had no counted activity in the
+      // window: a zero measurement, not a missing one.
+      frozenActivity: frozen ? (frozen.get(userId) ?? { messages: 0, activeDays: 0 }) : null,
       // Entry is reported in its own column; folding it in would mask the reason
       // an entrant would otherwise have been blocked for.
       alreadyEntered: false,
@@ -386,6 +427,7 @@ export function evaluateRaffleEligibility(
     status: raffle.status,
     isTest: raffle.is_test === 1,
     anchoredAt,
+    frozenAt,
     window,
     settings,
     considered: members.length,
@@ -393,4 +435,53 @@ export function evaluateRaffleEligibility(
     entered: members.filter((m) => m.entered).length,
     members,
   };
+}
+
+/**
+ * Measure every member's activity over a window, as the rows to freeze when a
+ * raffle opens. Uses the same pure counters the gate uses, so a frozen
+ * measurement equals what a live one would have produced at that instant.
+ */
+export function measureActivityForSnapshot(
+  db: Database,
+  guildId: string,
+  window: DayWindow,
+): ActivitySnapshotRow[] {
+  return listGuildCountsInWindow(db, guildId, window.startDay, window.endDay).map((u) => ({
+    userId: u.userId,
+    messages: messagesInWindow(u.counts, window),
+    activeDays: activeDaysInWindow(u.counts, window),
+  }));
+}
+
+/**
+ * One member's activity over a window, for re-freezing a single row after their
+ * counted history changes (`/raffle reset <user> activity`).
+ */
+export function measureMemberActivity(
+  db: Database,
+  guildId: string,
+  userId: string,
+  window: DayWindow,
+): FrozenActivity {
+  const counts = getCountsInWindow(db, guildId, userId, window.startDay, window.endDay);
+  return {
+    messages: messagesInWindow(counts, window),
+    activeDays: activeDaysInWindow(counts, window),
+  };
+}
+
+/**
+ * The activity window a raffle is judged on: `req_days` (falling back to the
+ * guild default, then a single day) ending on the raffle's start.
+ */
+export function raffleActivityWindow(
+  reqDays: number | null,
+  startsAt: string,
+): DayWindow {
+  // Mirrors gatherEligibilityInput exactly: the raffle row carries its own
+  // resolved bar (the wizard copies the guild defaults in at creation), and a
+  // null or sub-1 value means a single day. Falling back to the guild default
+  // here would measure a different window than the gate judges.
+  return activityWindow(startsAt, reqDays !== null && reqDays >= 1 ? reqDays : 1);
 }

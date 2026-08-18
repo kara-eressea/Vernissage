@@ -143,7 +143,8 @@ automatic at close or manually triggered by a mod (configurable per raffle).
      non-rerolled win in this guild (a lifetime bar, distinct from the win
      cooldown's time/count window; off by default). A rerolled/disqualified win
      does not count, mirroring the cooldown rule.
-   - User meets the activity requirement: at least **X messages** spread across
+   - User meets the activity requirement (measured once, when the raffle opened —
+     see "Eligibility locks at open" below): at least **X messages** spread across
      at least **K distinct active days** within the Y-day window (a day counts
      as active with any single counted message). The two floors are independent
      — a member can fail on either the total or the spread. The distinct-day
@@ -167,6 +168,39 @@ non-gameable gates (account age, tenure, cooldown) are stated exactly.
    entry written.
 4. On failure: ephemeral message explaining which check failed (mods may
    configure whether blacklist rejections give a generic message instead).
+
+### Eligibility locks at open
+When a raffle opens, its activity measurement is **frozen**: every member's
+counted messages and distinct active days over the window are computed once, at
+that instant, stored in `raffle_activity_snapshot`, and never re-measured. The
+entry gate judges those figures for the raffle's whole run.
+
+This is what makes "activity after the announcement cannot create eligibility"
+actually true. The window is anchored at the raffle's start, but activity is
+stored in whole UTC days, so its end day is the *entire* day the raffle opened —
+messages sent minutes after the doors opened landed inside the window and could
+push a member over the bar. The hole was as wide as the raffle's opening hour: up
+to 24 hours for a raffle opening just after midnight UTC. It was observed in
+practice, a member becoming eligible 22 minutes into a raffle by replying to the
+announcement.
+
+Only the **activity** half locks. Blacklist, role gates, and server tenure stay
+live at entry time, so a member banned mid-raffle loses their entry rights and one
+who gains a required role gains them. What you *did* is frozen; who you *are* is
+current.
+
+Consequences worth knowing:
+- A member absent from an existing snapshot had no counted activity in the window
+  — a zero measurement, not a missing one.
+- A raffle with no snapshot (one that opened before this existed) falls back to
+  measuring live, so raffles already running when this shipped are unaffected.
+- A raffle that opens while the bot is offline is frozen by the startup
+  reconcile, later than its true open instant, so its start-day bucket may
+  already include post-announcement messages. The reconcile logs this. Accepting
+  it is deliberate: the alternative — discarding the whole start day — would
+  penalise members who were honestly active earlier that day.
+- `/raffle reset <user> activity` re-measures that member's frozen row for every
+  open raffle (see "Resetting eligibility"), so the tool still bites mid-raffle.
 
 ### Win cooldown
 - Configurable per guild, overridable per raffle.
@@ -240,7 +274,12 @@ non-gameable gates (account age, tenure, cooldown) are stated exactly.
   - **activity**: delete the member's counted-message history in this guild
     (their `activity` rows) *and* drop any counts still buffered in memory
     (`MessageCounter.forgetUser`), so the next flush can't re-create what was
-    just deleted.
+    just deleted. It also **re-measures that member's frozen row** in every open
+    raffle (see "Eligibility locks at open"): an open raffle judges the
+    measurement taken when it opened, so without this the reset would leave the
+    inflated figure standing and silently do nothing where it matters most — a
+    spam wave discovered mid-raffle is exactly when a mod reaches for this.
+    Only that member's row is touched; everyone else's stays as frozen.
   - **all**: both of the above.
 - Every reset writes an `eligibility_reset` audit_log row (with the scope and the
   affected counts) and mirrors a count-free line to the audit channel — the audit
@@ -492,6 +531,17 @@ wins (
   claimed_at     TEXT,              -- when the winner claimed; null until claimed
   cooldown_waived INTEGER DEFAULT 0 -- 1 if /raffle reset waived this win from gating re-entry
 )
+
+raffle_activity_snapshot (
+  raffle_id    INTEGER,
+  user_id      TEXT,
+  messages     INTEGER,           -- counted messages in the raffle's window
+  active_days  INTEGER,           -- distinct active days in that window
+  PRIMARY KEY (raffle_id, user_id)
+)
+-- Frozen when the raffle opens, and judged for its whole run (see "Eligibility
+-- locks at open"). raffles.activity_snapshot_at records when; null means the
+-- raffle predates snapshots and is measured live.
 
 blacklist (
   guild_id   TEXT,

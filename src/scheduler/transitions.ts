@@ -12,7 +12,12 @@ import type { Database } from "better-sqlite3";
 import { computeTransition } from "../core/transitions.js";
 import type { DrawMode, RaffleStatus } from "../core/types.js";
 import { writeAudit } from "../db/repositories/audit.js";
+import { writeActivitySnapshot } from "../db/repositories/activitySnapshot.js";
 import { listByStatusAllGuilds, setStatus } from "../db/repositories/raffles.js";
+import {
+  measureActivityForSnapshot,
+  raffleActivityWindow,
+} from "../eligibility/service.js";
 
 /** Why a sweep ran: startup reconciliation vs a normal scheduled tick. */
 export type SweepReason = "reconcile" | "scheduled";
@@ -62,6 +67,29 @@ export function applyDueTransitions(
       }
 
       setStatus(db, raffle.raffle_id, to);
+      // Eligibility locks the moment the doors open: freeze the activity
+      // measurement now so messages sent afterwards can never create it, not
+      // even later the same UTC day (design.md "Entry flow"). Same transaction
+      // as the status change, so a raffle is never open without its snapshot.
+      if (to === "open") {
+        const window = raffleActivityWindow(raffle.req_days, raffle.starts_at);
+        writeActivitySnapshot(
+          db,
+          raffle.raffle_id,
+          measureActivityForSnapshot(db, raffle.guild_id, window),
+          now,
+        );
+        if (reason === "reconcile") {
+          // The bot was down when this raffle was due to open, so the snapshot is
+          // taken late and its start-day bucket may already include messages sent
+          // after the announcement. Better than discarding honest same-day
+          // activity, but worth knowing about if it ever happens.
+          console.warn(
+            `Raffle ${raffle.raffle_id} opened late (startup reconcile); its ` +
+              `activity snapshot was taken at ${now}, not at ${raffle.starts_at}.`,
+          );
+        }
+      }
       writeAudit(db, {
         guildId: raffle.guild_id,
         raffleId: raffle.raffle_id,

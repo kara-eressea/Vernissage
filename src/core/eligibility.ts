@@ -57,14 +57,30 @@ export function meetsActivityRequirement(input: EligibilityInput): boolean {
   if (input.reqDays < 1) {
     return true;
   }
-  const window = resolveActivityWindow(input);
-  if (input.reqMessages >= 1 && messagesInWindow(input.dailyCounts, window) < input.reqMessages) {
+  const { messages, activeDays } = measuredActivity(input);
+  if (input.reqMessages >= 1 && messages < input.reqMessages) {
     return false;
   }
-  if (input.reqActiveDays >= 1 && activeDaysInWindow(input.dailyCounts, window) < input.reqActiveDays) {
+  if (input.reqActiveDays >= 1 && activeDays < input.reqActiveDays) {
     return false;
   }
   return true;
+}
+
+/**
+ * The activity the gate judges: the measurement frozen when the raffle opened if
+ * it has one, else the counts measured live over the window. Every activity
+ * decision goes through here, so the frozen and live paths can never diverge.
+ */
+function measuredActivity(input: EligibilityInput): { messages: number; activeDays: number } {
+  if (input.frozenActivity) {
+    return input.frozenActivity;
+  }
+  const window = resolveActivityWindow(input);
+  return {
+    messages: messagesInWindow(input.dailyCounts, window),
+    activeDays: activeDaysInWindow(input.dailyCounts, window),
+  };
 }
 
 /**
@@ -221,9 +237,7 @@ export function activityShortfall(input: EligibilityInput): {
   missesVolume: boolean;
   missesSpread: boolean;
 } {
-  const window = resolveActivityWindow(input);
-  const messages = messagesInWindow(input.dailyCounts, window);
-  const activeDays = activeDaysInWindow(input.dailyCounts, window);
+  const { messages, activeDays } = measuredActivity(input);
   const gated = input.reqDays >= 1;
   return {
     messages,

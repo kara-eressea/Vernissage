@@ -107,6 +107,21 @@ export function migrate(db: Database): void {
          CREATE INDEX IF NOT EXISTS idx_pending_expires ON pending_raffles (expires_at)`,
       );
     }
+    if (current < 19) {
+      // Freeze each raffle's activity measurement at open, so activity posted
+      // after the doors open can never create eligibility. Empty on upgrade;
+      // raffles already open keep computing live until they close.
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS raffle_activity_snapshot (
+           raffle_id    INTEGER NOT NULL,
+           user_id      TEXT NOT NULL,
+           messages     INTEGER NOT NULL,
+           active_days  INTEGER NOT NULL,
+           PRIMARY KEY (raffle_id, user_id)
+         );
+         ALTER TABLE raffles ADD COLUMN activity_snapshot_at TEXT`,
+      );
+    }
   }
 
   if (current !== SCHEMA_VERSION) {
