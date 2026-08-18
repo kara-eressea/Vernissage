@@ -253,6 +253,30 @@ Consequences worth knowing:
   after the user's most recent non-rerolled win. A rerolled (disqualified) win
   does not gate re-entry.
 
+### Imported wins
+A server that ran raffles before installing the bot has a history the bot cannot
+see, and a fresh install would let everyone who just won enter again immediately.
+`/raffle record-win <user> <won-at> [note]` records one of those wins so it counts.
+
+- An imported win is an ordinary win in every way that gates entry: it feeds the
+  **time-based cooldown** (measured from the date the moderator gives, so it must
+  be a real historical one — a future date is refused), it feeds the
+  **count-based cooldown** (raffles drawn here since that date already count as
+  skipped), and it triggers the **prior-winner bar** on a raffle with
+  `exclude_prior_winners`. That last one is deliberate: "has won here before"
+  means the community, not this bot.
+- It is *not* a raffle. It has no entrants, no draw, no claim window, and it never
+  appears in the verifier, the raffle history, or `countRafflesSince` — so
+  importing a win never advances anyone else's count-based cooldown. This is why
+  a win no longer requires a raffle row (schema v20): synthesising a raffle to
+  hang it on would have polluted all four.
+- The note is free moderator text (which event it was). It is stored and shown on
+  the dashboard, but never posted — the audit-channel line states who and when,
+  never the note, mirroring the blacklist rule.
+- Every import writes an `external_win_recorded` audit row and mirrors a line to
+  the audit channel. The undo is `/raffle reset <user> cooldown`, which waives
+  imported wins along with drawn ones.
+
 ### Winner claim window
 - Optional, per raffle (`claim_window_hours`), off by default. When set, a winner
   must claim their prize before a per-win deadline or forfeit the slot.
@@ -303,7 +327,9 @@ Consequences worth knowing:
     (`wins.cooldown_waived = 1`), which lifts both the win cooldown and the
     prior-winner bar (both read `getUserWins`). The win rows are preserved —
     winner and claim history stay intact — only their re-entry-gating effect is
-    removed. Idempotent.
+    removed. Idempotent. **Imported wins are waived too** (see "Imported wins"):
+    the waive is scoped on `wins.guild_id`, not on a raffle, precisely so the
+    undo reaches a win that never had one.
   - **activity**: delete the member's counted-message history in this guild
     (their `activity` rows) *and* drop any counts still buffered in memory
     (`MessageCounter.forgetUser`), so the next flush can't re-create what was
@@ -556,7 +582,10 @@ entries (
 
 wins (
   win_id     INTEGER PRIMARY KEY,
-  raffle_id  INTEGER,
+  raffle_id  INTEGER,               -- null for an imported win (see "Imported wins")
+  guild_id   TEXT,                  -- the guild the win counts in; the eligibility read scopes on this
+  source     TEXT DEFAULT 'raffle', -- 'raffle' (drawn here) or 'external' (imported by a moderator)
+  note       TEXT,                  -- free text on an imported win; moderator-facing only
   user_id    TEXT,
   won_at     TEXT,
   rerolled   INTEGER DEFAULT 0,     -- 1 if later disqualified
@@ -564,6 +593,9 @@ wins (
   claimed_at     TEXT,              -- when the winner claimed; null until claimed
   cooldown_waived INTEGER DEFAULT 0 -- 1 if /raffle reset waived this win from gating re-entry
 )
+-- guild_id is denormalised from the raffle so a win can stand without one. It is
+-- what scopes the cooldown read; joining through raffles would silently drop
+-- every imported win.
 
 raffle_activity_snapshot (
   raffle_id    INTEGER,

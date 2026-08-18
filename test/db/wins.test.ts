@@ -4,9 +4,13 @@ import { openDb } from "../../src/db/index.js";
 import { createDraft, updateRaffleFields } from "../../src/db/repositories/raffles.js";
 import {
   activeWinnerIds,
+  addExternalWin,
   addWin,
+  getActiveWinForUser,
   getUserWins,
   getWin,
+  listExternalWins,
+  listExpiredUnclaimedWins,
   listWinsForRaffle,
   markRerolled,
   waiveUserWins,
@@ -119,5 +123,75 @@ describe("wins repository", () => {
     addWin(db, 2, "u2", "2026-07-01T00:00:00.000Z");
     expect(listWinsForRaffle(db, 1).map((w) => w.user_id)).toEqual(["u1"]);
     expect(activeWinnerIds(db, 2)).toEqual(["u2"]);
+  });
+});
+
+describe("imported wins", () => {
+  const WON = "2026-06-15T00:00:00.000Z";
+
+  function importWin(guild = "g1", user = "u1", note: string | null = "Summer art contest"): number {
+    return addExternalWin(db, { guildId: guild, userId: user, wonAt: WON, note });
+  }
+
+  it("gates the cooldown even though it has no raffle", () => {
+    importWin();
+    // The old query joined through raffles, which would have dropped this row
+    // entirely — recorded, but gating nothing.
+    expect(getUserWins(db, "g1", "u1")).toEqual([{ raffleId: null, wonAt: WON }]);
+  });
+
+  it("stays inside its own guild", () => {
+    importWin("g1");
+    expect(getUserWins(db, "g2", "u1")).toEqual([]);
+  });
+
+  it("is not mistaken for a test-raffle win by the is_test filter", () => {
+    // `r.is_test = 0` is NULL for a raffle-less win, so an unguarded filter would
+    // silently exclude every import.
+    importWin();
+    expect(getUserWins(db, "g1", "u1")).toHaveLength(1);
+  });
+
+  it("is waived by the reset path, which is its only undo", () => {
+    importWin();
+    expect(waiveUserWins(db, "g1", "u1")).toBe(1);
+    expect(getUserWins(db, "g1", "u1")).toEqual([]);
+  });
+
+  it("never appears in any raffle-keyed query", () => {
+    const r = raffleIn("g1");
+    addWin(db, r, "u2", "2026-07-01T00:00:00.000Z");
+    importWin("g1", "u1");
+
+    // No raffle to belong to, so the draw, reroll, claim and verifier reads,
+    // which all key on raffle_id, can never pick it up.
+    expect(listWinsForRaffle(db, r).map((w) => w.user_id)).toEqual(["u2"]);
+    expect(activeWinnerIds(db, r)).toEqual(["u2"]);
+    expect(getActiveWinForUser(db, r, "u1")).toBeUndefined();
+    expect(listExpiredUnclaimedWins(db, "2027-01-01T00:00:00.000Z")).toEqual([]);
+  });
+
+  it("records the source and the note, and lists them newest first", () => {
+    addExternalWin(db, { guildId: "g1", userId: "u1", wonAt: WON, note: "Art contest" });
+    addExternalWin(db, {
+      guildId: "g1",
+      userId: "u2",
+      wonAt: "2026-07-20T00:00:00.000Z",
+      note: null,
+    });
+    const r = raffleIn("g1");
+    addWin(db, r, "u3", "2026-07-01T00:00:00.000Z");
+
+    const listed = listExternalWins(db, "g1");
+
+    // Drawn wins are excluded: those are already visible as raffles.
+    expect(listed.map((w) => w.user_id)).toEqual(["u2", "u1"]);
+    expect(listed[1]).toMatchObject({ source: "external", note: "Art contest", raffle_id: null });
+  });
+
+  it("gives a drawn win the guild of its raffle without the caller passing one", () => {
+    const r = raffleIn("g7");
+    const id = addWin(db, r, "u1", "2026-07-01T00:00:00.000Z");
+    expect(getWin(db, id)).toMatchObject({ guild_id: "g7", source: "raffle", note: null });
   });
 });

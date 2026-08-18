@@ -507,7 +507,12 @@ flagged by whether they lean on data we already store:
   this page is for), and **test raffles are hidden**, with a line stating how many
   were left out. Entrant counts are the **committed** list (active entrants plus
   `draw_disqualified`), the same number the verifier hashes, so no raffle shows two
-  different entrant counts on two pages.
+  different entrant counts on two pages. The page also lists **imported wins** —
+  prizes recorded with `/raffle record-win` for raffles this bot never ran
+  (design.md "Imported wins"). They have no raffle to be a row of, but they gate
+  cooldowns exactly like a drawn win, so leaving them off would make the page read
+  as the whole record of who has won when it is not; a win since waived by
+  `/raffle reset` is shown struck through rather than dropped.
 - **A fairness lens (cheap; uses the `wins` table).** Distribution of wins across
   members over time — has the same handful of people won repeatedly? This is the
   question a suspicious community actually asks, and the data to answer it is

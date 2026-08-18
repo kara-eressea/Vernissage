@@ -128,6 +128,14 @@ export function describeAuditEvent(
       const what = scope ? ` (${scope})` : "";
       return `🧹 ${actor} reset ${subject}'s raffle eligibility${what}`;
     }
+    case AUDIT_EVENTS.externalWinRecorded: {
+      // The date is safe to show (it is what the cooldown is measured from), but
+      // the moderator's free-text note is not — it is arbitrary text about a
+      // member, so it stays in the DB payload, mirroring the blacklist rule.
+      const wonAt = str(event.payload, "wonAt");
+      const when = wonAt ? ` (won ${discordTimestamp(wonAt, "D")})` : "";
+      return `📥 ${actor} recorded a past win for ${subject}${when}`;
+    }
     default:
       // Unknown type: emit only the type, raffle id, and timestamp — never the
       // raw payload, which could contain private detail.

@@ -12,7 +12,7 @@ import {
   updateRaffleFields,
   type RaffleFieldPatch,
 } from "../../src/db/repositories/raffles.js";
-import { addWin } from "../../src/db/repositories/wins.js";
+import { addExternalWin, addWin } from "../../src/db/repositories/wins.js";
 import { announceOpenRaffle, attemptEntry, closeEntryMessage, refreshEntryMessage } from "../../src/discord/entryFlow.js";
 import { makeFakeNotifier } from "../helpers/fakeNotifier.js";
 
@@ -158,6 +158,45 @@ describe("attemptEntry", () => {
       ok: false,
       reason: "prior_winner",
     });
+  });
+
+  it("lets an imported win gate the cooldown and the prior-winner bar", () => {
+    // A prize won before the bot existed, recorded with /raffle record-win. It
+    // has no raffle at all, so nothing about it can be reached by joining
+    // through raffles — and yet it must gate exactly like a drawn win
+    // (design.md "Imported wins").
+    addExternalWin(db, {
+      guildId: "g1",
+      userId: "u1",
+      wonAt: "2026-07-10T00:00:00.000Z",
+      note: "Summer art contest",
+    });
+    incrementActivity(db, "g1", "u1", DAY, 5);
+
+    const cooling = seedOpenRaffle({ cooldown_days: 30 });
+    expect(attemptEntry(db, notifier, ctxFor(cooling)).result).toEqual({
+      ok: false,
+      reason: "in_cooldown",
+    });
+
+    const winnersBarred = seedOpenRaffle({ exclude_prior_winners: 1 });
+    expect(attemptEntry(db, notifier, ctxFor(winnersBarred)).result).toEqual({
+      ok: false,
+      reason: "prior_winner",
+    });
+  });
+
+  it("keeps an imported win inside its own guild", () => {
+    addExternalWin(db, {
+      guildId: "g2",
+      userId: "u1",
+      wonAt: "2026-07-10T00:00:00.000Z",
+      note: null,
+    });
+    incrementActivity(db, "g1", "u1", DAY, 5);
+
+    const id = seedOpenRaffle({ cooldown_days: 30, exclude_prior_winners: 1 });
+    expect(attemptEntry(db, notifier, ctxFor(id)).result.ok).toBe(true);
   });
 
   it("rejects a second entry as already_entered", () => {

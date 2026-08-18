@@ -18,6 +18,12 @@
  * The entrant count is the **committed** list (active entrants plus the ids the
  * draw failsafe removed) — the same number the verifier hashes, so a raffle never
  * shows two different entrant counts on two pages.
+ *
+ * The page also carries **imported wins** — prizes recorded with
+ * `/raffle record-win` for raffles this bot never ran (design.md "Imported
+ * wins"). They have no raffle to be a row of, but they gate cooldowns exactly
+ * like a drawn win, so leaving them off would make the history look like the
+ * whole picture of who has won when it is not.
  */
 
 import type { Database } from "../db/index.js";
@@ -25,7 +31,7 @@ import { getAuditForRaffle } from "../db/repositories/audit.js";
 import { listEntrants } from "../db/repositories/entries.js";
 import { getMemberNames } from "../db/repositories/members.js";
 import { disqualifiedEntrants, listByStatus, type RaffleRow } from "../db/repositories/raffles.js";
-import { listWinsForRaffle } from "../db/repositories/wins.js";
+import { listExternalWins, listWinsForRaffle } from "../db/repositories/wins.js";
 
 /** The statuses a raffle can be in once its run is over. */
 const ENDED_STATUSES = ["drawn", "completed", "cancelled"] as const;
@@ -88,9 +94,21 @@ export interface HistoryTotals {
   forfeitPct: number | null;
 }
 
+/** A win recorded by hand, for a raffle this bot never ran. */
+export interface ImportedWin {
+  userId: string;
+  name: string | null;
+  wonAt: string | null;
+  note: string | null;
+  /** Waived by `/raffle reset`, so it no longer gates anything. */
+  waived: boolean;
+}
+
 export interface HistoryView {
   rows: HistoryRow[];
   totals: HistoryTotals;
+  /** Wins imported with `/raffle record-win`, newest first. */
+  imported: ImportedWin[];
   /** Test raffles omitted from the listing, stated rather than hidden. */
   hiddenTests: number;
   page: number;
@@ -221,9 +239,22 @@ export function buildHistoryView(
     };
   });
 
+  // Imported wins are guild-scoped and raffle-less, so they are read separately
+  // rather than falling out of the raffle listing above.
+  const externals = listExternalWins(db, guildId);
+  const externalNames = getMemberNames(db, guildId, externals.map((w) => w.user_id));
+  const imported: ImportedWin[] = externals.map((w) => ({
+    userId: w.user_id,
+    name: externalNames.get(w.user_id)?.displayName ?? null,
+    wonAt: w.won_at,
+    note: w.note,
+    waived: w.cooldown_waived === 1,
+  }));
+
   return {
     rows,
     totals,
+    imported,
     hiddenTests,
     page: current,
     pageCount,

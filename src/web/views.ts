@@ -2126,6 +2126,41 @@ function historyRow(row: HistoryRow): RawHtml {
   `;
 }
 
+/**
+ * Wins recorded by hand for raffles this bot never ran. Shown alongside the
+ * history because they gate cooldowns identically — omitting them would make the
+ * page read as the whole record of who has won when it isn't.
+ */
+function importedWins(view: HistoryView): RawHtml {
+  if (view.imported.length === 0) {
+    return raw("");
+  }
+  return html`
+    <section style="margin-top:18px; background:#16181d; border:1px solid #23272e; border-radius:16px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 19px 13px; flex-wrap:wrap;">
+        <span class="serif" style="font-weight:600; font-size:16px;">Imported wins</span>
+        <span style="font-size:11.5px; color:#6b717c;">recorded with <code style="font-family:'JetBrains Mono',monospace;">/raffle record-win</code> · counts toward cooldowns</span>
+      </div>
+      <div style="border-top:1px solid #23272e;">
+        ${view.imported.map(
+          (w) => html`
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 19px; border-bottom:1px solid #1b1e24;">
+              <span style="min-width:0; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:12.5px; font-weight:600; color:${w.waived ? "#6b717c" : "#dfe2e7"}; ${w.waived ? "text-decoration:line-through;" : ""} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${w.name ?? w.userId}</span>
+                ${w.waived ? pill("Waived", "#8b93a0", "#101216", "#2a2f37") : raw("")}
+                ${w.note
+                  ? html`<span style="font-size:11.5px; color:#8b93a0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${w.note}</span>`
+                  : raw("")}
+              </span>
+              <span style="flex:none; font-size:11.5px; color:#6b717c;">won ${dateLabel(w.wonAt)}</span>
+            </div>
+          `,
+        )}
+      </div>
+    </section>
+  `;
+}
+
 /** The history listing: every finished raffle, newest first. */
 export function historyPage(
   session: Session,
@@ -2154,6 +2189,7 @@ export function historyPage(
       ${view.rows.length === 0
         ? html`<div style="background:#16181d; border:1px dashed #2f3540; border-radius:16px; padding:56px 40px; text-align:center;"><div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">Nothing finished yet</div><p style="margin:0; font-size:13.5px; color:#8b93a0;">Once a raffle has been drawn or cancelled, it lands here.</p></div>`
         : html`<div style="display:flex; flex-direction:column; gap:10px;">${view.rows.map(historyRow)}</div>`}
+      ${importedWins(view)}
       ${view.pageCount > 1
         ? html`<div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:20px;">
             ${pageLink(view.page - 1, "← Newer", view.page > 0)}

@@ -14,7 +14,12 @@ import {
   setStatus,
   updateRaffleFields,
 } from "../../src/db/repositories/raffles.js";
-import { addWin, markRerolled } from "../../src/db/repositories/wins.js";
+import {
+  addExternalWin,
+  addWin,
+  markRerolled,
+  waiveUserWins,
+} from "../../src/db/repositories/wins.js";
 import { buildHistoryView, claimStateOf, HISTORY_PAGE_SIZE } from "../../src/web/history.js";
 import { historyPage } from "../../src/web/views.js";
 
@@ -212,6 +217,49 @@ describe("buildHistoryView", () => {
   });
 });
 
+describe("imported wins on the history", () => {
+  it("lists wins that have no raffle, newest first, with their note", () => {
+    upsertMemberName(db, {
+      guildId: GUILD,
+      userId: "u1",
+      username: "alice",
+      displayName: "Alice",
+      updatedAt: NOW,
+    });
+    addExternalWin(db, {
+      guildId: GUILD,
+      userId: "u1",
+      wonAt: "2026-06-01T00:00:00.000Z",
+      note: "Art contest",
+    });
+    addExternalWin(db, { guildId: GUILD, userId: "u2", wonAt: "2026-07-01T00:00:00.000Z", note: null });
+
+    const imported = buildHistoryView(db, GUILD, NOW).imported;
+
+    expect(imported.map((w) => w.userId)).toEqual(["u2", "u1"]);
+    expect(imported[1]).toMatchObject({ name: "Alice", note: "Art contest", waived: false });
+  });
+
+  it("keeps a waived win visible rather than dropping it", () => {
+    addExternalWin(db, { guildId: GUILD, userId: "u1", wonAt: "2026-06-01T00:00:00.000Z", note: null });
+    waiveUserWins(db, GUILD, "u1");
+
+    // It no longer gates anything, but it did — hiding it would rewrite the record.
+    expect(buildHistoryView(db, GUILD, NOW).imported[0]).toMatchObject({ waived: true });
+  });
+
+  it("does not leak another guild's imports", () => {
+    addExternalWin(db, { guildId: "g2", userId: "u1", wonAt: "2026-06-01T00:00:00.000Z", note: null });
+    expect(buildHistoryView(db, GUILD, NOW).imported).toEqual([]);
+  });
+
+  it("leaves drawn wins out — those are already rows above", () => {
+    const id = seedRaffle();
+    addWin(db, id, "u1", NOW, null);
+    expect(buildHistoryView(db, GUILD, NOW).imported).toEqual([]);
+  });
+});
+
 describe("historyPage", () => {
   const guild = { id: GUILD, name: "Musicorum", icon: null };
   const session = { uid: "mod", username: "Mod", guilds: [guild], iat: 0 };
@@ -226,6 +274,21 @@ describe("historyPage", () => {
     expect(out).toContain(`/app/raffle?id=${id}`);
     expect(out).toContain("&lt;script&gt;");
     expect(out).not.toContain("<script>alert");
+  });
+
+  it("renders imported wins and escapes the moderator's note", () => {
+    addExternalWin(db, {
+      guildId: GUILD,
+      userId: "u1",
+      wonAt: "2026-06-01T00:00:00.000Z",
+      note: "<img src=x onerror=alert(1)>",
+    });
+
+    const out = historyPage(session, guild, buildHistoryView(db, GUILD, NOW), []);
+
+    expect(out).toContain("Imported wins");
+    expect(out).toContain("&lt;img");
+    expect(out).not.toContain("<img src=x");
   });
 
   it("renders the empty state without a page control", () => {

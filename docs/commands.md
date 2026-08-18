@@ -169,6 +169,35 @@ Lift a user's blacklist. Does **not** restore entries removed by the ban.
 List the server's current blacklist, with each ban's expiry and mod-only reason.
 Ephemeral.
 
+### `/raffle record-win <user> <won-at> [note]`
+Record a prize a member won **outside this bot** — before it was installed, or in
+an event run some other way — so it counts toward their win cooldown. The
+migration path when a server adopts the bot with a raffle history already behind
+it. Ephemeral. Full semantics: [Imported wins](design.md#imported-wins).
+
+- `won-at` takes the same friendly forms as the scheduling options
+  (`2026-06-15`, `3 weeks ago`, `2026-06-15 20:00`), read in the server's
+  configured timezone. A date in the future is refused — the cooldown is measured
+  from the date you give, so a future one would push it further out the later it is.
+- `note` is what they won it in. It is for moderators: stored, shown on the
+  dashboard's history page, and **never posted publicly** — the audit-channel line
+  says who and when, not the note.
+- The reply states the cooldown the import actually produced, computed from the
+  **server defaults**; a raffle that sets its own cooldown will differ.
+
+An imported win gates the time cooldown, the count cooldown, and the
+prior-winner bar, exactly like a raffle drawn here. It is not a raffle: it never
+appears in the verifier or the raffle history, and it never advances anyone
+else's count-based cooldown.
+
+One member per command; run it again for the next. Undo with
+`/raffle reset <user> cooldown`.
+
+```
+/raffle record-win user:@alice won-at:2026-06-15
+/raffle record-win user:@alice won-at:"3 weeks ago" note:"Summer art contest"
+```
+
 ### `/raffle reset <user> <scope>`
 Reset one member's raffle standing in this server when something goes wrong — a
 mis-run test that awarded a real cooldown, a spam wave that inflated someone's
@@ -178,7 +207,8 @@ one server; it never touches anyone else. Full semantics:
 
 `scope` is one of:
 - **cooldown** — waive the member's still-gating wins, lifting both their win
-  cooldown and the prior-winner bar. Win/claim records are preserved.
+  cooldown and the prior-winner bar. Win/claim records are preserved. Wins added
+  with `/raffle record-win` are waived too.
 - **activity** — delete the member's counted-message history (and drop any counts
   still buffered in memory, so a flush can't bring them back).
 - **all** — both.

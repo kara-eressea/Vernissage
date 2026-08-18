@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openDb } from "../../src/db/index.js";
 import { migrate } from "../../src/db/migrate.js";
 import { SCHEMA_VERSION } from "../../src/db/schema.js";
+import { addExternalWin, getUserWins } from "../../src/db/repositories/wins.js";
 
 // A unique on-disk path so the reopen test exercises real persistence.
 const dbPath = join(tmpdir(), `vernissage-migration-test-${process.pid}.db`);
@@ -45,6 +46,34 @@ function dropV19Columns(db: BetterSqlite3.Database): void {
   db.exec(
     `ALTER TABLE raffles DROP COLUMN activity_snapshot_at;
      DROP TABLE IF EXISTS raffle_activity_snapshot`,
+  );
+}
+
+/**
+ * Rebuild `wins` in its pre-v20 shape (raffle_id NOT NULL, no guild_id/source/
+ * note) to simulate a database from before a win could stand without a raffle.
+ */
+function restoreV19Wins(db: BetterSqlite3.Database): void {
+  db.exec(
+    `DROP INDEX IF EXISTS idx_wins_guild_user;
+     CREATE TABLE wins_old (
+       win_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+       raffle_id  INTEGER NOT NULL,
+       user_id    TEXT NOT NULL,
+       won_at     TEXT,
+       rerolled   INTEGER NOT NULL DEFAULT 0,
+       claim_deadline TEXT,
+       claimed_at     TEXT,
+       cooldown_waived INTEGER NOT NULL DEFAULT 0
+     );
+     INSERT INTO wins_old (win_id, raffle_id, user_id, won_at, rerolled,
+                           claim_deadline, claimed_at, cooldown_waived)
+       SELECT win_id, raffle_id, user_id, won_at, rerolled,
+              claim_deadline, claimed_at, cooldown_waived FROM wins;
+     DROP TABLE wins;
+     ALTER TABLE wins_old RENAME TO wins;
+     CREATE INDEX IF NOT EXISTS idx_wins_user ON wins (user_id);
+     CREATE INDEX IF NOT EXISTS idx_wins_raffle ON wins (raffle_id)`,
   );
 }
 
@@ -184,5 +213,73 @@ describe("schema", () => {
     expect(db2.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
     expect(db2.prepare(`SELECT guild_id FROM guilds`).get()).toEqual({ guild_id: "g1" });
     db2.close();
+  });
+});
+
+describe("v20: a win no longer needs a raffle", () => {
+  it("rebuilds wins, backfills guild_id, and keeps existing wins gating", () => {
+    const db = openDb(":memory:");
+    db.prepare(
+      `INSERT INTO raffles (raffle_id, guild_id, status) VALUES (41, 'g1', 'drawn')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO wins (win_id, raffle_id, guild_id, source, user_id, won_at, cooldown_waived)
+       VALUES (7, 41, 'g1', 'raffle', 'u1', '2026-07-01T00:00:00.000Z', 0)`,
+    ).run();
+    restoreV19Wins(db);
+    db.pragma("user_version = 19");
+
+    migrate(db);
+
+    expect(db.pragma("user_version", { simple: true })).toBe(SCHEMA_VERSION);
+    expect(columnNames(db, "wins")).toEqual(
+      expect.arrayContaining(["guild_id", "source", "note"]),
+    );
+    // The win survives with its id — the draw and claim paths hold win_ids — and
+    // its guild is backfilled from the raffle it came from.
+    const row = db.prepare(`SELECT * FROM wins WHERE win_id = 7`).get() as {
+      raffle_id: number;
+      guild_id: string;
+      source: string;
+      note: string | null;
+      user_id: string;
+    };
+    expect(row).toMatchObject({ raffle_id: 41, guild_id: "g1", source: "raffle", note: null });
+    // Which means the cooldown it was gating still gates.
+    expect(getUserWins(db, "g1", "u1")).toEqual([
+      { raffleId: 41, wonAt: "2026-07-01T00:00:00.000Z" },
+    ]);
+    db.close();
+  });
+
+  it("accepts a raffle-less win only after the upgrade", () => {
+    const db = openDb(":memory:");
+    restoreV19Wins(db);
+    // The old shape declares raffle_id NOT NULL, so an import cannot be stored.
+    expect(() =>
+      addExternalWin(db, { guildId: "g1", userId: "u1", wonAt: "2026-06-01T00:00:00.000Z", note: null }),
+    ).toThrow();
+
+    db.pragma("user_version = 19");
+    migrate(db);
+
+    expect(() =>
+      addExternalWin(db, { guildId: "g1", userId: "u1", wonAt: "2026-06-01T00:00:00.000Z", note: null }),
+    ).not.toThrow();
+    expect(getUserWins(db, "g1", "u1")).toHaveLength(1);
+    db.close();
+  });
+
+  it("re-creates the wins indexes the rebuild dropped", () => {
+    const db = openDb(":memory:");
+    restoreV19Wins(db);
+    db.pragma("user_version = 19");
+
+    migrate(db);
+
+    expect(indexNames(db, "wins")).toEqual(
+      expect.arrayContaining(["idx_wins_user", "idx_wins_raffle", "idx_wins_guild_user"]),
+    );
+    db.close();
   });
 });

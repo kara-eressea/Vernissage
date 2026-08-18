@@ -37,7 +37,12 @@ export interface DayWindow {
 
 /** A prior win, used for cooldown checks. */
 export interface WinRecord {
-  raffleId: number;
+  /**
+   * The raffle won, or null for a win imported with `/raffle record-win` — one
+   * from before the bot, which has no raffle (design.md "Imported wins"). The
+   * cooldown reads only `wonAt`; this identifies the win for callers that care.
+   */
+  raffleId: number | null;
   /** UTC ISO timestamp of the win. */
   wonAt: string;
 }
