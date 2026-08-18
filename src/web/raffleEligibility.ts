@@ -119,6 +119,46 @@ function describeReason(
   }
 }
 
+/** One bucket of the blocked-by-reason breakdown. */
+export interface ReasonCount {
+  label: string;
+  count: number;
+}
+
+/**
+ * How many blocked members each gate accounts for.
+ *
+ * A member failing two gates is counted under both — the question this answers
+ * is "how much of the blocking does each rule do?", not "how do the blocked
+ * partition?". The activity gate is split into its two floors, because "not
+ * active enough" hides the distinction that actually explains most complaints:
+ * plenty of messages, too few separate days (issue #34).
+ */
+export function blockedReasonBreakdown(report: RaffleEligibilityReport): ReasonCount[] {
+  const counts = new Map<string, number>();
+  const bump = (label: string): void => {
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  };
+
+  for (const m of report.members) {
+    if (m.eligible) continue;
+    for (const reason of m.reasons) {
+      if (reason === "insufficient_activity") {
+        bump(
+          m.missesVolume && m.missesSpread
+            ? "Too few messages, on too few days"
+            : m.missesVolume
+              ? "Too few messages"
+              : "Too few active days",
+        );
+        continue;
+      }
+      bump(describeReason(reason, m, report.settings));
+    }
+  }
+  return [...counts].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+}
+
 /** "1 Jul" / "14 Jul 2026" for the window caption. */
 function dayLabel(day: string, withYear = false): string {
   const date = new Date(`${day}T00:00:00Z`);
@@ -161,6 +201,13 @@ function buildCaveats(report: RaffleEligibilityReport): string[] {
   if (report.settings.requiredRoleId || report.settings.excludedRoleId) {
     caveats.push(
       "This raffle has a role gate, which can't be checked without a member fetch — some members shown as eligible may have been blocked by it.",
+    );
+  }
+  if (report.frozenAt === null) {
+    // A frozen snapshot survives pruning; a recomputed one reads the activity
+    // table as it stands today, which keeps only the last 180 days.
+    caveats.push(
+      "Nothing was frozen for this raffle, so its activity is recomputed from the counted-message table — which keeps only the last 180 days. If this raffle's window has since aged out, the figures here under-report it.",
     );
   }
   return caveats;

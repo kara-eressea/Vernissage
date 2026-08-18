@@ -86,3 +86,30 @@ export function listEntrants(db: Database, raffleId: number): string[] {
     .all(raffleId) as Array<{ user_id: string }>;
   return rows.map((r) => r.user_id);
 }
+
+/** One entry row as stored, including the soft-removal fields. */
+export interface EntryRow {
+  user_id: string;
+  entered_at: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+}
+
+/**
+ * Every entry row for a raffle, **including removed ones**, oldest first.
+ *
+ * `listEntrants` deliberately filters removals out — it feeds the draw, which
+ * must only ever see live entries. This is the reporting counterpart: the
+ * dashboard's raffle-detail page shows withdrawals and blacklist removals with
+ * their reason, which are stored but were surfaced nowhere.
+ */
+export function listEntryRows(db: Database, raffleId: number): EntryRow[] {
+  return db
+    .prepare(
+      `SELECT user_id, entered_at, removed_at, removed_reason
+         FROM entries
+        WHERE raffle_id = ?
+        ORDER BY COALESCE(entered_at, '') ASC, user_id ASC`,
+    )
+    .all(raffleId) as EntryRow[];
+}
