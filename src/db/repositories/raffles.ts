@@ -167,19 +167,28 @@ export function countRafflesSince(db: Database, guildId: string, sinceIso: strin
 }
 
 /**
- * The longest activity lookback (`req_days`) among raffles that could still be
- * entered — `scheduled` or `open`. Null when none apply or all are null. Drives
- * how far back activity rows must be kept before pruning (design.md activity
- * "prune rows older than the longest lookback window in use").
+ * The earliest UTC day any still-enterable raffle (`scheduled` or `open`) is
+ * being judged on: the start of its activity window, i.e. its start day less
+ * `req_days - 1`. Null when no such raffle exists.
+ *
+ * A raffle's window is anchored at its start, so it stays fixed while the raffle
+ * runs and recedes further into the past every day. Pruning must therefore be
+ * bounded by this, not by a lookback measured from now — otherwise a raffle open
+ * for longer than its own window loses the earliest days it is judging entrants
+ * on, and late entrants are wrongly rejected (design.md activity table).
+ *
+ * `req_days` is read the way the entry check reads it: anything null or below 1
+ * counts as a single-day window.
  */
-export function maxReqDaysInUse(db: Database): number | null {
+export function earliestActivityWindowStart(db: Database): string | null {
   const row = db
     .prepare(
-      `SELECT MAX(req_days) AS n FROM raffles
-       WHERE status IN ('scheduled', 'open') AND req_days IS NOT NULL`,
+      `SELECT MIN(date(starts_at, '-' || (MAX(COALESCE(req_days, 1), 1) - 1) || ' day')) AS d
+         FROM raffles
+        WHERE status IN ('scheduled', 'open') AND starts_at IS NOT NULL`,
     )
-    .get() as { n: number | null };
-  return row.n;
+    .get() as { d: string | null };
+  return row.d;
 }
 
 /** All draft raffles for a guild, newest first — used by /raffle edit. */
