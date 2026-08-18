@@ -17,6 +17,7 @@
 import type { DesignerView } from "./designer.js";
 import { html, raw, type RawHtml } from "./html.js";
 import type { HomeView, PickerCard } from "./home.js";
+import type { RaffleEligibilityView } from "./raffleEligibility.js";
 import { resolveDisplayName } from "./naming.js";
 import type { Session, SessionGuild } from "./session.js";
 import type { SimulatorView } from "./simulator.js";
@@ -327,7 +328,7 @@ function homeHeader(
   guild: SessionGuild,
   brand: string,
   cards: PickerCard[],
-  active: "overview" | "simulator" | "verify" | "designer",
+  active: "overview" | "simulator" | "verify" | "designer" | "eligibility",
 ): RawHtml {
   return html`
     <header style="display:flex; align-items:center; justify-content:space-between; height:58px; padding:0 24px; border-bottom:1px solid #1e2127; background:rgba(14,16,19,.72); position:sticky; top:0; z-index:20;">
@@ -346,6 +347,7 @@ function homeHeader(
         ${navItem("Overview", "/app", active === "overview")}
         ${navItem("Designer", "/app/designer", active === "designer")}
         ${navItem("Simulator", "/app/simulator", active === "simulator")}
+        ${navItem("Eligibility", "/app/eligibility", active === "eligibility")}
         ${active === "verify"
           ? html`<span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</span>`
           : html`<a href="/app/verify" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>`}
@@ -1859,4 +1861,165 @@ export function errorPage(message: string): string {
     </div>
   `;
   return shell("Error — Moderator Dashboard", body);
+}
+
+// ---------------------------------------------------------------------------
+// Per-raffle eligibility
+// ---------------------------------------------------------------------------
+
+/** The raffle picker shown when no raffle is selected. */
+export function eligibilityIndexPage(
+  session: Session,
+  guild: SessionGuild,
+  raffles: Array<{ id: number; name: string; status: string; startsAt: string | null; isTest: boolean }>,
+  cards: PickerCard[],
+): string {
+  const brand = resolveDisplayName({});
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "eligibility")}
+    <div style="max-width:900px; margin:0 auto; padding:26px 24px 84px;">
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><span>Eligibility</span></div>
+      <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0 0 4px;">Who could enter?</h1>
+      <p style="margin:0 0 24px; font-size:14px; color:#8b93a0; max-width:66ch;">Pick a raffle to see everyone it reached — and for everyone it didn't, exactly which requirement stopped them. Useful when a member asks why they weren't eligible.</p>
+      ${raffles.length === 0
+        ? html`<div style="background:#16181d; border:1px dashed #2f3540; border-radius:16px; padding:56px 40px; text-align:center;"><div class="serif" style="font-weight:600; font-size:18px; margin-bottom:6px;">No raffles yet</div><p style="margin:0; font-size:13.5px; color:#8b93a0;">Once a raffle has been scheduled, it will show up here.</p></div>`
+        : html`<div style="display:flex; flex-direction:column; gap:10px;">
+            ${raffles.map(
+              (r) => html`
+                <a href="/app/eligibility?raffle=${String(r.id)}" class="hovrow" style="display:flex; align-items:center; justify-content:space-between; gap:16px; background:#16181d; border:1px solid #23272e; border-radius:13px; padding:15px 18px;">
+                  <div style="min-width:0;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="font-size:14.5px; font-weight:600; color:#dfe2e7;">${r.name}</span>
+                      ${r.isTest
+                        ? html`<span style="font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#d4a24c; background:rgba(212,162,76,.13); border-radius:5px; padding:2px 6px;">Test</span>`
+                        : raw("")}
+                    </div>
+                    <div style="font-size:11.5px; color:#6b717c; margin-top:3px;">#${String(r.id)} · ${r.status}${r.startsAt ? html` · opened ${dateLabel(r.startsAt)}` : raw("")}</div>
+                  </div>
+                  <span style="flex:none; font-size:12px; color:var(--accent); font-weight:600;">View →</span>
+                </a>
+              `,
+            )}
+          </div>`}
+    </div>
+  `;
+  return shell("Eligibility — Moderator Dashboard", body);
+}
+
+/** The header stats for one raffle's eligibility report. */
+function eligibilityStats(view: RaffleEligibilityView): RawHtml {
+  const stat = (value: string, label: string, tone: string): RawHtml => html`
+    <div style="flex:1; min-width:130px; background:#16181d; border:1px solid #23272e; border-radius:13px; padding:14px 16px;">
+      <div style="font-size:24px; font-weight:600; color:${tone}; font-family:'JetBrains Mono',monospace; line-height:1.1;">${value}</div>
+      <div style="font-size:11.5px; color:#6b717c; margin-top:4px;">${label}</div>
+    </div>
+  `;
+  return html`
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+      ${stat(String(view.considered), "members considered", "#dfe2e7")}
+      ${stat(String(view.eligible), "cleared the bar", "#5ccc8a")}
+      ${stat(String(view.considered - view.eligible), "blocked", "#e58497")}
+      ${stat(String(view.entered), "actually entered", "#dfe2e7")}
+      ${stat(String(view.missed), "eligible, didn't enter", "#d4a24c")}
+    </div>
+  `;
+}
+
+/** The member table: who, how much activity, and every reason they were blocked. */
+function eligibilityTable(view: RaffleEligibilityView): RawHtml {
+  const cols = "2.4fr .8fr .8fr 1fr 2.2fr";
+  return html`
+    <section style="background:#16181d; border:1px solid #23272e; border-radius:16px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px 14px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="serif" style="font-weight:600; font-size:16px;">Members</span>
+          <span style="font-size:11px; color:#6b717c;">${view.shownLabel}</span>
+        </div>
+        <div style="display:flex; background:#101216; border:1px solid #2a2f37; border-radius:9px; padding:3px;">
+          ${view.filterTabs.map(
+            (f) => html`<a href="/app/eligibility?raffle=${String(view.raffleId)}&filter=${f.filter}" style="border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; white-space:nowrap; background:${f.active
+              ? "var(--accent)"
+              : "transparent"}; color:${f.active ? "#0e1013" : "#c3c8d1"};">${f.label}</a>`,
+          )}
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:${cols}; align-items:center; padding:0 20px; height:34px; border-top:1px solid #23272e; border-bottom:1px solid #23272e; background:#131519; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#6b717c;">
+        <span>Member</span><span style="text-align:center;">Msgs</span><span style="text-align:center;">Days</span><span style="text-align:center;">Status</span><span>Why not</span>
+      </div>
+      <div style="max-height:560px; overflow-y:auto;">
+        ${view.rows.length === 0
+          ? html`<div style="padding:44px 20px; text-align:center; font-size:13px; color:#8b93a0;">No members match this filter.</div>`
+          : view.rows.map(
+              (r) => html`
+                <div class="hovrow" style="display:grid; grid-template-columns:${cols}; align-items:center; padding:10px 20px; border-bottom:1px solid #1b1e24;">
+                  <div style="display:flex; align-items:center; gap:11px; min-width:0;">
+                    <span style="flex:none; width:30px; height:30px; border-radius:50%; background:${r.avatarColor};"></span>
+                    ${r.name
+                      ? html`<span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</span><span style="display:block; font-size:10.5px; color:#6b717c; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span></span>`
+                      : html`<span style="min-width:0;"><span style="display:block; font-size:12.5px; font-weight:600; color:#dfe2e7; font-family:'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.userId}</span><span style="display:block; font-size:11px; color:#6b717c;">member</span></span>`}
+                  </div>
+                  <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${String(r.messages)}</div>
+                  <div style="font-size:13px; color:#c3c8d1; font-family:'JetBrains Mono',monospace; text-align:center;">${String(r.activeDays)}</div>
+                  <div style="display:flex; justify-content:center;">
+                    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 9px 3px 7px; border-radius:20px; background:${r.entered
+                      ? "rgba(63,182,168,.13)"
+                      : r.eligible
+                        ? "rgba(70,184,119,.13)"
+                        : "rgba(229,104,122,.12)"}; color:${r.entered ? "#4fc9bb" : r.eligible ? "#5ccc8a" : "#e58497"};"><span style="width:6px; height:6px; border-radius:50%; background:${r.entered
+                      ? "var(--accent)"
+                      : r.eligible
+                        ? "var(--ok)"
+                        : "var(--danger)"};"></span>${r.statusLabel}</span>
+                  </div>
+                  <div style="font-size:12px; color:#a7adb7; padding-left:6px; display:flex; flex-wrap:wrap; gap:5px;">
+                    ${r.reasons.length === 0
+                      ? html`<span style="color:#4c525c;">—</span>`
+                      : r.reasons.map(
+                          (reason) => html`<span style="background:#1c1f26; border:1px solid #262a31; border-radius:6px; padding:2px 7px; white-space:nowrap;">${reason}</span>`,
+                        )}
+                  </div>
+                </div>
+              `,
+            )}
+      </div>
+    </section>
+  `;
+}
+
+/** One raffle's eligibility report: who could enter, and why the rest could not. */
+export function raffleEligibilityPage(
+  session: Session,
+  guild: SessionGuild,
+  view: RaffleEligibilityView,
+  cards: PickerCard[],
+): string {
+  const brand = resolveDisplayName({});
+  const body = html`
+    ${homeHeader(session, guild, brand, cards, "eligibility")}
+    <div style="max-width:1180px; margin:0 auto; padding:26px 24px 84px;">
+      <div style="display:flex; align-items:baseline; gap:10px; color:#6b717c; font-size:12px; margin-bottom:8px;"><a href="/app" class="hovnav" style="color:#8b93a0;">${guild.name}</a><span>/</span><a href="/app/eligibility" class="hovnav" style="color:#8b93a0;">Eligibility</a><span>/</span><span>${view.raffleName}</span></div>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <h1 class="serif" style="font-weight:600; font-size:28px; letter-spacing:-.015em; margin:0;">${view.raffleName}</h1>
+            ${view.isTest
+              ? html`<span style="font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#d4a24c; background:rgba(212,162,76,.13); border-radius:5px; padding:3px 7px;">Test</span>`
+              : raw("")}
+          </div>
+          <p style="margin:6px 0 0; font-size:13.5px; color:#8b93a0;">Window <span style="color:#c3c8d1;">${view.windowLabel}</span></p>
+          <p style="margin:3px 0 0; font-size:13.5px; color:#8b93a0;">Bar <span style="color:#c3c8d1;">${view.barLabel}</span></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:7px; flex:none; font-size:11.5px; color:#6b717c; background:#16181d; border:1px solid #23272e; border-radius:20px; padding:6px 12px 6px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Read-only · nothing is written</div>
+      </div>
+      ${eligibilityStats(view)}
+      ${eligibilityTable(view)}
+      <section style="margin-top:16px; background:#14171d; border:1px solid #262a31; border-radius:13px; padding:15px 18px;">
+        <div style="font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#6b717c; margin-bottom:8px;">What this can't see</div>
+        <ul style="margin:0; padding-left:18px; font-size:12.5px; color:#8b93a0; line-height:1.65;">
+          ${view.caveats.map((c) => html`<li>${c}</li>`)}
+        </ul>
+      </section>
+    </div>
+  `;
+  return shell(`${view.raffleName} — Eligibility`, body);
 }
