@@ -24,7 +24,12 @@ import { activeDaysInWindow, messagesInWindow } from "./activity.js";
 import { isInWinCooldown } from "./cooldown.js";
 import { meetsMinServerAge } from "./serverTenure.js";
 import { activityWindow } from "./time.js";
-import type { DayWindow, EligibilityInput, EligibilityResult } from "./types.js";
+import type {
+  DayWindow,
+  EligibilityInput,
+  EligibilityResult,
+  IneligibleReason,
+} from "./types.js";
 
 /**
  * The activity window both the entry gate and `/raffle status` evaluate: the
@@ -125,4 +130,105 @@ export function checkEligibility(input: EligibilityInput): EligibilityResult {
   }
 
   return { ok: true };
+}
+
+/** Every gate a member fails, rather than just the first (see below). */
+export interface EligibilityExplanation {
+  ok: boolean;
+  /**
+   * Each gate the member fails, in the design's check order. Empty when they
+   * pass. `reasons[0]` is always exactly what `checkEligibility` returns, so the
+   * two can never disagree about the headline reason.
+   */
+  reasons: IneligibleReason[];
+}
+
+/**
+ * Evaluate every entry check without short-circuiting.
+ *
+ * `checkEligibility` stops at the first failure, which is right for the entry
+ * flow — it mirrors what the member is told. A moderator answering "why couldn't
+ * they enter?" usually wants the whole picture instead ("they fail activity *and*
+ * are in cooldown"), so this reports all of them. The entry flow keeps using the
+ * short-circuiting version; this exists for the dashboard (docs/dashboard.md
+ * "One small piece of genuinely new core logic").
+ *
+ * It applies the same rules in the same order, including the waivers: an
+ * "open to everyone" raffle reports no gate below the creator check, because
+ * none of them apply to it. The one deliberate difference is that a raffle which
+ * is not open reports `not_open` *and* keeps evaluating, so a moderator looking
+ * at a closed or already-drawn raffle still sees who would have qualified.
+ */
+export function explainEligibility(input: EligibilityInput): EligibilityExplanation {
+  const reasons: IneligibleReason[] = [];
+
+  if (input.status !== "open") {
+    reasons.push("not_open");
+  }
+  if (input.blacklisted) {
+    reasons.push("blacklisted");
+  }
+  if (input.isCreator) {
+    reasons.push("is_creator");
+  }
+
+  if (!input.openToAll) {
+    if (input.requiredRoleId !== null && !input.userRoleIds.includes(input.requiredRoleId)) {
+      reasons.push("missing_required_role");
+    }
+    if (input.excludedRoleId !== null && input.userRoleIds.includes(input.excludedRoleId)) {
+      reasons.push("has_excluded_role");
+    }
+    if (!meetsMinAccountAge(input.userSnowflake, input.minAccountAgeDays, input.now)) {
+      reasons.push("account_too_new");
+    }
+    if (!meetsMinServerAge(input.joinedAt, input.minServerAgeDays, input.now)) {
+      reasons.push("too_new_to_server");
+    }
+    const inCooldown = isInWinCooldown({
+      cooldownDays: input.cooldown.cooldownDays,
+      cooldownCount: input.cooldown.cooldownCount,
+      wins: input.wins,
+      rafflesSinceLastWin: input.rafflesSinceLastWin,
+      now: input.raffleStart,
+    });
+    if (inCooldown) {
+      reasons.push("in_cooldown");
+    }
+    if (input.excludePriorWinners && input.hasPriorWin) {
+      reasons.push("prior_winner");
+    }
+    if (!meetsActivityRequirement(input)) {
+      reasons.push("insufficient_activity");
+    }
+  }
+
+  if (input.alreadyEntered) {
+    reasons.push("already_entered");
+  }
+
+  return { ok: reasons.length === 0, reasons };
+}
+
+/**
+ * Which of the two activity floors a member misses, for a report that wants to
+ * say "enough messages, but not spread over enough days". Both can be true.
+ * Returns nulls when no activity gate applies.
+ */
+export function activityShortfall(input: EligibilityInput): {
+  messages: number;
+  activeDays: number;
+  missesVolume: boolean;
+  missesSpread: boolean;
+} {
+  const window = resolveActivityWindow(input);
+  const messages = messagesInWindow(input.dailyCounts, window);
+  const activeDays = activeDaysInWindow(input.dailyCounts, window);
+  const gated = input.reqDays >= 1;
+  return {
+    messages,
+    activeDays,
+    missesVolume: gated && input.reqMessages >= 1 && messages < input.reqMessages,
+    missesSpread: gated && input.reqActiveDays >= 1 && activeDays < input.reqActiveDays,
+  };
 }

@@ -167,19 +167,55 @@ export function countRafflesSince(db: Database, guildId: string, sinceIso: strin
 }
 
 /**
- * The longest activity lookback (`req_days`) among raffles that could still be
- * entered — `scheduled` or `open`. Null when none apply or all are null. Drives
- * how far back activity rows must be kept before pruning (design.md activity
- * "prune rows older than the longest lookback window in use").
+ * How many raffles in the guild completed their draw between two instants —
+ * `sinceIso` (exclusive, a member's last win) and `untilIso` (exclusive, the
+ * raffle being evaluated). The bounded form of `countRafflesSince`, for looking
+ * at a past raffle: counting up to *now* would credit the member with raffles
+ * that had not happened yet when the raffle in question ran, and so understate
+ * their cooldown at the time.
  */
-export function maxReqDaysInUse(db: Database): number | null {
+export function countRafflesBetween(
+  db: Database,
+  guildId: string,
+  sinceIso: string,
+  untilIso: string,
+): number {
   const row = db
     .prepare(
-      `SELECT MAX(req_days) AS n FROM raffles
-       WHERE status IN ('scheduled', 'open') AND req_days IS NOT NULL`,
+      `SELECT count(*) AS n FROM raffles
+       WHERE guild_id = ?
+         AND status IN ('drawn', 'completed')
+         AND is_test = 0
+         AND starts_at > ?
+         AND starts_at < ?`,
     )
-    .get() as { n: number | null };
+    .get(guildId, sinceIso, untilIso) as { n: number };
   return row.n;
+}
+
+/**
+ * The earliest UTC day any still-enterable raffle (`scheduled` or `open`) is
+ * being judged on: the start of its activity window, i.e. its start day less
+ * `req_days - 1`. Null when no such raffle exists.
+ *
+ * A raffle's window is anchored at its start, so it stays fixed while the raffle
+ * runs and recedes further into the past every day. Pruning must therefore be
+ * bounded by this, not by a lookback measured from now — otherwise a raffle open
+ * for longer than its own window loses the earliest days it is judging entrants
+ * on, and late entrants are wrongly rejected (design.md activity table).
+ *
+ * `req_days` is read the way the entry check reads it: anything null or below 1
+ * counts as a single-day window.
+ */
+export function earliestActivityWindowStart(db: Database): string | null {
+  const row = db
+    .prepare(
+      `SELECT MIN(date(starts_at, '-' || (MAX(COALESCE(req_days, 1), 1) - 1) || ' day')) AS d
+         FROM raffles
+        WHERE status IN ('scheduled', 'open') AND starts_at IS NOT NULL`,
+    )
+    .get() as { d: string | null };
+  return row.d;
 }
 
 /** All draft raffles for a guild, newest first — used by /raffle edit. */

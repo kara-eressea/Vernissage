@@ -194,9 +194,11 @@ existing function: evaluate every gate without short-circuiting and return the
 list of failures. It lives in core next to `checkEligibility` and is independently
 unit-tested; the entry flow keeps using the short-circuiting version.
 
-*Not yet built.* Tier 1 ships with the first-failing reason (the short-circuiting
-`checkEligibility`), which matches the single-reason column the design shows. The
-all-failures companion is a later refinement, not required for the current page.
+*Built*, as `explainEligibility` in `src/core/eligibility.ts`, alongside
+`activityShortfall` (which of the two activity floors a member missed). The
+simulator still shows the first-failing reason, matching the single-reason column
+its design shows; the per-raffle eligibility report below uses the all-failures
+version.
 
 ### Generate the command, don't run it
 
@@ -245,6 +247,39 @@ Because the simulator is a moderator-only, ephemeral read-out, it may show exact
 numbers — the "never show the activity bar to members" rule governs
 member-facing surfaces, and `/raffle eligible` and `/raffle config show` already
 print these figures to moderators.
+
+## Per-raffle eligibility: "why couldn't they enter?"
+
+*Built* (`/app/eligibility`). The simulator answers "who would clear a bar I am
+considering"; this answers the question moderators actually get asked — **"why
+wasn't I eligible for that raffle?"** It takes one raffle, evaluates its *own*
+stored settings against its *own* window (anchored at its start, exactly as the
+entry gate does), and lists every member with their message count, active days,
+status, and — for anyone blocked — **every** requirement they missed.
+
+Three things make it different from the simulator:
+
+- **The raffle's window, not "the last Y days ending now."** The report is
+  anchored at the raffle's start like the real gate, so it stays truthful for a
+  raffle that closed weeks ago. The 180-day activity retention is what makes that
+  possible; under the old lookback-only pruning the days would already be gone.
+- **Every failing gate, not the first.** `checkEligibility` short-circuits, which
+  is right for the member-facing reply but unhelpful for a moderator explaining a
+  decision. The new pure `explainEligibility` (a sibling in core, independently
+  tested — the "one small piece of genuinely new core logic" sketched above)
+  evaluates every gate and returns them all. The entry flow keeps using the
+  short-circuiting version, and `reasons[0]` is guaranteed to equal what it would
+  have said, so the two can never disagree.
+- **Entry is a column, not a reason.** "Already entered" is reported beside the
+  member rather than folded into their reasons, so an entrant's row still shows
+  what would otherwise have blocked them. The header also counts members who
+  were eligible and *didn't* enter — the raffle's unrealised reach.
+
+Wins and cooldowns are evaluated as of the raffle's start, so a win recorded
+after the raffle never blocks a member retroactively. The blind spots are stated
+on the page rather than hidden: candidates come from the activity table (plus
+anyone who entered), role gates and tenure need a member fetch and so are not
+applied, and the blacklist is only known as it stands now.
 
 ## The Raffle Designer: compose, preview, hand off
 
@@ -502,7 +537,8 @@ conscious decision, not a side effect of wanting nicer charts.
    (`/app/simulator`). The feature that motivated this, and the cheapest
    high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
-   data we already keep.
+   data we already keep. The per-raffle eligibility report (`/app/eligibility`,
+   above) is the first slice of this: ✅ *Built.*
 5. **Raffle Designer.** ✅ *Built* (`/app/designer`). The one feature that reaches
    past read-only, built after the read-only surface proved itself. Phase A: the
    visual composer with live entry-card and eligible-pool previews (read-only).

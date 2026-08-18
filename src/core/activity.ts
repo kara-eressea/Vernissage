@@ -76,18 +76,43 @@ export function cappedIncrement(
 }
 
 /**
- * The UTC day strictly before which activity rows may be pruned (design.md:
- * "prune rows older than the longest lookback window in use").
+ * How long counted activity is kept: six months of daily buckets.
  *
- * Given `now`, the longest activity lookback in use (`maxReqDays`), and a safety
- * margin, returns the cutoff day for `pruneActivityBefore` (which deletes rows
- * with `day < cutoff`). The margin keeps a buffer of still-safe days so an
- * off-by-one or a slightly longer window never deletes rows a check still needs.
+ * Retention used to track the longest lookback in use, which kept the table
+ * minimal but deleted history the dashboard's trends and per-raffle views want,
+ * and — because it was measured from *now* while a raffle's window is frozen at
+ * its start — could delete days a still-open raffle was being judged on. A flat
+ * horizon is simpler to reason about and cheap: one row per member per active
+ * day is a few thousand rows a year for a server of this size.
+ */
+export const ACTIVITY_RETENTION_DAYS = 180;
+
+/**
+ * The UTC day strictly before which activity rows may be pruned (design.md
+ * activity table).
+ *
+ * Two things bound it, and the earlier one wins:
+ *   - the flat retention horizon (`ACTIVITY_RETENTION_DAYS` back from `now`), and
+ *   - `earliestNeededDay`: the first day any scheduled or open raffle still needs,
+ *     since a raffle's activity window is anchored at its start and therefore
+ *     recedes into the past as the raffle runs. Without this, a long-running or
+ *     long-lookback raffle would have the ground cut from under it mid-flight and
+ *     late entrants would be judged on a truncated window.
+ *
+ * `safetyDays` keeps a further buffer so an off-by-one can never delete a day a
+ * check still needs. Returns the cutoff for `pruneActivityBefore`, which deletes
+ * rows with `day < cutoff`.
  */
 export function pruneCutoffDay(
   now: string,
-  maxReqDays: number,
+  earliestNeededDay: string | null,
+  retentionDays = ACTIVITY_RETENTION_DAYS,
   safetyDays = 1,
 ): string {
-  return addDays(utcDay(now), -(maxReqDays + safetyDays));
+  const byRetention = addDays(utcDay(now), -(retentionDays + safetyDays));
+  if (earliestNeededDay === null) {
+    return byRetention;
+  }
+  const byRaffle = addDays(earliestNeededDay, -safetyDays);
+  return byRaffle < byRetention ? byRaffle : byRetention;
 }

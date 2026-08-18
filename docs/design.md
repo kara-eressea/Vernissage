@@ -74,6 +74,26 @@ messages itself via the gateway, starting from the moment it is installed.
   precision is ever needed, switch the activity table to hourly buckets;
   the check logic is unchanged.
 
+### Activity retention
+Counted activity is kept for **180 days**, and the pruner additionally never
+deletes a day that a `scheduled` or `open` raffle is still judging entrants on —
+whichever of the two reaches further back wins, less a one-day safety margin.
+
+The second half is not belt-and-braces, it is the correctness condition. A
+raffle's activity window is anchored at its **start**, so it stays fixed while
+the raffle runs and recedes further into the past every day. Retention measured
+from *now* therefore erodes an open raffle's own window from underneath it: a
+raffle open for longer than its lookback would judge late entrants on a truncated
+window and reject people who in fact qualified. Because `req_days` has no upper
+bound and a raffle can stay open indefinitely, no flat horizon — 180 days or
+otherwise — can guarantee this on its own; the anchor is what does.
+
+The 180-day horizon replaced a rule that kept only the longest lookback in use.
+That was minimal but too tight: it deleted the history the dashboard's trend and
+per-raffle views want, and it is what let the window erosion happen. The cost is
+small — one row per member per active day, a few thousand rows a year for a
+server of this size — and message content is still never stored.
+
 ## Core concepts
 
 ### Raffle lifecycle
@@ -431,7 +451,8 @@ activity (
   count     INTEGER,
   PRIMARY KEY (guild_id, user_id, day)
 )
--- prune rows older than the longest lookback window in use
+-- retention: keep 180 days (see "Activity retention" below), and never prune a
+-- day a scheduled or open raffle is still judging entrants on
 
 raffles (
   raffle_id       INTEGER PRIMARY KEY,
