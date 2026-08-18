@@ -613,13 +613,77 @@ the real cost, more than any single feature:
   terminates it).
 - OAuth client secret and redirect URI registered in the Discord developer
   portal; secrets kept out of the repo.
-- Session security (signed, `HttpOnly`, `Secure` cookies), and basic rate
+- Session security (encrypted, `HttpOnly`, `Secure` cookies), and basic rate
   limiting on the login and simulator endpoints.
 - Process isolation as above, so the web surface can never take down message
   counting.
 
 None of this is exotic, but it is a new operational posture and should be a
 conscious decision, not a side effect of wanting nicer charts.
+
+### Access is re-checked, not just granted
+
+Sign-in resolves which allowlisted guilds a visitor manages, and originally that
+answer was then trusted for the cookie's whole life — seven days. A moderator who
+lost Manage Server, or was removed from the server outright, kept full read access
+to that guild's raffles, entrants, member names and activity figures until their
+session lapsed (issue #40). The dashboard is read-only, which caps the damage, but
+it is also the surface with the most member data in one place, and losing
+moderator status is exactly when that view should close.
+
+Three changes, together:
+
+- **Every `/app` request re-derives the answer** from Discord, through the same
+  `selectManageableGuilds` the callback uses, and authorises against that rather
+  than the cookie's copy (`src/web/access.ts`). It is one choke point in the
+  router, ahead of the designer's POST as well as the read pages, so no route can
+  forget it.
+- **A five-minute per-user cache** keeps a page load from being a Discord round
+  trip and keeps the per-token rate limit intact. That window is the residual
+  exposure — minutes rather than days. Only successes and definite revocations are
+  cached; a transient failure is never remembered.
+- **The session lifetime dropped from 7 days to 12 hours**, which bounds the
+  exposure if the re-check is ever switched off, and keeps every session shorter
+  than the ~7-day Discord access token it carries — which is why there is **no
+  refresh-token handling**: an expired token simply fails the re-check.
+
+Two distinctions that matter more than they look:
+
+- **A Discord outage fails the request, not the session.** A blip, a 5xx or a rate
+  limit returns `unavailable`; the visitor sees a retry page and stays signed in.
+  Only a definite rejection — Discord refuses the token, or they genuinely no
+  longer manage the guild — ends the session. `TokenRejectedError` (401/403) is
+  what separates the two. Logging every moderator out because Discord hiccuped
+  would be its own outage.
+- **The stale list is never a fallback.** If the check cannot run, the request
+  fails. Serving the cookie's list on failure would reintroduce the exact gap
+  being closed.
+
+The cookie is now **encrypted** (AES-256-GCM, key derived from
+`DASHBOARD_SESSION_SECRET`) rather than only signed, because it carries the
+visitor's Discord access token. A signed cookie is tamper-proof but readable, and
+a readable token turns cookie theft from "dashboard access until the session
+expires" into "Discord identity and guild-list access for as long as the token
+lives" — an escalation that outlives the session. GCM gives integrity and
+confidentiality together, so the separate HMAC is gone.
+
+Operationally:
+
+- **`DASHBOARD_REVALIDATE=off`** disables the per-request check, falling back to
+  trusting the session for its 12 hours. An escape hatch, not a tuning knob — it
+  exists so a misbehaving check cannot lock every moderator out of the dashboard.
+- **Rotating `DASHBOARD_SESSION_SECRET` signs everyone out immediately.** No
+  outstanding cookie can be decrypted afterwards. This is the emergency lever when
+  a session must die *now*, and it needs no code.
+- The cookie format changed, so existing sessions end at deploy and everyone signs
+  in once. That is the intended outcome of a change whose point is that stale
+  sessions should not survive.
+
+Still open: the dashboard admits only guild **owners** and holders of **Manage
+Server**, not the configured `mod_role`, because the web tier has no bot token to
+read roles with. A moderator whose only authority is that role can run `/raffle`
+commands in chat but cannot sign in. Closing it is the Tier-2 member fetch, which
+would also let the re-check consult the bot instead of Discord.
 
 ## Suggested sequencing
 
