@@ -287,6 +287,54 @@ on the page rather than hidden: candidates come from the activity table (plus
 anyone who entered), role gates and tenure need a member fetch and so are not
 applied, and the blacklist is only known as it stands now.
 
+## One raffle, in full: the detail page
+
+`/app/raffle?id=<n>` (`src/web/raffleDetail.ts`, `raffleDetailPage` in
+`views.ts`) is the page you land on from a home card, a history row, the
+eligibility report, or the verifier — everything one raffle knows about itself,
+gated to the selected guild like every other `/app` page.
+
+It shows the **settings the raffle actually applied**, and it is careful about
+where each one came from, because that is a per-field fact rather than a blanket
+rule. The **activity** bar is read straight off the raffle row with no
+guild-default fallback — the gate reads `req_messages ?? 0`, so a null there is
+*no floor*, not the server default, and the page says exactly that rather than
+quietly printing the default beside it. The **cooldown** genuinely does fall back,
+and is labelled "from the server default" when it did. **Account age** and
+**server tenure** have had no per-raffle override since schema v15, and are
+labelled server-wide policy.
+
+It also surfaces two things that were stored but rendered nowhere: **entrants who
+withdrew or were removed**, with their reason and the failsafe badge where the
+draw dropped them (`listEntrants` filters removals out because it feeds the draw;
+`listEntryRows` is the reporting counterpart), and **rerolled winners**, kept in
+the record struck through rather than dropped, next to each standing winner's
+claim state.
+
+The eligibility half is not a second implementation: it calls
+`evaluateRaffleEligibility` and presents it with the same
+`buildRaffleEligibilityView` the standalone report uses, so the two pages cannot
+disagree. The panel adds a **blocked-by-reason breakdown**, and that breakdown
+splits the activity gate into its two floors — too few messages, too few active
+days, or both. That distinction is the one moderators are actually asked about: a
+member who clears the volume comfortably and fails only on spread reads "not
+active enough" as a message-count problem, and one of them went looking for a
+counting bug because of it.
+
+**And it stops at the login.** Naming the binding floor to the *member* was
+proposed and rejected (issue #34): it is a directly actionable hint for farming
+the bar, where the same fact behind an authenticated moderator page is just an
+answer. So the dashboard names the floor and the member-facing reply does not —
+an instance of the general rule that this surface may show what chat must not.
+
+**What it can and cannot see.** For a raffle whose measurement was frozen at open
+(schema v19) the figures are the exact ones the gate judged, and the page says so.
+For an older raffle they are recomputed now, and the page carries the warning —
+including that the counted-activity table keeps only 180 days, so a raffle whose
+window has since aged out will under-report. The blacklist is read as it stands
+today, role gates cannot be checked without a member fetch, and members who never
+posted and never entered are invisible. All of it is printed on the page.
+
 ## The Raffle Designer: compose, preview, hand off
 
 The simulator tunes *config*; the Designer composes a *whole raffle* — name,
@@ -445,6 +493,21 @@ flagged by whether they lean on data we already store:
   rerolls, and how often winners actually claimed. A high unclaimed rate is a
   signal the claim window is too short — a tuning insight you can't see from a
   single raffle.
+
+  **What shipped.** `/app/history` (`src/web/history.ts` for the view model,
+  `historyPage` in `views.ts`) lists every finished raffle for the selected guild,
+  newest first, 25 to a page, with an aggregate strip: raffles run, winners drawn,
+  rerolls, cancellations, and the **forfeit rate** — prizes whose claim deadline
+  ran out unclaimed, as a percentage of wins that required a claim at all. That
+  denominator matters: a rate computed over raffles with no claim window would
+  read "0% forfeited" and imply claims are working when none were ever asked for,
+  so the figure is suppressed entirely until a claim window has been used. Two
+  scope choices are on the page rather than silent — **cancelled raffles are
+  included**, badged and winner-less ("what happened to that one?" is exactly what
+  this page is for), and **test raffles are hidden**, with a line stating how many
+  were left out. Entrant counts are the **committed** list (active entrants plus
+  `draw_disqualified`), the same number the verifier hashes, so no raffle shows two
+  different entrant counts on two pages.
 - **A fairness lens (cheap; uses the `wins` table).** Distribution of wins across
   members over time — has the same handful of people won repeatedly? This is the
   question a suspicious community actually asks, and the data to answer it is
@@ -454,6 +517,15 @@ flagged by whether they lean on data we already store:
   filterable per-raffle timeline instead of a scroll of channel messages. A
   natural home for the CSV/JSON audit export listed as a future idea in
   design.md.
+
+  **What shipped.** The per-raffle timeline is a panel on the raffle-detail page
+  (below), not a page of its own. It reuses the audit channel's own sentences
+  through a small renderer seam added to `src/core/auditFormat.ts`
+  (`describeAuditEvent`): one switch, two surfaces — the channel renders mentions
+  as Discord markup, the dashboard resolves them against the `members` name cache
+  — so a new event type can never be described one way in chat and another on the
+  web. The privacy rule the formatter enforces by construction (never a reason,
+  never a count) therefore holds on both. Filtering and export are still open.
 - **Config health checks (cheap).** Passive warnings the bot can't easily nag
   about in chat: no announce channel set, no counted channels configured, an
   activity window shorter than the distinct-days floor it requires, a cooldown
@@ -543,8 +615,11 @@ conscious decision, not a side effect of wanting nicer charts.
    (`/app/simulator`). The feature that motivated this, and the cheapest
    high-leverage thing once the shell exists.
 4. **Activity distribution / trends and raffle-history views.** Presentation over
-   data we already keep. The per-raffle eligibility report (`/app/eligibility`,
-   above) is the first slice of this: ✅ *Built.*
+   data we already keep. Largely ✅ *Built*: the per-raffle eligibility report
+   (`/app/eligibility`), the raffle history (`/app/history`), and the raffle
+   detail page with its audit timeline (`/app/raffle?id=<n>`). Still open: the
+   activity **histogram with the bar drawn on it**, activity **trends over time**
+   beyond the home spark, and the **fairness lens** (wins per member).
 5. **Raffle Designer.** ✅ *Built* (`/app/designer`). The one feature that reaches
    past read-only, built after the read-only surface proved itself. Phase A: the
    visual composer with live entry-card and eligible-pool previews (read-only).

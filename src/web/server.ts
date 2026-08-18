@@ -17,7 +17,9 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import type { WebConfig } from "./config.js";
 import type { Database } from "../db/index.js";
 import { buildDesignerView, buildDesignerPool } from "./designer.js";
+import { buildHistoryView } from "./history.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
+import { buildRaffleDetail } from "./raffleDetail.js";
 import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
@@ -50,7 +52,9 @@ import {
   designerPage,
   eligibilityIndexPage,
   errorPage,
+  historyPage,
   homePage,
+  raffleDetailPage,
   loginPage,
   noAccessPage,
   pickerPage,
@@ -171,6 +175,9 @@ export function createServer(deps: ServerDeps): Server {
   // The per-raffle eligibility report runs the same bounded DB scan as the
   // simulator, so it gets the same generous read ceiling.
   const eligibilityLimiter = new RateLimiter(120, 60 * 1000);
+  // History and raffle detail are plain DB reads (the detail page also runs the
+  // eligibility scan), so they share the read pages' generous ceiling.
+  const historyLimiter = new RateLimiter(120, 60 * 1000);
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
@@ -179,6 +186,7 @@ export function createServer(deps: ServerDeps): Server {
     verifyLimiter.sweep(t);
     designerLimiter.sweep(t);
     eligibilityLimiter.sweep(t);
+    historyLimiter.sweep(t);
   }, 5 * 60 * 1000);
   sweepTimer.unref();
 
@@ -283,6 +291,24 @@ export function createServer(deps: ServerDeps): Server {
         return;
       }
       handleEligibility(res, session, url);
+      return;
+    }
+
+    if (path === "/app/history") {
+      if (!historyLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleHistory(res, session, url);
+      return;
+    }
+
+    if (path === "/app/raffle") {
+      if (!historyLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleRaffleDetail(res, session, url);
       return;
     }
 
@@ -428,7 +454,8 @@ export function createServer(deps: ServerDeps): Server {
     const nameRows = getMemberNames(db, guild.id, result.members.map((m) => m.userId));
     const names = new Map<string, string>();
     for (const [id, n] of nameRows) {
-      if (n.displayName) names.set(id, n.displayName);
+      const label = n.displayName ?? n.username;
+      if (label) names.set(id, label);
     }
     const view = buildSimulatorView(result, filter, names);
     const cards = buildPickerCards(db, session.guilds, now);
@@ -537,6 +564,69 @@ export function createServer(deps: ServerDeps): Server {
     sendJson(res, 200, pool);
   }
 
+  /** Every finished raffle for the selected guild, newest first, paged. */
+  function handleHistory(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      redirect(res, "/app");
+      return;
+    }
+    const now = new Date().toISOString();
+    // `?page=` is 1-based in the URL and 0-based in the view model; a junk value
+    // is treated as the first page rather than an error.
+    const raw = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+    const page = Number.isInteger(raw) && raw > 0 ? raw - 1 : 0;
+    sendHtml(
+      res,
+      200,
+      historyPage(session, guild, buildHistoryView(db, guild.id, now, page), buildPickerCards(db, session.guilds, now)),
+    );
+  }
+
+  /** One raffle in full: settings, entrants, winners, eligibility, timeline. */
+  function handleRaffleDetail(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      redirect(res, "/app");
+      return;
+    }
+    const idParam = url.searchParams.get("id");
+    const raffleId = idParam ? Number.parseInt(idParam, 10) : NaN;
+    if (!Number.isInteger(raffleId) || raffleId <= 0) {
+      redirect(res, "/app/history");
+      return;
+    }
+    const now = new Date().toISOString();
+    const detail = buildRaffleDetail(db, guild.id, raffleId, now);
+    if (!detail.ok) {
+      // Unknown here, or another server's raffle: back to the listing rather
+      // than confirming that some other guild's id exists.
+      redirect(res, "/app/history");
+      return;
+    }
+    sendHtml(
+      res,
+      200,
+      raffleDetailPage(session, guild, detail, buildPickerCards(db, session.guilds, now)),
+    );
+  }
+
   /**
    * Who could enter one raffle, and for everyone who could not, every gate they
    * failed. With no raffle id, lists the raffles to choose from.
@@ -598,7 +688,8 @@ export function createServer(deps: ServerDeps): Server {
     const nameRows = getMemberNames(db, guild.id, report.members.map((m) => m.userId));
     const names = new Map<string, string>();
     for (const [id, n] of nameRows) {
-      if (n.displayName) names.set(id, n.displayName);
+      const label = n.displayName ?? n.username;
+      if (label) names.set(id, label);
     }
     const view = buildRaffleEligibilityView(report, filter, names);
     sendHtml(res, 200, raffleEligibilityPage(session, guild, view, cards));
