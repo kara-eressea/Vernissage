@@ -184,6 +184,15 @@ as entered — they cannot mistake ineligibility for a lost draw. The exact
 activity thresholds (X and K) are never shown to members — not on the entry
 card, the failure reply, or /raffle status — so the bar cannot be farmed to;
 non-gameable gates (account age, tenure, cooldown) are stated exactly.
+
+The activity reply does name **which of the two floors** was missed — volume or
+spread — while still never naming a number, a threshold, or a "you need N more".
+The dimension is not gameable in the way the figures are: telling a member the
+spread is what binds points them at posting a little across more days, which is
+precisely the sustained participation the distinct-day floor exists to reward. A
+single undifferentiated "not enough recent activity" was actively misleading:
+members who cleared X comfortably and failed only on K read it as a message
+count, and concluded their messages were not being counted at all.
 3. On success: entry recorded, ephemeral confirmation to user, audit log
    entry written.
 4. On failure: ephemeral message explaining which check failed (mods may

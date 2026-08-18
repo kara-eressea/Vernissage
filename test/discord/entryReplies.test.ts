@@ -66,6 +66,48 @@ describe("entryFailureMessage", () => {
     expect(msg.toLowerCase()).not.toContain("keep chatting");
   });
 
+  it("names the spread floor when the member had messages but too few days", () => {
+    // 40 messages on a single day against a three-day spread floor: the volume
+    // is fine, so "be more active" would be the wrong advice (issue #34).
+    const msg = entryFailureMessage(
+      "insufficient_activity",
+      input({
+        reqMessages: 0,
+        reqActiveDays: 3,
+        dailyCounts: [{ day: "2026-07-05", count: 40 }],
+      }),
+      false,
+    );
+    expect(msg.toLowerCase()).toContain("separate days");
+    expect(msg.toLowerCase()).not.toContain("weren't active enough");
+    expect(msg).not.toMatch(/\d/);
+  });
+
+  it("gives materially different guidance for a volume shortfall", () => {
+    const spread = entryFailureMessage(
+      "insufficient_activity",
+      input({ reqMessages: 0, reqActiveDays: 3, dailyCounts: [{ day: "2026-07-05", count: 40 }] }),
+      false,
+    );
+    const volume = entryFailureMessage("insufficient_activity", input(), false);
+
+    expect(volume).not.toBe(spread);
+    expect(volume.toLowerCase()).toContain("weren't active enough");
+    expect(volume.toLowerCase()).not.toContain("separate days");
+    expect(volume).not.toMatch(/\d/);
+  });
+
+  it("names both floors when the member misses both", () => {
+    const msg = entryFailureMessage(
+      "insufficient_activity",
+      input({ reqMessages: 20, reqActiveDays: 3, dailyCounts: [{ day: "2026-07-05", count: 2 }] }),
+      false,
+    );
+    expect(msg.toLowerCase()).toContain("weren't active enough");
+    expect(msg.toLowerCase()).toContain("separate days");
+    expect(msg).not.toMatch(/\d/);
+  });
+
   it("describes the win cooldown", () => {
     const msg = entryFailureMessage("in_cooldown", input(), false);
     expect(msg.toLowerCase()).toContain("cooldown");
@@ -93,6 +135,42 @@ describe("statusMessage", () => {
     expect(msg).not.toContain("20");
     expect(msg.toLowerCase()).toContain("cooldown");
     expect(msg).toContain("already entered");
+  });
+
+  it("splits the activity line by which floor is short, without any digits", () => {
+    const activityLine = (msg: string): string =>
+      msg.split("\n").find((l) => l.includes("Activity:"))!;
+
+    const volume = activityLine(statusMessage("R", input()));
+    const spread = activityLine(
+      statusMessage(
+        "R",
+        input({ reqMessages: 0, reqActiveDays: 3, dailyCounts: [{ day: "2026-07-05", count: 40 }] }),
+      ),
+    );
+    const both = activityLine(
+      statusMessage(
+        "R",
+        input({ reqMessages: 20, reqActiveDays: 3, dailyCounts: [{ day: "2026-07-05", count: 2 }] }),
+      ),
+    );
+
+    expect(spread).not.toBe(volume);
+    expect(spread.toLowerCase()).toContain("separate days");
+    expect(volume.toLowerCase()).not.toContain("separate days");
+    expect(both.toLowerCase()).toContain("separate days");
+    expect(both).not.toBe(spread);
+    for (const line of [volume, spread, both]) {
+      expect(line).not.toMatch(/\d/);
+    }
+  });
+
+  it("keeps the met-activity line when both floors are cleared", () => {
+    const msg = statusMessage(
+      "R",
+      input({ reqMessages: 5, reqActiveDays: 1, dailyCounts: [{ day: "2026-07-05", count: 8 }] }),
+    );
+    expect(msg).toContain("✅ Activity: you've been active enough recently");
   });
 
   it("marks a blacklisted member", () => {

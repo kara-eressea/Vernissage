@@ -50,6 +50,11 @@ than one raffle is open. Ephemeral.
 Show your own standing for a raffle: activity progress toward the requirement,
 any win cooldown, and whether you have entered. Ephemeral.
 
+The activity line says whether the shortfall is in messages, in the number of
+separate days, or both — never in numbers (design.md
+["Entry flow"](design.md#entry-flow) keeps the thresholds unpublished). The
+entry-failure reply is worded the same way.
+
 ```
 /raffle status raffle:42
 ```

@@ -4,12 +4,14 @@
  * Maps an eligibility outcome to the ephemeral message a member sees. Cooldown
  * timing (non-gameable) is quoted exactly, but the activity thresholds are kept
  * vague on every member-facing surface — publishing the message/active-day bar
- * would invite gaming it (design.md "Entry flow", activity-privacy rule).
+ * would invite gaming it (design.md "Entry flow", activity-privacy rule). Which
+ * of the two floors was missed *is* named, though: the dimension guides a member
+ * toward the behaviour the gate rewards without revealing a number.
  * Blacklist rejections honor the guild's generic-message toggle. No
  * discord.js/database import.
  */
 
-import { meetsActivityRequirement } from "../../core/eligibility.js";
+import { activityShortfall } from "../../core/eligibility.js";
 import { winCooldownStatus } from "../../core/cooldown.js";
 import { discordTimestamp } from "../../core/time.js";
 import type { EligibilityInput, IneligibleReason } from "../../core/types.js";
@@ -71,15 +73,66 @@ export function entryFailureMessage(
     case "prior_winner":
       return "This raffle is only open to members who haven't won here before.";
     case "insufficient_activity":
-      // Deliberately no have/need numbers, mirroring the public card: exact
-      // figures (message and active-day floors) would let members farm to the bar.
-      // Activity is measured up to the raffle's start, so say so plainly rather
-      // than inviting a futile burst of messages now ("keep chatting" would
-      // mislead — posting after it opened can't help this raffle).
-      return "Sorry, you're not eligible for this raffle — you weren't active enough here before it started. Staying active will help you qualify for future ones.";
+      return `Sorry, you're not eligible for this raffle — ${activityShortfallCopy(input)}`;
     case "already_entered":
       return "You're already entered into this raffle. Changed your mind? Use `/raffle withdraw`.";
   }
+}
+
+/**
+ * Which activity floor the member missed, as a phrase.
+ *
+ * Naming the *dimension* is not the same as publishing the *bar*: "on too few
+ * separate days" points a member at posting a little across more days, which is
+ * exactly the sustained participation the distinct-day floor exists to reward.
+ * The numbers stay hidden either way (design.md "Entry flow", activity-privacy
+ * rule) — so no count, threshold, or "N more" appears here.
+ *
+ * The distinction matters because the old single line ("not enough recent
+ * activity") read as a message-count problem to every member who hit the spread
+ * floor with plenty of messages, and sent them looking for a counting bug
+ * instead of at the actual requirement.
+ */
+function activityShortfallCopy(input: EligibilityInput): string {
+  const { missesVolume, missesSpread } = activityShortfall(input);
+  // Spread only: they talked plenty, just in too few sittings. Saying "be more
+  // active" here would be wrong and is what caused the confusion.
+  if (missesSpread && !missesVolume) {
+    return (
+      "you were active here before it started, just not across enough separate days. " +
+      "This raffle looks for activity spread over several days rather than one busy session — " +
+      "chatting a little on more days will help you qualify for future ones."
+    );
+  }
+  if (missesSpread && missesVolume) {
+    return (
+      "you weren't active enough here before it started, and what you did send landed on too few separate days. " +
+      "Chatting a little on more days will help you qualify for future ones."
+    );
+  }
+  // Volume only (and the defensive fallback if neither floor reports a miss):
+  // activity is measured up to the raffle's start, so say so plainly rather than
+  // inviting a futile burst of messages now ("keep chatting" would mislead —
+  // posting after it opened can't help this raffle).
+  return (
+    "you weren't active enough here before it started. " +
+    "Staying active will help you qualify for future ones."
+  );
+}
+
+/** The `/raffle status` activity line, split by floor like the failure copy. */
+function activityStatusLine(input: EligibilityInput): string {
+  const { missesVolume, missesSpread } = activityShortfall(input);
+  if (!missesVolume && !missesSpread) {
+    return "- ✅ Activity: you've been active enough recently";
+  }
+  if (missesSpread && !missesVolume) {
+    return "- ⬜ Activity: enough messages, but not spread across enough separate days yet";
+  }
+  if (missesSpread && missesVolume) {
+    return "- ⬜ Activity: not enough recent activity, and not on enough separate days yet";
+  }
+  return "- ⬜ Activity: not enough recent activity yet";
 }
 
 /** The `/raffle status` card: the member's standing against one raffle's gates. */
@@ -123,11 +176,7 @@ export function statusMessage(raffleName: string | null, input: EligibilityInput
         : "- ✅ Limited to members who haven't won here before.",
     );
   }
-  lines.push(
-    meetsActivityRequirement(input)
-      ? "- ✅ Activity: you've been active enough recently"
-      : "- ⬜ Activity: not enough recent activity yet",
-  );
+  lines.push(activityStatusLine(input));
   lines.push(
     cooldown.active
       ? `- ⏳ Win cooldown active${cooldown.endsAt ? ` until ${discordTimestamp(cooldown.endsAt, "R")}` : ""}`
