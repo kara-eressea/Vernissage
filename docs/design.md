@@ -40,6 +40,26 @@ messages itself via the gateway, starting from the moment it is installed.
   - Channels to include or exclude (e.g. exclude bot-command channels).
   - Optional cap on counted messages per user per hour, to blunt spam.
   - Ignore messages from bots and webhooks.
+- **Messages in threads count, under the parent channel's rule.** A thread has
+  its own channel id, but activity in it is activity in the channel it hangs
+  from, so both sides resolve a thread to its parent: the gateway path when a
+  message arrives, and `/raffle config channels` when a moderator stores a rule
+  (picking a thread stores the rule on its parent and says so). A rule keyed on a
+  thread's own id would match nothing. Forum posts follow the same rule — the
+  forum channel is the parent. Private threads are the exception the bot cannot
+  fix: the gateway delivers their messages only to a bot that is a member of the
+  thread, so they are not counted unless it is.
+- **A message can be dropped before it is counted, and that is now visible.**
+  The Discord library resolves a message's channel from its cache and silently
+  discards the event when the channel is missing — no event, no error. Archived
+  threads are the realistic case: only *active* threads arrive when the bot
+  connects, and the library evicts archived ones on a timer. A watchdog on the
+  raw gateway stream (`src/discord/droppedMessages.ts`) therefore counts and logs
+  every countable message that arrives for an uncached channel, and fetches that
+  channel so later messages in it are delivered normally; `/raffle config show`
+  reports the tally when it is non-zero. The message that triggered the recovery
+  is still not counted — recovering it would mean a second implementation of the
+  counting path, which is deliberately not done.
 - Anti-spam judgment calls beyond this are left to moderators, who can
   blacklist offenders.
 - Activity window: the Y-day window always ends at the raffle's start, so

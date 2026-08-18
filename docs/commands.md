@@ -272,6 +272,12 @@ Counting precedence (also shown by `list`): an **exclude** always wins; if any
 **includes** exist they form an allowlist (only those channels count); otherwise
 every channel counts.
 
+Rules cover **threads too**: a thread's messages count under the channel it hangs
+from, so one rule on `#general` governs every thread in it (forum posts count
+under their forum channel). Threads are kept out of the channel picker for that
+reason; if one is chosen anyway the rule is stored on its parent and the reply
+says so. See [design.md](design.md#key-constraint-message-counting).
+
 > `channels` is a single subcommand with an `action` option rather than
 > `channels include …` as separate subcommands, because Discord caps command
 > nesting at command → group → subcommand and `config` already uses the group

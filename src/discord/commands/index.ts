@@ -14,6 +14,7 @@
 import type { Database } from "better-sqlite3";
 import type { BotConfig } from "../../config.js";
 import type { MessageCounter } from "../../counting/counter.js";
+import type { DropWatchHandle } from "../droppedMessages.js";
 import type { Notifier } from "../notifier.js";
 import { buildRaffleCommand } from "./raffle/index.js";
 import type { Command } from "./types.js";
@@ -30,6 +31,12 @@ export interface CommandContext {
    * most tests) run without it.
    */
   counter?: MessageCounter;
+  /**
+   * The gateway watchdog, so `/raffle config show` can report messages that were
+   * dropped before counting (issue #28). Optional: absent in tests and in any
+   * process that doesn't hold a gateway connection.
+   */
+  dropWatch?: DropWatchHandle;
 }
 
 /** Build the full command set, wiring each handler to `ctx`. */
