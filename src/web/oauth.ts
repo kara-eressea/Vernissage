@@ -68,6 +68,21 @@ export async function fetchUser(accessToken: string): Promise<DiscordUser> {
   return (await res.json()) as DiscordUser;
 }
 
+/**
+ * Discord refused the access token — revoked, deauthorised, or expired.
+ *
+ * Distinguished from a transport or server-side failure because the two demand
+ * opposite handling on the per-request access re-check: a rejected token means the
+ * session is genuinely finished, while a 5xx or a network error is transient and
+ * must not log anyone out (access.ts).
+ */
+export class TokenRejectedError extends Error {
+  constructor(status: number) {
+    super(`Discord rejected the access token (${status})`);
+    this.name = "TokenRejectedError";
+  }
+}
+
 /** A partial guild from `/users/@me/guilds` — includes the user's permissions. */
 export interface DiscordPartialGuild {
   id: string;
@@ -84,6 +99,11 @@ export async function fetchUserGuilds(accessToken: string): Promise<DiscordParti
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
+    // 401/403 mean the token itself is no longer accepted; anything else (5xx,
+    // 429) is transient and the caller must not treat it as a revocation.
+    if (res.status === 401 || res.status === 403) {
+      throw new TokenRejectedError(res.status);
+    }
     throw new Error(`Fetching guilds failed: ${res.status}`);
   }
   return (await res.json()) as DiscordPartialGuild[];

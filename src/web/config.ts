@@ -40,6 +40,14 @@ export interface WebConfig {
   handoffUrl?: string;
   /** Shared secret presented to the bot handoff endpoint. Undefined disables the handoff. */
   handoffSecret?: string;
+  /**
+   * Whether each `/app` request re-checks the visitor's guild standing with
+   * Discord (design.md "Dashboard access is re-checked"). On by default; the
+   * off switch exists as an operational escape hatch if the re-check ever locks
+   * moderators out, and turning it off returns to trusting the session for its
+   * full 12-hour life.
+   */
+  revalidateAccess: boolean;
 }
 
 /** Environment variable names specific to the dashboard, documented in .env.example. */
@@ -54,6 +62,8 @@ export const WEB_ENV = {
   handoffUrl: "DESIGNER_HANDOFF_URL",
   /** Shared secret for the handoff endpoint — must match the bot's (optional). */
   handoffSecret: "DESIGNER_HANDOFF_SECRET",
+  /** Set to "off"/"false" to stop re-checking access per request (escape hatch). */
+  revalidateAccess: "DASHBOARD_REVALIDATE",
 } as const;
 
 /** Thrown when required dashboard configuration is missing, listing every problem. */
@@ -121,5 +131,6 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     // set (they must match the bot's DESIGNER_HANDOFF_* config).
     handoffUrl: env[WEB_ENV.handoffUrl]?.trim().replace(/\/+$/, "") || undefined,
     handoffSecret: env[WEB_ENV.handoffSecret]?.trim() || undefined,
+    revalidateAccess: parseBool(env[WEB_ENV.revalidateAccess], true),
   };
 }

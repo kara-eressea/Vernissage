@@ -29,15 +29,20 @@ describe("session encode/decode", () => {
     expect(decodeSession(cookie, SECRET, NOW)).toEqual(session);
   });
 
-  it("rejects a tampered payload", () => {
+  it("rejects a tampered ciphertext", () => {
     const cookie = encodeSession(makeSession(), SECRET);
-    const [payload, sig] = cookie.split(".");
-    // Flip the payload but keep the old signature.
-    const forged = `${payload}x.${sig}`;
-    expect(decodeSession(forged, SECRET, NOW)).toBeNull();
+    const [fmt, iv, sealed] = cookie.split(".");
+    // The GCM tag covers the ciphertext, so any edit fails authentication.
+    expect(decodeSession(`${fmt}.${iv}.${sealed}AA`, SECRET, NOW)).toBeNull();
   });
 
-  it("rejects a signature made with a different secret", () => {
+  it("rejects a tampered nonce", () => {
+    const cookie = encodeSession(makeSession(), SECRET);
+    const [fmt, , sealed] = cookie.split(".");
+    expect(decodeSession(`${fmt}.${"A".repeat(16)}.${sealed}`, SECRET, NOW)).toBeNull();
+  });
+
+  it("rejects a cookie sealed with a different secret", () => {
     const cookie = encodeSession(makeSession(), "other-secret");
     expect(decodeSession(cookie, SECRET, NOW)).toBeNull();
   });
@@ -47,6 +52,30 @@ describe("session encode/decode", () => {
     expect(decodeSession("", SECRET, NOW)).toBeNull();
     expect(decodeSession("nodothere", SECRET, NOW)).toBeNull();
     expect(decodeSession(".onlysig", SECRET, NOW)).toBeNull();
+    // Wrong scheme marker: a cookie from another format must not be guessed at.
+    expect(decodeSession("v1.aaa.bbb", SECRET, NOW)).toBeNull();
+  });
+
+  it("keeps the access token out of a readable cookie", () => {
+    // The reason the cookie is encrypted rather than merely signed: a readable
+    // token would let cookie theft reach Discord directly, for longer than the
+    // session lives (issue #40).
+    const cookie = encodeSession(makeSession({ at: "super-secret-token" }), SECRET);
+    expect(cookie).not.toContain("super-secret-token");
+    for (const part of cookie.split(".").slice(1)) {
+      const decoded = Buffer.from(part, "base64url").toString("utf8");
+      expect(decoded).not.toContain("super-secret-token");
+      expect(decoded).not.toContain("uid");
+    }
+    // But the server still reads it back.
+    expect(decodeSession(cookie, SECRET, NOW)?.at).toBe("super-secret-token");
+  });
+
+  it("expires in hours, not days", () => {
+    // The lifetime is the ceiling on a removed moderator's residual access when
+    // the per-request re-check is switched off, and must stay under Discord's
+    // ~7-day access-token life so no refresh handling is needed.
+    expect(SESSION_MAX_AGE_MS).toBe(12 * 60 * 60 * 1000);
   });
 
   it("rejects an expired session", () => {

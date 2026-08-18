@@ -25,6 +25,7 @@ import {
 import { buildHistoryView } from "./history.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
 import { buildRaffleDetail } from "./raffleDetail.js";
+import { AccessChecker, applyAccess } from "./access.js";
 import { selectManageableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
@@ -183,6 +184,8 @@ export function createServer(deps: ServerDeps): Server {
   // History and raffle detail are plain DB reads (the detail page also runs the
   // eligibility scan), so they share the read pages' generous ceiling.
   const historyLimiter = new RateLimiter(120, 60 * 1000);
+  // Re-checks each visitor's Discord standing per request, behind a short cache.
+  const access = new AccessChecker(config.guildIds);
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
@@ -192,6 +195,7 @@ export function createServer(deps: ServerDeps): Server {
     designerLimiter.sweep(t);
     eligibilityLimiter.sweep(t);
     historyLimiter.sweep(t);
+    access.sweep(t);
   }, 5 * 60 * 1000);
   sweepTimer.unref();
 
@@ -211,13 +215,57 @@ export function createServer(deps: ServerDeps): Server {
     const path = url.pathname;
     const cookies = parseCookies(req.headers.cookie);
     const now = Date.now();
-    const session = decodeSession(cookies.get(SESSION_COOKIE), config.sessionSecret, now);
+    let session = decodeSession(cookies.get(SESSION_COOKIE), config.sessionSecret, now);
 
     // Health check for the reverse proxy / orchestrator — no auth, no DB.
     if (path === "/healthz") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("ok");
       return;
+    }
+
+    // Re-check the visitor's guild standing with Discord before serving anything
+    // under /app (design.md "Dashboard access is re-checked", issue #40). One
+    // choke point rather than a call per route, so no route can forget it, and it
+    // sits ahead of the designer's POST as well as the read pages.
+    if (session && config.revalidateAccess && path.startsWith("/app")) {
+      // These two routes are fetched by the page's own JavaScript, so they must
+      // answer in JSON rather than hand back an HTML error the client can't read.
+      const wantsJson = path === "/app/designer/pool" || path === "/app/designer/stage";
+      const result = await access.check(session, now);
+      if (!result.ok) {
+        if (result.reason === "unavailable") {
+          // Discord could not be reached. Fail this request only — the session
+          // stays valid, so a blip is a retry rather than a mass logout.
+          if (wantsJson) {
+            sendJson(res, 503, { error: "access_check_unavailable" });
+          } else {
+            sendHtml(
+              res,
+              503,
+              errorPage("Couldn't confirm your access with Discord just now. Please try again in a moment."),
+            );
+          }
+          return;
+        }
+        // Definitively no longer a moderator here (or the token is dead): end the
+        // session rather than letting the cookie outlive the permission.
+        if (wantsJson) {
+          sendJson(res, 401, { error: "unauthorized" });
+        } else {
+          redirect(res, "/", [clearCookie(SESSION_COOKIE, config)]);
+        }
+        return;
+      }
+      const applied = applyAccess(session, result.guilds);
+      session = applied.session;
+      if (applied.changed) {
+        // Gained or lost a server since sign-in: refresh the cookie so the
+        // switcher matches reality. setHeader rather than threading cookies
+        // through every response; a handler that sets its own Set-Cookie
+        // (\`/app/select\`) builds it from this same refreshed session.
+        res.setHeader("Set-Cookie", sessionCookie(session, config));
+      }
     }
 
     // The Raffle Designer handoff is the one POST route — it proxies the composed
@@ -387,8 +435,14 @@ export function createServer(deps: ServerDeps): Server {
         guilds: manageable,
         // Drop straight into the only guild when there is exactly one.
         selectedGuildId: manageable.length === 1 ? manageable[0]!.id : undefined,
+        // Kept so each request can re-check this standing (access.ts). The cookie
+        // is encrypted precisely because it carries this.
+        at: token,
         iat: now,
       };
+      // A fresh sign-in is authoritative: drop any cached answer for this user so
+      // someone who just regained access is not held out by a stale "revoked".
+      access.forget(user.id);
     } catch (err) {
       console.error("OAuth callback failed:", err);
       sendHtml(res, 502, errorPage("Could not complete sign-in with Discord. Please try again."), [
