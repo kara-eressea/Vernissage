@@ -131,8 +131,14 @@ export interface ReasonCount {
  * A member failing two gates is counted under both — the question this answers
  * is "how much of the blocking does each rule do?", not "how do the blocked
  * partition?". The activity gate is split into its two floors, because "not
- * active enough" hides the distinction that actually explains most complaints:
- * plenty of messages, too few separate days (issue #34).
+ * active enough" hides the distinction a moderator is actually asked about:
+ * plenty of messages, too few separate days.
+ *
+ * This split is deliberately **moderator-only**. The member-facing reply names
+ * neither the thresholds nor which floor was missed (design.md "Entry flow",
+ * activity-privacy rule) — telling a member that spread is what binds is an
+ * actionable hint for farming the bar. Behind the login, it is just the answer
+ * to "why couldn't they enter?".
  */
 export function blockedReasonBreakdown(report: RaffleEligibilityReport): ReasonCount[] {
   const counts = new Map<string, number>();

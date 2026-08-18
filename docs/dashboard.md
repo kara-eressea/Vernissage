@@ -316,9 +316,16 @@ The eligibility half is not a second implementation: it calls
 `buildRaffleEligibilityView` the standalone report uses, so the two pages cannot
 disagree. The panel adds a **blocked-by-reason breakdown**, and that breakdown
 splits the activity gate into its two floors — too few messages, too few active
-days, or both. That distinction is the whole of issue #34: "not active enough"
-reads as a message-count problem to a member who cleared the volume comfortably
-and failed only on spread, and it sent one of them looking for a counting bug.
+days, or both. That distinction is the one moderators are actually asked about: a
+member who clears the volume comfortably and fails only on spread reads "not
+active enough" as a message-count problem, and one of them went looking for a
+counting bug because of it.
+
+**And it stops at the login.** Naming the binding floor to the *member* was
+proposed and rejected (issue #34): it is a directly actionable hint for farming
+the bar, where the same fact behind an authenticated moderator page is just an
+answer. So the dashboard names the floor and the member-facing reply does not —
+an instance of the general rule that this surface may show what chat must not.
 
 **What it can and cannot see.** For a raffle whose measurement was frozen at open
 (schema v19) the figures are the exact ones the gate judged, and the page says so.

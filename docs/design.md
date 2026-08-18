@@ -184,6 +184,19 @@ as entered — they cannot mistake ineligibility for a lost draw. The exact
 activity thresholds (X and K) are never shown to members — not on the entry
 card, the failure reply, or /raffle status — so the bar cannot be farmed to;
 non-gameable gates (account age, tenure, cooldown) are stated exactly.
+
+**Nor is the dimension.** A member who fails the activity gate is not told
+*which* floor they missed, only that they were not active enough. Naming it is
+tempting — someone who cleared X comfortably and failed only on K reads the
+generic line as a message-count problem, and at least one has concluded their
+messages were not being counted at all — but "post on more separate days" is a
+directly actionable route to the bar, and a gate that tells you which dial to
+turn is one you can farm. The full picture lives behind the moderator login
+instead: the dashboard's per-raffle eligibility report shows each member's exact
+messages and active days against the raffle's bar, and the raffle-detail page
+breaks the blocked members down by which floor they missed. Moderators can
+therefore explain a rejection precisely, in their own words, without the bot
+publishing the shape of the bar to everyone.
 3. On success: entry recorded, ephemeral confirmation to user, audit log
    entry written.
 4. On failure: ephemeral message explaining which check failed (mods may
