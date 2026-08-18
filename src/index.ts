@@ -33,6 +33,7 @@ import {
   isRoutableComponent,
   type CustomIdInteraction,
 } from "./discord/interactions.js";
+import { attachDroppedMessageWatch } from "./discord/droppedMessages.js";
 import { attachMessageCounter } from "./discord/messageCounter.js";
 import { backfillMemberNames } from "./discord/memberNames.js";
 import { createNotifier } from "./discord/notifier.js";
@@ -83,6 +84,15 @@ async function main(): Promise<void> {
 
   // Start counting messages toward activity, flushed to the DB on an interval.
   const counting = attachMessageCounter(client, db, counter, config.guildIds);
+
+  // Watch the raw gateway stream for messages discord.js drops before they reach
+  // the counter (an uncached channel — typically a revived archived thread), so
+  // the failure is logged instead of silent, and fetch the channel so later
+  // messages there do count (issue #28).
+  const dropWatch = attachDroppedMessageWatch(client, config.guildIds);
+  // Handlers read ctx at invocation time, so the watchdog (which needs the
+  // client, built after the command set) can be handed over here.
+  commandCtx.dropWatch = dropWatch;
 
   // The draw's left-guild / blacklist failsafe checks pulled winners against
   // current membership via REST (only winners, so a handful of lookups).
@@ -226,6 +236,7 @@ async function main(): Promise<void> {
     console.log(`Received ${signal}; shutting down.`);
     scheduler.stop();
     counting.stop();
+    dropWatch.stop();
     pruning.stop();
     claimSweep.stop();
     pendingSweep.stop();

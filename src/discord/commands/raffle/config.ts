@@ -16,6 +16,7 @@
  */
 
 import {
+  ChannelType,
   MessageFlags,
   SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
@@ -47,6 +48,7 @@ import {
   setGuildConfig,
   type GuildConfigPatch,
 } from "../../../db/repositories/guilds.js";
+import { ruleChannelId } from "../../../core/messageCounting.js";
 import type { ChannelMode } from "../../../core/types.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
@@ -171,9 +173,50 @@ export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): Slash
         .addChannelOption((o) =>
           o
             .setName("channel")
-            .setDescription("The channel (required for include, exclude, and clear)."),
+            .setDescription("The channel (required for include, exclude, and clear).")
+            // Rules live on the parent channel — a thread's messages count under
+            // the channel it hangs from — so threads are kept out of the picker
+            // entirely. One picked anyway is resolved to its parent below.
+            .addChannelTypes(
+              ChannelType.GuildText,
+              ChannelType.GuildAnnouncement,
+              ChannelType.GuildForum,
+              ChannelType.GuildMedia,
+              ChannelType.GuildVoice,
+              ChannelType.GuildStageVoice,
+            ),
         ),
     );
+}
+
+/** The channel shape the counted-channel handler reads off an interaction. */
+interface PickedChannel {
+  id: string;
+  type?: number;
+  parentId?: string | null;
+}
+
+/**
+ * The channel a rule is stored against, plus the picked channel when the two
+ * differ. Counting keys every rule on the parent channel, so a rule saved
+ * against a thread's own id would match nothing; picking a thread is therefore
+ * treated as picking its parent, and the reply says so rather than silently
+ * storing something inert.
+ */
+export function resolveRuleChannel(picked: PickedChannel): {
+  targetId: string;
+  redirectedFrom: string | null;
+} {
+  const isThread =
+    picked.type === ChannelType.PublicThread ||
+    picked.type === ChannelType.PrivateThread ||
+    picked.type === ChannelType.AnnouncementThread;
+  const targetId = ruleChannelId({
+    id: picked.id,
+    isThread,
+    parentId: picked.parentId ?? null,
+  });
+  return { targetId, redirectedFrom: targetId === picked.id ? null : picked.id };
 }
 
 /** Reply ephemerally; all config replies are private to the invoking mod. */
@@ -250,6 +293,17 @@ async function handleConfigShow(
     ? ` ⚠️ posts have been failing since <t:${Math.floor(Date.parse(failingSince) / 1000)}:f> — check my access`
     : "";
 
+  // Surface the gateway watchdog's tally when it has seen anything: a message
+  // dropped before counting is otherwise invisible (see droppedMessages.ts), and
+  // a moderator without container logs has no other way to notice.
+  const drops = ctx.dropWatch?.stats();
+  const countingHealth =
+    drops && drops.dropped > 0
+      ? [
+          `⚠️ Message counting: ${drops.dropped} message(s) in ${drops.channels} channel(s) arrived for a channel I hadn't cached and weren't counted since my last restart. Later messages in those channels do count.`,
+        ]
+      : [];
+
   const lines = [
     "**Server raffle configuration**",
     `- Audit channel: ${fmtChannel(guild?.audit_channel)}${auditHealth}`,
@@ -265,6 +319,7 @@ async function handleConfigShow(
     `- Counted channels — include: ${includes.length ? includes.join(", ") : "none"}`,
     `- Counted channels — exclude: ${excludes.length ? excludes.join(", ") : "none"}`,
     `_${countingNote}_`,
+    ...countingHealth,
   ];
   await reply(interaction, lines.join("\n"));
 }
@@ -416,29 +471,38 @@ async function handleConfigChannels(
     return;
   }
   const now = new Date().toISOString();
+  const { targetId, redirectedFrom } = resolveRuleChannel(channel as PickedChannel);
+  // Picking a thread means picking its parent; say so, so the rule's real reach
+  // (the whole channel, threads included) is never a surprise.
+  const threadNote = redirectedFrom
+    ? `\n_<#${redirectedFrom}> is a thread, so the rule applies to its channel <#${targetId}> — messages in a thread count under the channel it hangs from._`
+    : "";
 
   if (action === "clear") {
-    removeChannelRule(ctx.db, guildId, channel.id);
+    removeChannelRule(ctx.db, guildId, targetId);
     writeAudit(ctx.db, {
       guildId,
       raffleId: null,
       eventType: AUDIT_EVENTS.countedChannelCleared,
       actorId: interaction.user.id,
-      payload: { channelId: channel.id },
+      payload: { channelId: targetId },
       createdAt: now,
     });
-    await reply(interaction, `Cleared the counting rule for <#${channel.id}>.`);
+    await reply(interaction, `Cleared the counting rule for <#${targetId}>.${threadNote}`);
     return;
   }
 
-  setChannelRule(ctx.db, guildId, channel.id, action as ChannelMode);
+  setChannelRule(ctx.db, guildId, targetId, action as ChannelMode);
   writeAudit(ctx.db, {
     guildId,
     raffleId: null,
     eventType: AUDIT_EVENTS.countedChannelSet,
     actorId: interaction.user.id,
-    payload: { channelId: channel.id, mode: action },
+    payload: { channelId: targetId, mode: action },
     createdAt: now,
   });
-  await reply(interaction, `Set <#${channel.id}> to **${action}** for message counting.`);
+  await reply(
+    interaction,
+    `Set <#${targetId}> to **${action}** for message counting.${threadNote}`,
+  );
 }

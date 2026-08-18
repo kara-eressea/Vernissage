@@ -233,6 +233,36 @@ describe("handleConfig — writes", () => {
     ]);
   });
 
+  it("channels stores a picked thread's rule on its parent channel", async () => {
+    // ChannelType.PublicThread = 11. A rule keyed on the thread's own id would
+    // never match anything, since counting resolves a message to its parent.
+    const interaction = fakeInteraction({
+      subcommand: "channels",
+      manageGuild: true,
+      values: { action: "include", channel: { id: "t9", type: 11, parentId: "c1" } },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    expect(listChannelRules(db, "g1")).toEqual([{ channelId: "c1", mode: "include" }]);
+    const reply = (interaction.reply.mock.calls[0]![0] as { content: string }).content;
+    expect(reply).toContain("is a thread");
+    expect(reply).toContain("<#c1>");
+  });
+
+  it("channels clear on a thread clears its parent's rule", async () => {
+    setChannelRule(db, "g1", "c1", "exclude");
+    const interaction = fakeInteraction({
+      subcommand: "channels",
+      manageGuild: true,
+      values: { action: "clear", channel: { id: "t9", type: 11, parentId: "c1" } },
+    });
+
+    await handleConfig(interaction, ctx);
+
+    expect(listChannelRules(db, "g1")).toEqual([]);
+  });
+
   it("channels list is read-only: no channel needed, nothing written", async () => {
     setChannelRule(db, "g1", "c1", "include");
     setChannelRule(db, "g1", "c2", "exclude");
