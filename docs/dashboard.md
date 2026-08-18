@@ -383,6 +383,23 @@ is set on both processes; otherwise the button stays the Phase-A preview sandbox
 and the bot opens no inbound socket. Full details in design.md "Raffle Designer
 handoff".
 
+### Stricter than the server default
+
+When the composed dials sit above the guild default, a banner appears beside the
+live pool preview naming the dial, both values, and how many fewer members would
+qualify (design.md "Stricter than the default"). It shares the pure comparison
+with the creation wizard, so the two surfaces cannot disagree about what counts as
+stricter, and it reuses `simulateEligiblePool` for the pool figure rather than
+counting anything itself.
+
+Two notes on how it is built. The cheap pure comparison runs first and
+short-circuits, so the second pool scan is only paid for when there is something
+to warn about — the common case adds nothing to every debounced refresh. And the
+sentence travels through the pool JSON as **plain text**, rendered into the banner
+with `textContent`: the wizard's copy is the same sentence with Discord bold, via
+a small `emphasis` seam in the shared core, so no markup ever crosses into the
+page.
+
 ### The previews are the point
 
 Because the entry-card formatter and the eligibility check are already pure

@@ -494,6 +494,39 @@ decisions that shape it:
   before start time, or X of 0).
 - Wizard state is keyed to the draft raffle id in the database, not held in
   memory, so a bot restart mid-wizard does not lose progress (see wizard_state).
+- **A raffle stricter than the server default says so, with the cost.** When any
+  activity dial is above the guild default, the eligibility step and the final
+  summary carry an advisory naming the dial, both values, and roughly how many
+  fewer members would qualify. It is *advisory only* — it never blocks creating
+  the raffle. See "Stricter than the default" below.
+
+### Stricter than the default
+A raffle may set its own activity bar, and raising one quietly changes who can
+enter. A live raffle that lifted its distinct-active-days floor from the server
+default of 3 to 5 blocked members who would have qualified normally, and produced
+two "why wasn't I eligible?" reports; nothing had surfaced that the raffle was
+unusual, either while it was being built or afterwards.
+
+- **Only stricter is flagged.** A looser raffle is a deliberate "open this one up".
+- **The comparison is against the bar the gate applies**, not the raw columns: the
+  gate reads `req_messages ?? 0` and `req_active_days ?? 0`, so an unset floor is
+  *no floor* rather than the server default, and an unset window is one day.
+  Comparing columns directly would report a wide-open raffle as strict.
+- **The window runs the other way.** A *shorter* window is stricter — less time to
+  accumulate the same messages — and it is only flagged when some activity floor
+  applies at all, so a raffle with no floor is never warned about a window that
+  gates nothing.
+- **An open-to-everyone raffle is never flagged**: it waives the activity gate, so
+  its numbers gate nothing.
+- **The pool figure reuses the simulator.** Both bars are measured with the same
+  non-activity settings so the difference isolates the activity change, and the
+  measurement is over a window ending *now* (a draft has no start to anchor to),
+  which the copy states. If the measurement fails, the dials are still named.
+- The advisory carries **no recommendation**. It reports the cost at the point of
+  decision; raising the bar on purpose is a legitimate choice.
+
+The same advisory appears in the dashboard's Raffle Designer, beside the live pool
+preview, from the same pure comparison.
 
 ## Data model (SQLite to start)
 

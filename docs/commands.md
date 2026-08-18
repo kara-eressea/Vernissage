@@ -348,13 +348,21 @@ The flow (all on one ephemeral message that updates in place):
    `/raffle config set`), not per-raffle. A **More restrictions…** sub-screen
    holds the optional per-raffle gates: bar prior winners, and require or exclude
    a role.
+
+   If any activity number is **above the server default**, the step shows an
+   advisory naming the dial, both values, and roughly how many fewer members
+   would qualify — e.g. *"asks for 5 active days (server default: 3). About 5
+   fewer members would qualify (48 → 43)"*. It is advisory only and never blocks
+   the raffle; a looser raffle shows nothing. See
+   [Stricter than the default](design.md#stricter-than-the-default).
 4. **Draw** — winner count, draw mode (auto at close or manual), cooldown
    override, an optional claim window in hours, and a **test-mode** toggle
    (default off — see [Test raffles](design.md#test-raffles)).
 5. **Summary** — every setting in plain language (for example, "To enter, members
    must have sent at least 20 messages on at least 3 different days in the 14
    days before the raffle starts"), with buttons: **Confirm & schedule**, **Edit
-   a step**, **Save as draft**, **Cancel**.
+   a step**, **Save as draft**, **Cancel**. The stricter-than-default advisory
+   repeats here, so it is seen once more before anything is published.
 
 Useful behaviors:
 - The raffle exists as a **draft** from step 1, so an abandoned wizard loses

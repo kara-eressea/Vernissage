@@ -1444,6 +1444,13 @@ const DESIGNER_SCRIPT = raw(`<script>
       .catch(function(){});
   }
   function renderPool(pool){
+    // Stricter-than-default advisory (issue #35). textContent, not innerHTML:
+    // the sentence is plain text from the shared core and stays that way.
+    var warn=$('ds-strict');
+    if(warn){
+      if(pool.strictness){ warn.textContent=pool.strictness; warn.style.display='flex'; }
+      else { warn.textContent=''; warn.style.display='none'; }
+    }
     var host=$('ds-pool'); if(!host) return;
     if(!pool.hasCandidates){
       host.innerHTML='<div style="padding:20px 4px; font-size:13px; color:#8b93a0; text-align:center;">No members have counted activity in this window yet.</div>';
@@ -1819,6 +1826,7 @@ export function designerPage(
               <span style="font-weight:700; font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; color:#8b93a0;">Eligible pool</span>
               <span style="font-size:11px; color:#6b717c;">activity-bar preview</span>
             </div>
+            <div id="ds-strict" style="display:${view.pool.strictness ? "flex" : "none"}; align-items:flex-start; gap:8px; margin-bottom:14px; padding:10px 12px; background:rgba(212,162,76,.09); border:1px solid rgba(212,162,76,.28); border-radius:10px; font-size:12.5px; color:var(--warn); line-height:1.5;">${view.pool.strictness ?? ""}</div>
             <div id="ds-pool">${dsPoolBody(view.pool)}</div>
             <div id="ds-pool-open" style="display:none; padding:14px; background:#101216; border:1px dashed #2f3540; border-radius:10px; font-size:13px; color:#8b93a0; text-align:center;">No activity requirements — every member in the server can enter.</div>
           </section>

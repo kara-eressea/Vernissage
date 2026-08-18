@@ -6,6 +6,7 @@ import {
   getRaffle,
   updateRaffleFields,
 } from "../../src/db/repositories/raffles.js";
+import { incrementActivity } from "../../src/db/repositories/activity.js";
 import { getWizardState, upsertWizardStep } from "../../src/db/repositories/wizardState.js";
 import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import { createWizard, type WizardInteraction } from "../../src/discord/wizard/index.js";
@@ -261,5 +262,110 @@ describe("wizard confirm", () => {
 
     expect(getRaffle(db, id)?.status).toBe("draft"); // not scheduled
     expect(interaction.update).toHaveBeenCalled(); // error re-render
+  });
+});
+
+describe("wizard stricter-than-default advisory", () => {
+  const GUILD = "g1";
+
+  /** A server whose normal bar is 10 messages / 14 days / 3 active days. */
+  function seedDefaults(): void {
+    setGuildConfig(
+      db,
+      GUILD,
+      { default_req_messages: 10, default_req_days: 14, default_req_active_days: 3 },
+      "2026-07-01T00:00:00.000Z",
+    );
+  }
+
+  /**
+   * `days` members, each active on `activeDays` separate recent days with
+   * `perDay` messages — enough population for the pool comparison to move.
+   */
+  function seedMembers(count: number, activeDays: number, perDay = 5): void {
+    const today = new Date();
+    for (let m = 0; m < count; m++) {
+      // Real snowflakes: the account-age gate parses ids.
+      const id = String(300000000000000000n + BigInt(m));
+      for (let d = 0; d < activeDays; d++) {
+        const day = new Date(today.getTime() - d * 86400000).toISOString().slice(0, 10);
+        incrementActivity(db, GUILD, id, day, perDay);
+      }
+    }
+  }
+
+  /** Open the eligibility step and return what the moderator sees. */
+  async function eligibilityScreen(raffleId: number): Promise<string> {
+    upsertWizardStep(db, raffleId, "eligibility", "2026-07-01T00:00:00.000Z");
+    const interaction = fakeButton(`wiz:eligibility:back:${raffleId}`);
+    await wizard().handle(interaction);
+    return (interaction.update.mock.calls[0]![0] as { content: string }).content;
+  }
+
+  it("says nothing when the raffle sits on the server defaults", async () => {
+    seedDefaults();
+    const id = createDraft(db, GUILD, "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, { req_messages: 10, req_days: 14, req_active_days: 3 });
+
+    expect(await eligibilityScreen(id)).not.toContain("Stricter");
+  });
+
+  it("says nothing when the raffle is looser", async () => {
+    seedDefaults();
+    const id = createDraft(db, GUILD, "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, { req_messages: 5, req_days: 30, req_active_days: 1 });
+
+    expect(await eligibilityScreen(id)).not.toContain("Stricter");
+  });
+
+  it("warns with the dial, both values, and the pool cost when the bar is raised", async () => {
+    seedDefaults();
+    // 6 members clear 3 active days but not 5; 4 clear both.
+    seedMembers(6, 3);
+    seedMembers(4, 6);
+    const id = createDraft(db, GUILD, "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, { req_messages: 10, req_days: 14, req_active_days: 5 });
+
+    const content = await eligibilityScreen(id);
+
+    // This is exactly the change that produced this week's reports.
+    expect(content).toContain("Stricter than your server default");
+    expect(content).toContain("5 active days");
+    expect(content).toContain("server default: 3");
+    expect(content).toContain("fewer members");
+  });
+
+  it("says nothing for an open-to-everyone raffle, whose numbers gate nothing", async () => {
+    seedDefaults();
+    const id = createDraft(db, GUILD, "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, { req_active_days: 5, open_to_all: 1 });
+
+    expect(await eligibilityScreen(id)).not.toContain("Stricter");
+  });
+
+  it("carries the advisory onto the summary, so it is seen before publishing", async () => {
+    seedDefaults();
+    seedMembers(4, 3);
+    const id = createDraft(db, GUILD, "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, {
+      name: "X",
+      prize: "Y",
+      starts_at: "2026-08-01T00:00:00.000Z",
+      ends_at: "2026-08-08T00:00:00.000Z",
+      req_messages: 10,
+      req_days: 14,
+      req_active_days: 5,
+    });
+    updateRaffleFields(db, id, { winner_count: 1, draw_mode: "auto" });
+    upsertWizardStep(db, id, "draw", "2026-07-01T00:00:00.000Z");
+
+    // "Review summary" is the real route onto the last step; summary/back means
+    // "edit a step" and returns to the beginning.
+    const interaction = fakeButton(`wiz:draw:next:${id}`);
+    await wizard().handle(interaction);
+    const content = (interaction.update.mock.calls[0]![0] as { content: string }).content;
+
+    expect(content).toContain("Step 5 of 5");
+    expect(content).toContain("Stricter than your server default");
   });
 });

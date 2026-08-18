@@ -16,7 +16,12 @@ import { randomBytes } from "node:crypto";
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { WebConfig } from "./config.js";
 import type { Database } from "../db/index.js";
-import { buildDesignerView, buildDesignerPool } from "./designer.js";
+import {
+  buildDesignerPool,
+  buildDesignerView,
+  designerStrictness,
+  readDefaults,
+} from "./designer.js";
 import { buildHistoryView } from "./history.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
 import { buildRaffleDetail } from "./raffleDetail.js";
@@ -560,8 +565,18 @@ export function createServer(deps: ServerDeps): Server {
       cooldownCount: g?.default_cooldown_count ?? null,
     };
     const settings = resolveSimSettings(base, url.searchParams);
-    const pool = buildDesignerPool(simulateEligiblePool(db, guild.id, settings, now));
-    sendJson(res, 200, pool);
+    const result = simulateEligiblePool(db, guild.id, settings, now);
+    // Only the composed dials can be stricter than the server's bar; the initial
+    // render opens on the defaults, so it never carries an advisory (issue #35).
+    const strictness = designerStrictness(
+      db,
+      guild.id,
+      settings,
+      readDefaults(db, guild.id),
+      result.eligible,
+      now,
+    );
+    sendJson(res, 200, buildDesignerPool(result, strictness));
   }
 
   /** Every finished raffle for the selected guild, newest first, paged. */

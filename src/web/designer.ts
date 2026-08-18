@@ -16,6 +16,11 @@
  * live `/app/designer/pool` JSON endpoint produce identical shapes.
  */
 
+import {
+  plainEmphasis,
+  stricterThanDefaults,
+  strictnessWarning,
+} from "../core/barStrictness.js";
 import type { IneligibleReason } from "../core/types.js";
 import type { Database } from "../db/index.js";
 import { getGuild } from "../db/repositories/guilds.js";
@@ -60,6 +65,12 @@ export interface DesignerPool {
   thresholdPct: number;
   reqMessages: number;
   reasons: DesignerPoolReason[];
+  /**
+   * The "stricter than your server default" advisory for the dials as composed,
+   * or null when they are at or below the server's normal bar (issue #35). Plain
+   * text: the banner sets `textContent`, so no markup travels through the JSON.
+   */
+  strictness: string | null;
 }
 
 /** Plain-language labels for the exclusion reasons the snapshot can produce. */
@@ -80,7 +91,10 @@ type ReasonKey = keyof typeof REASON_LABELS;
  * only counts what the core already decided (docs/dashboard.md "The pool preview
  * reuses the simulator engine").
  */
-export function buildDesignerPool(result: SimulationResult): DesignerPool {
+export function buildDesignerPool(
+  result: SimulationResult,
+  strictness: string | null = null,
+): DesignerPool {
   const reqMessages = result.settings.reqMessages;
 
   const counts = new Array<number>(BIN_COUNT).fill(0);
@@ -120,7 +134,54 @@ export function buildDesignerPool(result: SimulationResult): DesignerPool {
     thresholdPct: Math.max(0, Math.min(100, (reqMessages / POOL_AXIS_MAX) * 100)),
     reqMessages,
     reasons,
+    strictness,
   };
+}
+
+/**
+ * The "stricter than your server default" advisory for the composer's current
+ * dials, or null when there is nothing to say (issue #35).
+ *
+ * The pure comparison runs first and short-circuits, so the second pool scan is
+ * only paid for when the dials are actually above the server's bar — the common
+ * case costs nothing on every debounced refresh. `eligibleNow` is reused from the
+ * simulation the caller has already run for the panel, so this adds at most one
+ * extra scan rather than two.
+ */
+export function designerStrictness(
+  db: Database,
+  guildId: string,
+  settings: SimulationSettings,
+  defaults: DesignerDefaults,
+  eligibleNow: number,
+  now: string,
+): string | null {
+  const stricter = stricterThanDefaults(
+    {
+      reqMessages: settings.reqMessages,
+      reqDays: settings.reqDays,
+      reqActiveDays: settings.reqActiveDays,
+    },
+    {
+      reqMessages: defaults.reqMessages,
+      reqDays: defaults.reqDays,
+      reqActiveDays: defaults.reqActiveDays,
+    },
+  );
+  if (stricter.length === 0) {
+    return null;
+  }
+  let impact: { underDefaults: number; underRaffle: number } | null = null;
+  try {
+    impact = {
+      underDefaults: simulateEligiblePool(db, guildId, settingsFromDefaults(defaults), now).eligible,
+      underRaffle: eligibleNow,
+    };
+  } catch (err) {
+    // Naming the dials still helps even if the pool figure is unavailable.
+    console.error("Failed to measure designer pool impact:", err);
+  }
+  return strictnessWarning(stricter, impact, plainEmphasis);
 }
 
 /**
@@ -186,7 +247,7 @@ export interface DesignerView {
 }
 
 /** Read a guild's eligibility defaults, falling back to sensible starting values. */
-function readDefaults(db: Database, guildId: string): DesignerDefaults {
+export function readDefaults(db: Database, guildId: string): DesignerDefaults {
   const g = getGuild(db, guildId);
   return {
     reqMessages: g?.default_req_messages ?? 10,

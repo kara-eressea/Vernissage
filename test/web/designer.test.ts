@@ -7,6 +7,8 @@ import { simulateEligiblePool, type SimulationResult } from "../../src/eligibili
 import {
   buildDesignerPool,
   buildDesignerView,
+  designerStrictness,
+  readDefaults,
   settingsFromDefaults,
 } from "../../src/web/designer.js";
 
@@ -186,5 +188,81 @@ describe("settingsFromDefaults", () => {
       cooldownDays: 90,
       cooldownCount: 3,
     });
+  });
+});
+
+describe("designerStrictness", () => {
+  /** `count` members active on `activeDays` separate recent days. */
+  function seedMembers(count: number, activeDays: number, perDay = 5, offset = 0): void {
+    for (let m = 0; m < count; m++) {
+      const id = String(300000000000000000n + BigInt(offset + m));
+      for (let d = 0; d < activeDays; d++) {
+        const day = new Date(Date.parse(NOW) - d * 86400000).toISOString().slice(0, 10);
+        incrementActivity(db, GUILD, id, day, perDay);
+      }
+    }
+  }
+
+  function noteFor(dials: Partial<{ reqMessages: number; reqDays: number; reqActiveDays: number }>) {
+    const defaults = readDefaults(db, GUILD);
+    const settings = { ...settingsFromDefaults(defaults), ...dials };
+    const eligible = simulateEligiblePool(db, GUILD, settings, NOW).eligible;
+    return designerStrictness(db, GUILD, settings, defaults, eligible, NOW);
+  }
+
+  it("is null while the composer sits on the server defaults", () => {
+    seedDefaults();
+    seedMembers(5, 4);
+    expect(noteFor({})).toBeNull();
+  });
+
+  it("is null for a looser bar", () => {
+    seedDefaults();
+    seedMembers(5, 4);
+    expect(noteFor({ reqMessages: 1, reqActiveDays: 0, reqDays: 30 })).toBeNull();
+  });
+
+  it("names the dial and the pool cost for a raised bar, without markup", () => {
+    // This fixture's server sets no distinct-day floor at all, so asking for 5
+    // is a bar the server never applies — the strictest case there is.
+    seedDefaults();
+    seedMembers(6, 3); // clear 3 active days, not 5
+    seedMembers(4, 6, 5, 100); // clear both
+
+    const note = noteFor({ reqActiveDays: 5 })!;
+
+    expect(note).toContain("5 active days");
+    expect(note).toContain("server default: 0");
+    expect(note).toContain("fewer members");
+    // The banner sets textContent, so markdown would render literally.
+    expect(note).not.toContain("**");
+  });
+
+  it("says so when the stricter bar excludes nobody", () => {
+    seedDefaults();
+    seedMembers(4, 10); // everyone clears either bar
+    const note = noteFor({ reqActiveDays: 5 })!;
+    expect(note.toLowerCase()).toContain("no one currently active");
+  });
+
+  it("is carried on the pool payload the live endpoint returns", () => {
+    seedDefaults();
+    seedMembers(6, 3);
+    const defaults = readDefaults(db, GUILD);
+    const settings = { ...settingsFromDefaults(defaults), reqActiveDays: 5 };
+    const result = simulateEligiblePool(db, GUILD, settings, NOW);
+
+    const pool = buildDesignerPool(
+      result,
+      designerStrictness(db, GUILD, settings, defaults, result.eligible, NOW),
+    );
+
+    expect(pool.strictness).toContain("Stricter than your server default");
+  });
+
+  it("carries no advisory on the initial render, which opens on the defaults", () => {
+    seedDefaults();
+    seedMembers(5, 4);
+    expect(buildDesignerView(db, GUILD, "Musicorum", "Mod", NOW).pool.strictness).toBeNull();
   });
 });
