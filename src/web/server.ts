@@ -23,10 +23,16 @@ import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./o
 import { RateLimiter } from "./rateLimit.js";
 import { getGuild } from "../db/repositories/guilds.js";
 import { getMemberNames } from "../db/repositories/members.js";
+import { listByStatus } from "../db/repositories/raffles.js";
 import {
+  evaluateRaffleEligibility,
   simulateEligiblePool,
   type SimulationSettings,
 } from "../eligibility/service.js";
+import {
+  buildRaffleEligibilityView,
+  type EligibilityFilter,
+} from "./raffleEligibility.js";
 import { buildSimulatorView, resolveSimSettings, type SimFilter } from "./simulator.js";
 import { buildVerification, listVerifiableRaffles } from "./verify.js";
 import {
@@ -42,11 +48,13 @@ import {
 } from "./session.js";
 import {
   designerPage,
+  eligibilityIndexPage,
   errorPage,
   homePage,
   loginPage,
   noAccessPage,
   pickerPage,
+  raffleEligibilityPage,
   simulatorPage,
   verifyIndexPage,
   verifyPage,
@@ -160,6 +168,9 @@ export function createServer(deps: ServerDeps): Server {
   // The designer's live pool preview fires a request per dial nudge (debounced);
   // a higher ceiling keeps interactive tuning smooth under the same flood cap.
   const designerLimiter = new RateLimiter(240, 60 * 1000);
+  // The per-raffle eligibility report runs the same bounded DB scan as the
+  // simulator, so it gets the same generous read ceiling.
+  const eligibilityLimiter = new RateLimiter(120, 60 * 1000);
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
@@ -167,6 +178,7 @@ export function createServer(deps: ServerDeps): Server {
     simLimiter.sweep(t);
     verifyLimiter.sweep(t);
     designerLimiter.sweep(t);
+    eligibilityLimiter.sweep(t);
   }, 5 * 60 * 1000);
   sweepTimer.unref();
 
@@ -262,6 +274,15 @@ export function createServer(deps: ServerDeps): Server {
         return;
       }
       handleSimulator(res, session, url);
+      return;
+    }
+
+    if (path === "/app/eligibility") {
+      if (!eligibilityLimiter.check(clientIp(req, config.trustProxy), now)) {
+        sendHtml(res, 429, errorPage("Too many requests. Please wait a moment and try again."));
+        return;
+      }
+      handleEligibility(res, session, url);
       return;
     }
 
@@ -514,6 +535,73 @@ export function createServer(deps: ServerDeps): Server {
     const settings = resolveSimSettings(base, url.searchParams);
     const pool = buildDesignerPool(simulateEligiblePool(db, guild.id, settings, now));
     sendJson(res, 200, pool);
+  }
+
+  /**
+   * Who could enter one raffle, and for everyone who could not, every gate they
+   * failed. With no raffle id, lists the raffles to choose from.
+   */
+  function handleEligibility(res: ServerResponse, session: Session | null, url: URL): void {
+    if (!session) {
+      redirect(res, "/");
+      return;
+    }
+    if (session.guilds.length === 0) {
+      sendHtml(res, 200, noAccessPage());
+      return;
+    }
+    const guild = selectedGuild(session);
+    if (!guild) {
+      redirect(res, "/app");
+      return;
+    }
+    const now = new Date().toISOString();
+    const cards = buildPickerCards(db, session.guilds, now);
+    const raffleParam = url.searchParams.get("raffle");
+    const raffleId = raffleParam ? Number.parseInt(raffleParam, 10) : NaN;
+
+    // No (or unparseable) raffle id: list the raffles that have a bar to report
+    // on — anything past draft, newest first.
+    if (!Number.isInteger(raffleId) || raffleId <= 0) {
+      const rows = listByStatus(db, guild.id, [
+        "scheduled",
+        "open",
+        "closed",
+        "drawn",
+        "completed",
+        "cancelled",
+      ]);
+      const raffles = rows
+        .map((r) => ({
+          id: r.raffle_id,
+          name: r.name ?? `Raffle #${r.raffle_id}`,
+          status: r.status,
+          startsAt: r.starts_at,
+          isTest: r.is_test === 1,
+        }))
+        .sort((a, b) => b.id - a.id);
+      sendHtml(res, 200, eligibilityIndexPage(session, guild, raffles, cards));
+      return;
+    }
+
+    const report = evaluateRaffleEligibility(db, guild.id, raffleId, now);
+    if (!report) {
+      // Unknown to this guild (or another server's raffle): back to the list.
+      redirect(res, "/app/eligibility");
+      return;
+    }
+    const filterParam = url.searchParams.get("filter");
+    const filter: EligibilityFilter =
+      filterParam === "eligible" || filterParam === "blocked" || filterParam === "entered"
+        ? filterParam
+        : "all";
+    const nameRows = getMemberNames(db, guild.id, report.members.map((m) => m.userId));
+    const names = new Map<string, string>();
+    for (const [id, n] of nameRows) {
+      if (n.displayName) names.set(id, n.displayName);
+    }
+    const view = buildRaffleEligibilityView(report, filter, names);
+    sendHtml(res, 200, raffleEligibilityPage(session, guild, view, cards));
   }
 
   function handleVerify(res: ServerResponse, session: Session | null, url: URL): void {

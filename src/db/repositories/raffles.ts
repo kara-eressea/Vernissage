@@ -167,6 +167,33 @@ export function countRafflesSince(db: Database, guildId: string, sinceIso: strin
 }
 
 /**
+ * How many raffles in the guild completed their draw between two instants —
+ * `sinceIso` (exclusive, a member's last win) and `untilIso` (exclusive, the
+ * raffle being evaluated). The bounded form of `countRafflesSince`, for looking
+ * at a past raffle: counting up to *now* would credit the member with raffles
+ * that had not happened yet when the raffle in question ran, and so understate
+ * their cooldown at the time.
+ */
+export function countRafflesBetween(
+  db: Database,
+  guildId: string,
+  sinceIso: string,
+  untilIso: string,
+): number {
+  const row = db
+    .prepare(
+      `SELECT count(*) AS n FROM raffles
+       WHERE guild_id = ?
+         AND status IN ('drawn', 'completed')
+         AND is_test = 0
+         AND starts_at > ?
+         AND starts_at < ?`,
+    )
+    .get(guildId, sinceIso, untilIso) as { n: number };
+  return row.n;
+}
+
+/**
  * The earliest UTC day any still-enterable raffle (`scheduled` or `open`) is
  * being judged on: the start of its activity window, i.e. its start day less
  * `req_days - 1`. Null when no such raffle exists.
