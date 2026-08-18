@@ -139,6 +139,18 @@ export interface EligibilityInput {
   /** The user's daily message counts (already scoped to counted channels). */
   dailyCounts: DailyCount[];
 
+  /**
+   * The activity measurement frozen when the raffle opened, if it has one.
+   *
+   * Eligibility locks at open: what a member did is measured once, then never
+   * re-measured, so messages sent after the doors open cannot create it — not
+   * even later the same UTC day, which the day-resolution window would otherwise
+   * allow (design.md "Entry flow"). When present this supersedes `dailyCounts`
+   * for the activity gate; when absent (a raffle that opened before snapshots
+   * existed, or the no-raffle snapshot report) the counts are measured live.
+   */
+  frozenActivity?: { messages: number; activeDays: number } | null;
+
   /** Whether the user already has an active entry in this raffle. */
   alreadyEntered: boolean;
 

@@ -27,6 +27,7 @@ function report(members: RaffleEligibilityMember[], overrides: Partial<RaffleEli
     status: "open",
     isTest: false,
     anchoredAt: "2026-08-16T20:24:00.000Z",
+    frozenAt: "2026-08-16T20:24:03.000Z",
     window: { startDay: "2026-08-03", endDay: "2026-08-16" },
     settings: {
       reqMessages: 10,

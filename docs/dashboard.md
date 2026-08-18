@@ -275,6 +275,12 @@ Three things make it different from the simulator:
   what would otherwise have blocked them. The header also counts members who
   were eligible and *didn't* enter — the raffle's unrealised reach.
 
+The page reads whatever the gate reads. For a raffle whose measurement was frozen
+when it opened (design.md "Eligibility locks at open") it shows those exact
+figures and says so; for an older raffle still measured live it says that instead,
+warning that same-day activity after the raffle opened may be included. Either
+way the moderator view and the gate cannot disagree.
+
 Wins and cooldowns are evaluated as of the raffle's start, so a win recorded
 after the raffle never blocks a member retroactively. The blind spots are stated
 on the page rather than hidden: candidates come from the activity table (plus
