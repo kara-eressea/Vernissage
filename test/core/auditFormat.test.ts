@@ -143,4 +143,19 @@ describe("formatAuditLine", () => {
     );
     expect(web).not.toContain("being awful");
   });
+
+  it("shows the date of an imported win but never the moderator's note", () => {
+    const out = line({
+      eventType: AUDIT_EVENTS.externalWinRecorded,
+      raffleId: null,
+      actorId: "1",
+      payload: { userId: "2", wonAt: "2026-06-15T00:00:00.000Z", note: "private detail" },
+    });
+    expect(out).toContain("<@2>");
+    expect(out.toLowerCase()).toContain("past win");
+    // The date is what the cooldown is measured from, so it is safe and useful.
+    expect(out).toContain("<t:");
+    // The note is arbitrary text about a member; the audit channel is public.
+    expect(out).not.toContain("private detail");
+  });
 });

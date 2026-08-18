@@ -122,6 +122,48 @@ export function migrate(db: Database): void {
          ALTER TABLE raffles ADD COLUMN activity_snapshot_at TEXT`,
       );
     }
+    if (current < 20) {
+      // Let a win stand without a raffle, so wins from before the bot (or from
+      // outside it) can be imported for cooldown purposes (design.md "Win
+      // cooldown", "Imported wins").
+      //
+      // raffle_id must become nullable and SQLite cannot drop NOT NULL in place,
+      // so the table is rebuilt: create → copy → drop → rename. win_id values are
+      // carried over explicitly, since the draw and claim paths hold them. The
+      // whole rebuild is one transaction — a half-migrated wins table would lose
+      // every cooldown in the guild.
+      db.transaction(() => {
+        db.exec(
+          `CREATE TABLE wins_new (
+             win_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+             raffle_id  INTEGER,
+             guild_id   TEXT,
+             source     TEXT NOT NULL DEFAULT 'raffle',
+             note       TEXT,
+             user_id    TEXT NOT NULL,
+             won_at     TEXT,
+             rerolled   INTEGER NOT NULL DEFAULT 0,
+             claim_deadline TEXT,
+             claimed_at     TEXT,
+             cooldown_waived INTEGER NOT NULL DEFAULT 0
+           );
+           -- Every existing win came from a raffle, so guild_id backfills from
+           -- there and source is the 'raffle' default.
+           INSERT INTO wins_new
+             (win_id, raffle_id, guild_id, source, note, user_id, won_at,
+              rerolled, claim_deadline, claimed_at, cooldown_waived)
+           SELECT w.win_id, w.raffle_id, r.guild_id, 'raffle', NULL, w.user_id,
+                  w.won_at, w.rerolled, w.claim_deadline, w.claimed_at,
+                  w.cooldown_waived
+             FROM wins w LEFT JOIN raffles r ON r.raffle_id = w.raffle_id;
+           DROP TABLE wins;
+           ALTER TABLE wins_new RENAME TO wins;
+           CREATE INDEX IF NOT EXISTS idx_wins_user ON wins (user_id);
+           CREATE INDEX IF NOT EXISTS idx_wins_raffle ON wins (raffle_id);
+           CREATE INDEX IF NOT EXISTS idx_wins_guild_user ON wins (guild_id, user_id)`,
+        );
+      })();
+    }
   }
 
   if (current !== SCHEMA_VERSION) {

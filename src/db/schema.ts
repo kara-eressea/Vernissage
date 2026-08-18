@@ -22,7 +22,7 @@
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -154,7 +154,20 @@ CREATE TABLE IF NOT EXISTS entries (
 
 CREATE TABLE IF NOT EXISTS wins (
   win_id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  raffle_id  INTEGER NOT NULL,
+  -- Nullable since v20: an imported win (source 'external') records a prize won
+  -- before the bot existed, or outside it, and has no raffle of its own.
+  raffle_id  INTEGER,
+  -- The guild the win belongs to. Denormalised from raffles at v20 so a win no
+  -- longer needs a raffle to be guild-scoped; the eligibility reads key on this
+  -- column rather than joining through raffles (design.md "Win cooldown").
+  guild_id   TEXT,
+  -- 'raffle' (drawn by this bot) or 'external' (recorded by a moderator with
+  -- /raffle record-win). Only the source differs — an external win gates the win
+  -- cooldown and the prior-winner bar exactly like a real one.
+  source     TEXT NOT NULL DEFAULT 'raffle',
+  -- Free-text note on an imported win: which event or old raffle it was. Shown
+  -- to moderators only, never in a public post.
+  note       TEXT,
   user_id    TEXT NOT NULL,
   won_at     TEXT,
   rerolled   INTEGER NOT NULL DEFAULT 0,
@@ -171,6 +184,11 @@ CREATE INDEX IF NOT EXISTS idx_wins_user
 
 CREATE INDEX IF NOT EXISTS idx_wins_raffle
   ON wins (raffle_id);
+
+-- The eligibility read (getUserWins) is by guild and member, and since v20 it no
+-- longer reaches that pair through raffles.
+CREATE INDEX IF NOT EXISTS idx_wins_guild_user
+  ON wins (guild_id, user_id);
 
 CREATE TABLE IF NOT EXISTS blacklist (
   guild_id   TEXT NOT NULL,

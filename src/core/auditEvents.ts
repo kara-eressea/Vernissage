@@ -29,6 +29,9 @@ export const AUDIT_EVENTS = {
   countedChannelSet: "counted_channel_set",
   countedChannelCleared: "counted_channel_cleared",
   eligibilityReset: "eligibility_reset",
+  // A moderator recorded a win that happened outside this bot, so it gates the
+  // winner's cooldown and prior-winner bar (design.md "Imported wins").
+  externalWinRecorded: "external_win_recorded",
   // A raffle composed in the dashboard's Raffle Designer was staged as an inert
   // pending spec (design.md "Raffle Designer handoff"). Not mirrored to the audit
   // channel — it becomes real, with its own raffle_created/scheduled rows, only
