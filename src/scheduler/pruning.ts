@@ -1,18 +1,18 @@
 /**
  * Activity-pruning scheduler.
  *
- * Deletes activity rows older than the longest lookback in use (design.md
- * activity table: "prune rows older than the longest lookback window in use").
+ * Deletes activity rows past the retention horizon (design.md activity table),
+ * never touching a day a scheduled or open raffle is still judging entrants on.
  * Runs once at startup and then on a daily interval, mirroring the
  * attachMessageCounter handle pattern (setInterval + timer.unref). The cutoff is
- * computed by the pure `pruneCutoffDay` from `now` and `maxReqDaysInUse`; when no
- * lookback is in use it prunes nothing (keeps all rows).
+ * computed by the pure `pruneCutoffDay` from `now`, the retention horizon, and
+ * the earliest window start still in use.
  */
 
 import type { Database } from "better-sqlite3";
-import { pruneCutoffDay } from "../core/activity.js";
+import { ACTIVITY_RETENTION_DAYS, pruneCutoffDay } from "../core/activity.js";
 import { pruneActivityBefore } from "../db/repositories/activity.js";
-import { maxReqDaysInUse } from "../db/repositories/raffles.js";
+import { earliestActivityWindowStart } from "../db/repositories/raffles.js";
 
 /** Default cadence: prune once a day. */
 export const DEFAULT_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -29,8 +29,10 @@ export interface PruningOptions {
   intervalMs?: number;
   /** Clock, returning UTC ISO. Injectable for tests; defaults to now. */
   now?: () => string;
-  /** Extra buffer days kept beyond the longest lookback. */
+  /** Extra buffer days kept beyond the computed cutoff. */
   safetyDays?: number;
+  /** How many days of activity to keep; defaults to the six-month horizon. */
+  retentionDays?: number;
 }
 
 /**
@@ -44,14 +46,19 @@ export function startActivityPruning(
   const now = options.now ?? (() => new Date().toISOString());
   const intervalMs = options.intervalMs ?? DEFAULT_PRUNE_INTERVAL_MS;
   const safetyDays = options.safetyDays ?? 1;
+  const retentionDays = options.retentionDays ?? ACTIVITY_RETENTION_DAYS;
 
   const pruneNow = (): number => {
     try {
-      const max = maxReqDaysInUse(db);
-      if (max === null) {
-        return 0; // No lookback in use; keep everything.
-      }
-      return pruneActivityBefore(db, pruneCutoffDay(now(), max, safetyDays));
+      // Bounded by the retention horizon and by the earliest day any still-
+      // enterable raffle needs, whichever reaches further back.
+      const cutoff = pruneCutoffDay(
+        now(),
+        earliestActivityWindowStart(db),
+        retentionDays,
+        safetyDays,
+      );
+      return pruneActivityBefore(db, cutoff);
     } catch (err) {
       console.error("Activity pruning failed:", err);
       return 0;

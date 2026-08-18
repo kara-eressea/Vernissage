@@ -94,15 +94,33 @@ describe("cappedIncrement", () => {
 describe("pruneCutoffDay", () => {
   const NOW = "2026-07-15T12:00:00.000Z";
 
-  it("keeps the lookback plus a safety margin before the cutoff", () => {
-    // 14-day lookback + 1 safety day: rows before 2026-06-30 may be deleted, so
-    // the oldest still-needed day (2026-07-01, the start of the 14-day window)
-    // is safely retained.
-    expect(pruneCutoffDay(NOW, 14, 1)).toBe("2026-06-30");
-    expect(pruneCutoffDay(NOW, 1, 1)).toBe("2026-07-13");
+  it("keeps the retention horizon plus a safety margin", () => {
+    // 30 days of retention + 1 safety day: rows before 2026-06-14 may go.
+    expect(pruneCutoffDay(NOW, null, 30, 1)).toBe("2026-06-14");
+    expect(pruneCutoffDay(NOW, null, 1, 1)).toBe("2026-07-13");
   });
 
   it("respects a zero safety margin", () => {
-    expect(pruneCutoffDay(NOW, 14, 0)).toBe("2026-07-01");
+    expect(pruneCutoffDay(NOW, null, 14, 0)).toBe("2026-07-01");
+  });
+
+  it("reaches further back when an open raffle still needs older days", () => {
+    // A raffle judging a window that starts before the retention horizon keeps
+    // its own days alive (less the safety margin), whatever the horizon says.
+    expect(pruneCutoffDay(NOW, "2026-05-01", 30, 1)).toBe("2026-04-30");
+  });
+
+  it("does not shorten retention for a raffle whose window is recent", () => {
+    // The raffle needs only 2026-07-10 onward, but retention still governs.
+    expect(pruneCutoffDay(NOW, "2026-07-10", 30, 1)).toBe("2026-06-14");
+  });
+
+  it("regression: an open raffle's window survives as the raffle runs", () => {
+    // Issue: retention was measured from now while a raffle's window is frozen
+    // at its start, so a raffle open longer than its own window had the earliest
+    // days it was judging entrants on deleted underneath it.
+    const openedLongAgo = "2026-06-01"; // window start of a still-open raffle
+    expect(pruneCutoffDay(NOW, openedLongAgo, 14, 1)).toBe("2026-05-31");
+    expect(pruneCutoffDay(NOW, openedLongAgo, 14, 1) < openedLongAgo).toBe(true);
   });
 });
