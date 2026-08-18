@@ -184,6 +184,33 @@ function accountAgeDays(snowflake: string, now: string): number | null {
 }
 
 /**
+ * How many members clear two different activity bars right now — the pool cost of
+ * a raffle asking for more than the server's default (issue #35).
+ *
+ * Both runs use the *same* non-activity settings (account age, cooldown), taken
+ * from the guild defaults, so the difference isolates the activity change rather
+ * than picking up an unrelated per-raffle cooldown override. It reuses
+ * `simulateEligiblePool` rather than counting anything itself, so the figure can
+ * never drift from the real gate.
+ *
+ * Like the simulator, it measures over a window ending **now**, not the raffle's
+ * start — a draft has not started yet, so there is nothing else to anchor to. The
+ * copy that shows the number says "based on activity right now" for that reason.
+ */
+export function comparePoolUnderBars(
+  db: Database,
+  guildId: string,
+  raffleBar: { reqMessages: number; reqDays: number; reqActiveDays: number },
+  defaultBar: { reqMessages: number; reqDays: number; reqActiveDays: number },
+  shared: Pick<SimulationSettings, "minAccountAgeDays" | "cooldownDays" | "cooldownCount">,
+  now: string,
+): { underDefaults: number; underRaffle: number } {
+  const run = (bar: { reqMessages: number; reqDays: number; reqActiveDays: number }): number =>
+    simulateEligiblePool(db, guildId, { ...bar, ...shared }, now).eligible;
+  return { underDefaults: run(defaultBar), underRaffle: run(raffleBar) };
+}
+
+/**
  * Simulate the eligible pool under caller-supplied settings instead of the
  * guild's stored defaults — the engine behind the dashboard's eligibility
  * simulator. It reuses the exact pure `checkEligibility` the entry flow and the

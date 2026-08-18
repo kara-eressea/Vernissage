@@ -326,8 +326,22 @@ export function restrictionsScreen(raffle: RaffleRow): WizardMessage {
  * Build the ephemeral message for a given wizard step, reflecting the draft's
  * current values. Modals are opened via the step's buttons.
  */
-export function renderStep(step: WizardStep, raffle: RaffleRow, summaryLines?: string[]): WizardMessage {
+export function renderStep(
+  step: WizardStep,
+  raffle: RaffleRow,
+  summaryLines?: string[],
+  /**
+   * An advisory line shown above the step (issue #35: this raffle's bar is
+   * stricter than the server default). Prepended rather than woven in, so the
+   * step copy stays one thing and the notice can appear on more than one step.
+   */
+  notice?: string | null,
+): WizardMessage {
   const id = raffle.raffle_id;
+  if (notice) {
+    const base = renderStep(step, raffle, summaryLines);
+    return { content: `${notice}\n\n${base.content}`, components: base.components };
+  }
   switch (step) {
     case "basics":
       return {

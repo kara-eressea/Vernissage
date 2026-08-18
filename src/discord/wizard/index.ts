@@ -27,6 +27,8 @@ import {
   validateSchedule,
 } from "../../core/raffleValidation.js";
 import { formatWallClockInZone, parseFriendlyTimeInZone } from "../../core/timeParse.js";
+import { stricterThanDefaults, strictnessWarning } from "../../core/barStrictness.js";
+import { comparePoolUnderBars } from "../../eligibility/service.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 import { getRaffle, updateRaffleFields, type RaffleRow } from "../../db/repositories/raffles.js";
 import {
@@ -109,10 +111,77 @@ export function createWizard(deps: WizardDeps): Wizard {
     }
   }
 
+  /** The advisory shown on the steps where the bar is visible or confirmed. */
+  function noticeFor(step: WizardStep, raffle: RaffleRow): string | null {
+    return step === "eligibility" || step === "summary" ? strictnessNotice(raffle) : null;
+  }
+
   /** Re-render `step` with a leading error banner. */
   function withError(step: WizardStep, raffle: RaffleRow, error: string): WizardMessage {
-    const base = renderStep(step, raffle, summaryLines(raffle));
+    const base = renderStep(step, raffle, summaryLines(raffle), noticeFor(step, raffle));
     return { content: `⚠️ ${error}\n\n${base.content}`, components: base.components };
+  }
+
+  /**
+   * The "stricter than your server default" advisory for a raffle, or null when
+   * it is at or below the normal bar (issue #35).
+   *
+   * The cheap pure comparison runs first and short-circuits: the two pool
+   * simulations are only paid for when there is something to warn about, so the
+   * common case — a raffle on the defaults — costs nothing on every re-render.
+   */
+  function strictnessNotice(raffle: RaffleRow): string | null {
+    // An open-to-everyone raffle waives the activity gate outright, so its
+    // activity numbers gate nothing and comparing them would mislead.
+    if (raffle.open_to_all === 1) {
+      return null;
+    }
+    const guild = getGuild(db, raffle.guild_id);
+    const defaults = {
+      reqMessages: guild?.default_req_messages ?? null,
+      reqDays: guild?.default_req_days ?? null,
+      reqActiveDays: guild?.default_req_active_days ?? null,
+    };
+    const stricter = stricterThanDefaults(
+      {
+        reqMessages: raffle.req_messages,
+        reqDays: raffle.req_days,
+        reqActiveDays: raffle.req_active_days,
+      },
+      defaults,
+    );
+    if (stricter.length === 0) {
+      return null;
+    }
+    const effective = (b: { reqMessages: number | null; reqDays: number | null; reqActiveDays: number | null }) => ({
+      reqMessages: b.reqMessages ?? 0,
+      reqDays: b.reqDays !== null && b.reqDays >= 1 ? b.reqDays : 1,
+      reqActiveDays: b.reqActiveDays ?? 0,
+    });
+    let impact: { underDefaults: number; underRaffle: number } | null = null;
+    try {
+      impact = comparePoolUnderBars(
+        db,
+        raffle.guild_id,
+        effective({
+          reqMessages: raffle.req_messages,
+          reqDays: raffle.req_days,
+          reqActiveDays: raffle.req_active_days,
+        }),
+        effective(defaults),
+        {
+          minAccountAgeDays: guild?.default_min_account_age_days ?? null,
+          cooldownDays: guild?.default_cooldown_days ?? null,
+          cooldownCount: guild?.default_cooldown_count ?? null,
+        },
+        new Date().toISOString(),
+      );
+    } catch (err) {
+      // The warning matters more than the number: if the pool scan fails, still
+      // name the dials rather than dropping the advisory entirely.
+      console.error(`Failed to measure pool impact for raffle ${raffle.raffle_id}:`, err);
+    }
+    return strictnessWarning(stricter, impact);
   }
 
   /** The summary lines for a raffle, resolving guild defaults. */
@@ -135,7 +204,7 @@ export function createWizard(deps: WizardDeps): Wizard {
   ): Promise<void> {
     upsertWizardStep(db, raffleId, step, new Date().toISOString());
     const raffle = getRaffle(db, raffleId)!;
-    await respond(interaction, renderStep(step, raffle, summaryLines(raffle)));
+    await respond(interaction, renderStep(step, raffle, summaryLines(raffle), noticeFor(step, raffle)));
   }
 
   async function start(
@@ -148,7 +217,7 @@ export function createWizard(deps: WizardDeps): Wizard {
       return;
     }
     const step = (getWizardState(db, raffleId)?.step as WizardStep | undefined) ?? "basics";
-    await respond(interaction, renderStep(step, raffle, summaryLines(raffle)));
+    await respond(interaction, renderStep(step, raffle, summaryLines(raffle), noticeFor(step, raffle)));
   }
 
   async function handle(interaction: WizardInteraction): Promise<void> {
@@ -429,7 +498,7 @@ export function createWizard(deps: WizardDeps): Wizard {
     step: WizardStep,
   ): Promise<void> {
     const raffle = getRaffle(db, raffleId)!;
-    await respond(interaction, renderStep(step, raffle, summaryLines(raffle)));
+    await respond(interaction, renderStep(step, raffle, summaryLines(raffle), noticeFor(step, raffle)));
   }
 
   /** Reload the raffle and re-render the eligibility restrictions sub-screen. */

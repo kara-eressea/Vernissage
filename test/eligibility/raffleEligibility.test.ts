@@ -7,7 +7,7 @@ import { addEntry } from "../../src/db/repositories/entries.js";
 import { setGuildConfig } from "../../src/db/repositories/guilds.js";
 import { createDraft, setStatus, updateRaffleFields } from "../../src/db/repositories/raffles.js";
 import { addWin } from "../../src/db/repositories/wins.js";
-import { evaluateRaffleEligibility } from "../../src/eligibility/service.js";
+import { comparePoolUnderBars, evaluateRaffleEligibility } from "../../src/eligibility/service.js";
 
 const NOW = "2026-07-20T12:00:00.000Z";
 /** The raffle opens here, so its window is the 14 days ending 2026-07-14. */
@@ -196,5 +196,80 @@ describe("evaluateRaffleEligibility", () => {
     const report = evaluateRaffleEligibility(db, "g1", id, NOW)!;
 
     expect(report).toMatchObject({ considered: 3, eligible: 2, entered: 1 });
+  });
+});
+
+describe("comparePoolUnderBars", () => {
+  const AT = "2026-07-20T12:00:00.000Z";
+
+  /** `count` members active on `activeDays` recent days, ids from `offset`. */
+  function seedMembers(count: number, activeDays: number, perDay = 5, offset = 0): void {
+    for (let m = 0; m < count; m++) {
+      const id = String(300000000000000000n + BigInt(offset + m));
+      for (let d = 0; d < activeDays; d++) {
+        const day = new Date(Date.parse(AT) - d * 86400000).toISOString().slice(0, 10);
+        incrementActivity(db, "g1", id, day, perDay);
+      }
+    }
+  }
+
+  const SHARED = { minAccountAgeDays: null, cooldownDays: null, cooldownCount: null };
+
+  it("counts the members between two activity bars", () => {
+    seedMembers(6, 3); // 15 messages over 3 days
+    seedMembers(4, 6, 5, 100); // 30 messages over 6 days
+
+    const impact = comparePoolUnderBars(
+      db,
+      "g1",
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 5 },
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 3 },
+      SHARED,
+      AT,
+    );
+
+    expect(impact).toEqual({ underDefaults: 10, underRaffle: 4 });
+  });
+
+  it("reports no difference when both bars admit the same people", () => {
+    seedMembers(5, 8);
+    const impact = comparePoolUnderBars(
+      db,
+      "g1",
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 5 },
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 3 },
+      SHARED,
+      AT,
+    );
+    expect(impact.underDefaults).toBe(impact.underRaffle);
+  });
+
+  it("applies the shared non-activity settings to both runs", () => {
+    // A cooldown that blocks everyone must not show up as a cost of the
+    // *activity* change — it has to cancel out on both sides.
+    seedMembers(6, 3);
+    seedMembers(4, 6, 5, 100);
+    const strict = comparePoolUnderBars(
+      db,
+      "g1",
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 5 },
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 3 },
+      { minAccountAgeDays: 999999, cooldownDays: null, cooldownCount: null },
+      AT,
+    );
+    expect(strict).toEqual({ underDefaults: 0, underRaffle: 0 });
+  });
+
+  it("scopes to the guild", () => {
+    seedMembers(6, 6);
+    const impact = comparePoolUnderBars(
+      db,
+      "other",
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 5 },
+      { reqMessages: 10, reqDays: 14, reqActiveDays: 3 },
+      SHARED,
+      AT,
+    );
+    expect(impact).toEqual({ underDefaults: 0, underRaffle: 0 });
   });
 });
