@@ -10,7 +10,7 @@ import {
   upsertMemberNames,
 } from "../../src/db/repositories/members.js";
 import { createDraft } from "../../src/db/repositories/raffles.js";
-import { addWin } from "../../src/db/repositories/wins.js";
+import { addExternalWin, addWin } from "../../src/db/repositories/wins.js";
 
 const NOW = "2026-07-15T12:00:00.000Z";
 const LATER = "2026-07-16T12:00:00.000Z";
@@ -70,6 +70,28 @@ describe("member name cache", () => {
 
     const missing = listUnnamedRaffleMemberIds(db, "g1").sort();
     expect(missing).toEqual(["200", "300"]);
+  });
+
+  it("lists a member whose only presence is an imported win", () => {
+    // The migration case: they won before the bot existed and have not posted
+    // since, so nothing else in the guild's data knows their name.
+    addExternalWin(db, {
+      guildId: "g1",
+      userId: "400",
+      wonAt: "2026-06-01T00:00:00.000Z",
+      note: null,
+    });
+    expect(listUnnamedRaffleMemberIds(db, "g1")).toContain("400");
+  });
+
+  it("does not list an imported winner from another guild", () => {
+    addExternalWin(db, {
+      guildId: "g2",
+      userId: "500",
+      wonAt: "2026-06-01T00:00:00.000Z",
+      note: null,
+    });
+    expect(listUnnamedRaffleMemberIds(db, "g1")).toEqual([]);
   });
 
   it("does not list ids from another guild's raffles", () => {

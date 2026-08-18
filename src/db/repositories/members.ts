@@ -104,7 +104,8 @@ export function getMemberNames(
  * Entrant and winner ids in a guild's raffles that have no cached name yet — the
  * work list for the startup backfill. A member who has posted a counted message
  * is already named via the message path; this catches those who only ever
- * entered (or won) without a counted message.
+ * entered (or won) without a counted message — including someone whose only
+ * presence is a win imported with `/raffle record-win`.
  */
 export function listUnnamedRaffleMemberIds(db: Database, guildId: string): string[] {
   const rows = db
@@ -114,9 +115,13 @@ export function listUnnamedRaffleMemberIds(db: Database, guildId: string): strin
            FROM entries e JOIN raffles r ON r.raffle_id = e.raffle_id
           WHERE r.guild_id = ?
          UNION
+         -- Scoped on wins.guild_id, not through a raffle: an imported win
+         -- (design.md "Imported wins") has none, and joining would drop exactly
+         -- the member most likely to need a name — someone who won before the
+         -- bot and has not posted since.
          SELECT w.user_id AS user_id
-           FROM wins w JOIN raffles r ON r.raffle_id = w.raffle_id
-          WHERE r.guild_id = ?
+           FROM wins w
+          WHERE w.guild_id = ?
        ) ids
        WHERE NOT EXISTS (
          SELECT 1 FROM members m WHERE m.guild_id = ? AND m.user_id = ids.user_id
