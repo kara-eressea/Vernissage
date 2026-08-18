@@ -38,6 +38,8 @@ export interface RaffleRow {
   draw_secret: string | null;
   draw_disqualified: string | null;
   drand_round: number | null;
+  /** When the activity measurement was frozen (the open instant); null = live. */
+  activity_snapshot_at: string | null;
   created_by: string | null;
   created_at: string | null;
 }

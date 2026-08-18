@@ -164,10 +164,13 @@ describe("evaluateRaffleEligibility", () => {
     expect(a.reasons).toContain("in_cooldown");
   });
 
-  it("falls back to the guild defaults when the raffle sets no bar of its own", () => {
+  it("reads the activity bar off the raffle row, exactly as the entry gate does", () => {
+    // The raffle row carries the bar resolved at creation, so a raffle with no
+    // values of its own has no activity gate — not the guild's. Reporting the
+    // guild default here would describe a bar the raffle never applied.
     const id = seedRaffle({ req_messages: null, req_days: null, req_active_days: null });
     const report = evaluateRaffleEligibility(db, "g1", id, NOW)!;
-    expect(report.settings).toMatchObject({ reqMessages: 10, reqDays: 14, reqActiveDays: 3 });
+    expect(report.settings).toMatchObject({ reqMessages: 0, reqDays: 1, reqActiveDays: 0 });
   });
 
   it("still reports for a drawn raffle, so a moderator can look back", () => {

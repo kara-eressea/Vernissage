@@ -25,8 +25,17 @@ import {
 import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
 import { userMention } from "../../../core/format.js";
 import { deleteUserActivity } from "../../../db/repositories/activity.js";
+import {
+  openSnapshotRaffleIds,
+  refreshMemberSnapshot,
+} from "../../../db/repositories/activitySnapshot.js";
 import { writeAudit } from "../../../db/repositories/audit.js";
+import { getRaffle } from "../../../db/repositories/raffles.js";
 import { waiveUserWins } from "../../../db/repositories/wins.js";
+import {
+  measureMemberActivity,
+  raffleActivityWindow,
+} from "../../../eligibility/service.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
@@ -85,6 +94,24 @@ export async function handleReset(
   const { winsWaived, activityRowsDeleted } = ctx.db.transaction(() => {
     const winsWaived = plan.wins ? waiveUserWins(ctx.db, guildId, user.id) : 0;
     const activityRowsDeleted = plan.activity ? deleteUserActivity(ctx.db, guildId, user.id) : 0;
+    // An open raffle judges the measurement frozen when it opened, so deleting
+    // the member's counted history would otherwise leave a stale frozen count
+    // behind and the reset would silently do nothing there. Re-measure their row
+    // from what remains — which is the point of the tool when a spam wave
+    // inflated someone's counts mid-raffle (design.md "Resetting eligibility").
+    if (plan.activity) {
+      for (const raffleId of openSnapshotRaffleIds(ctx.db, guildId)) {
+        const raffle = getRaffle(ctx.db, raffleId);
+        if (!raffle?.starts_at) continue;
+        const window = raffleActivityWindow(raffle.req_days, raffle.starts_at);
+        refreshMemberSnapshot(
+          ctx.db,
+          raffleId,
+          user.id,
+          measureMemberActivity(ctx.db, guildId, user.id, window),
+        );
+      }
+    }
     writeAudit(ctx.db, {
       guildId,
       raffleId: null,

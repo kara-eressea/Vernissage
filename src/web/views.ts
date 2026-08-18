@@ -2008,6 +2008,15 @@ export function raffleEligibilityPage(
           </div>
           <p style="margin:6px 0 0; font-size:13.5px; color:#8b93a0;">Window <span style="color:#c3c8d1;">${view.windowLabel}</span></p>
           <p style="margin:3px 0 0; font-size:13.5px; color:#8b93a0;">Bar <span style="color:#c3c8d1;">${view.barLabel}</span></p>
+          <p style="margin:9px 0 0; display:inline-flex; align-items:center; gap:7px; font-size:12px; color:${view.measurement.frozen
+            ? "#8b93a0"
+            : "#d4a24c"}; background:${view.measurement.frozen
+            ? "#16181d"
+            : "rgba(212,162,76,.09)"}; border:1px solid ${view.measurement.frozen
+            ? "#23272e"
+            : "rgba(212,162,76,.25)"}; border-radius:9px; padding:7px 11px; max-width:72ch; line-height:1.5;"><span style="flex:none; color:${view.measurement.frozen
+            ? "var(--ok)"
+            : "#d4a24c"};">${view.measurement.frozen ? "🔒" : "⚠"}</span>${view.measurement.label}</p>
         </div>
         <div style="display:flex; align-items:center; gap:7px; flex:none; font-size:11.5px; color:#6b717c; background:#16181d; border:1px solid #23272e; border-radius:20px; padding:6px 12px 6px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Read-only · nothing is written</div>
       </div>

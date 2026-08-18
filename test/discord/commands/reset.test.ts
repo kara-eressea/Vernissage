@@ -8,7 +8,13 @@ import {
   getCountsInWindow,
   incrementActivity,
 } from "../../../src/db/repositories/activity.js";
-import { createDraft } from "../../../src/db/repositories/raffles.js";
+import {
+  createDraft,
+  setStatus,
+  updateRaffleFields,
+} from "../../../src/db/repositories/raffles.js";
+import { listActivitySnapshot } from "../../../src/db/repositories/activitySnapshot.js";
+import { applyDueTransitions } from "../../../src/scheduler/transitions.js";
 import { addWin, getUserWins } from "../../../src/db/repositories/wins.js";
 import { handleReset } from "../../../src/discord/commands/raffle/reset.js";
 import type { CommandContext } from "../../../src/discord/commands/index.js";
@@ -167,5 +173,59 @@ describe("reset relies on guild-scoped deletes", () => {
     incrementActivity(db, "g2", "u1", "2026-07-03", 1);
     expect(deleteUserActivity(db, "g1", "u1")).toBe(1);
     expect(getCountsInWindow(db, "g2", "u1", "2026-07-01", "2026-07-31")).toHaveLength(1);
+  });
+});
+
+describe("resetting activity while a raffle is open", () => {
+  /** An open raffle whose activity measurement was frozen when it opened. */
+  function openFrozenRaffle(): number {
+    const id = createDraft(db, "g1", "mod-1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, {
+      starts_at: "2026-07-14T18:00:00.000Z",
+      ends_at: "2026-07-30T18:00:00.000Z",
+      req_messages: 10,
+      req_days: 14,
+      req_active_days: 3,
+    });
+    setStatus(db, id, "scheduled");
+    applyDueTransitions(db, "2026-07-14T18:00:00.000Z", "scheduled");
+    return id;
+  }
+
+  it("re-measures the member's frozen row, so the reset still bites mid-raffle", async () => {
+    // A spam wave inflated their counts; the mod resets them while the raffle
+    // runs. A pure freeze would leave the inflated figure standing.
+    incrementActivity(db, "g1", "target", "2026-07-10", 40);
+    incrementActivity(db, "g1", "other", "2026-07-10", 12);
+    const id = openFrozenRaffle();
+    expect(listActivitySnapshot(db, id)).toContainEqual({
+      userId: "target",
+      messages: 40,
+      activeDays: 1,
+    });
+
+    await handleReset(reset("activity"), ctx);
+
+    // Their frozen row is gone (nothing left to measure)...
+    expect(listActivitySnapshot(db, id).map((r) => r.userId)).toEqual(["other"]);
+    // ...and everyone else's is untouched.
+    expect(listActivitySnapshot(db, id)).toContainEqual({
+      userId: "other",
+      messages: 12,
+      activeDays: 1,
+    });
+  });
+
+  it("leaves frozen rows alone when only the cooldown is reset", async () => {
+    incrementActivity(db, "g1", "target", "2026-07-10", 40);
+    const id = openFrozenRaffle();
+
+    await handleReset(reset("cooldown"), ctx);
+
+    expect(listActivitySnapshot(db, id)).toContainEqual({
+      userId: "target",
+      messages: 40,
+      activeDays: 1,
+    });
   });
 });

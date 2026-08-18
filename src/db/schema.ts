@@ -16,12 +16,13 @@
  * and the per-raffle open_to_all escape hatch, retiring the per-raffle
  * account-age override and new-member exemption; v17 added the members name
  * cache; v18 added the pending_raffles staging table for the dashboard's Raffle
- * Designer handoff) and are also reflected here so a fresh database is created at
- * the current version directly.
+ * Designer handoff; v19 froze each raffle's activity measurement at open in
+ * raffle_activity_snapshot) and are also reflected here so a fresh database is
+ * created at the current version directly.
  */
 
 /** Current schema version, tracked via SQLite's `user_version` pragma. */
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 /**
  * The full current schema. Every statement is idempotent (IF NOT EXISTS), so
@@ -130,6 +131,9 @@ CREATE TABLE IF NOT EXISTS raffles (
   -- draw disqualifies someone.
   draw_disqualified TEXT,
   drand_round     INTEGER,
+  -- When the activity snapshot was frozen (the raffle's open instant), or null
+  -- for a raffle whose measurement is still computed live (v19).
+  activity_snapshot_at TEXT,
   created_by      TEXT,
   created_at      TEXT
 );
@@ -236,4 +240,20 @@ CREATE TABLE IF NOT EXISTS pending_raffles (
 
 CREATE INDEX IF NOT EXISTS idx_pending_expires
   ON pending_raffles (expires_at);
+
+-- The activity measurement each raffle was judged on, frozen at the moment it
+-- opened (design.md "Entry flow"). Eligibility is decided when the doors open:
+-- messages sent after that cannot create it, not even later the same UTC day,
+-- which the day-resolution window would otherwise allow. Only the *activity*
+-- half is frozen — blacklist, roles, and tenure stay live at entry time.
+-- Rows are written inside the scheduled -> open transition, one per member with
+-- counted activity in the window. A raffle with no rows (opened before this
+-- existed, or opened while the bot was offline) falls back to live computation.
+CREATE TABLE IF NOT EXISTS raffle_activity_snapshot (
+  raffle_id    INTEGER NOT NULL,
+  user_id      TEXT NOT NULL,
+  messages     INTEGER NOT NULL,
+  active_days  INTEGER NOT NULL,
+  PRIMARY KEY (raffle_id, user_id)
+);
 `;

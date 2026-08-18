@@ -22,6 +22,10 @@ import { resolveEntrySettings } from "../core/settings.js";
 import { activityWindow } from "../core/time.js";
 import type { EligibilityInput, EligibilityResult } from "../core/types.js";
 import { writeAudit } from "../db/repositories/audit.js";
+import {
+  getFrozenActivity,
+  hasActivitySnapshot,
+} from "../db/repositories/activitySnapshot.js";
 import { getCountsInWindow } from "../db/repositories/activity.js";
 import { isBlacklisted } from "../db/repositories/blacklist.js";
 import { addEntry, hasEntry, listEntrants } from "../db/repositories/entries.js";
@@ -78,6 +82,16 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
   const window = activityWindow(raffleStart, reqDays);
   const dailyCounts = getCountsInWindow(db, raffle.guild_id, userId, window.startDay, window.endDay);
 
+  // Eligibility locks when the raffle opens: if its activity measurement was
+  // frozen then, that is what the gate judges, so messages sent after the doors
+  // opened cannot create eligibility (design.md "Entry flow"). A member absent
+  // from an existing snapshot had no counted activity in the window — a zero
+  // measurement, not a missing one. Raffles that opened before snapshots existed
+  // have none, and fall back to the live counts above.
+  const frozenActivity = hasActivitySnapshot(db, raffle.raffle_id)
+    ? (getFrozenActivity(db, raffle.raffle_id, userId) ?? { messages: 0, activeDays: 0 })
+    : null;
+
   return {
     status: raffle.status as EligibilityInput["status"],
     blacklisted: isBlacklisted(db, raffle.guild_id, userId, now),
@@ -100,6 +114,7 @@ export function gatherEligibilityInput(db: Database, ctx: EntryContext): Eligibi
     raffleStart,
     joinedAt: ctx.joinedAt,
     dailyCounts,
+    frozenActivity,
     alreadyEntered: hasEntry(db, raffle.raffle_id, userId),
     now,
   };
