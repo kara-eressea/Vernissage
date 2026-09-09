@@ -55,6 +55,19 @@ export const ENV = {
   handoffPort: "DESIGNER_HANDOFF_PORT",
 } as const;
 
+/** Where the database lives when DATABASE_PATH is unset. */
+export const DEFAULT_DATABASE_PATH = "./vernissage.db";
+
+/**
+ * The configured database path, or the default. Shared by the bot, the
+ * dashboard, and the backup/restore tools — the last of which must resolve it
+ * without requiring the token and the rest of a valid config, so that a backup
+ * still works when .env is broken or partial.
+ */
+export function resolveDatabasePath(env: NodeJS.ProcessEnv = process.env): string {
+  return env[ENV.databasePath]?.trim() || DEFAULT_DATABASE_PATH;
+}
+
 /** Parse a comma-separated guild-id list: trim, drop blanks, de-duplicate. */
 export function parseGuildIds(raw: string | undefined): string[] {
   if (!raw) {
@@ -100,7 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
     token: token!,
     appId: appId!,
     guildIds,
-    databasePath: env[ENV.databasePath]?.trim() || "./vernissage.db",
+    databasePath: resolveDatabasePath(env),
     handoff: loadHandoffConfig(env),
   };
 }

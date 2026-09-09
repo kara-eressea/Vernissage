@@ -441,6 +441,25 @@ added back (then excluded) when reconstructing the committed list, so the
 entrant count and therefore every selection index stay identical to the draw a
 verifier reproduces from public data.
 
+### Restores must not rewrite a published commitment
+Once a commitment is published at close, it is a promise: the secret behind it
+is fixed, and the draw that follows must be the one that commitment describes.
+`commitOnClose` enforces this while the bot runs — it is a no-op once
+`entrants_hash` is set, so a restart between close and draw reuses the stored
+secret rather than minting a new one.
+
+A restore can break the promise from outside, and so carries the same rule.
+Restoring a backup taken *before* a raffle closed, onto a database where it has
+since closed, hands the bot an uncommitted raffle: on startup it would commit
+again with a fresh secret, publish a second commitment, and draw from a
+different seed, so the winners it announces need not be the ones it already
+announced. The restore tool therefore compares the archive against the database
+it would replace and refuses when a published commitment would be discarded,
+overridable only with an explicit `--rewrite-published-draws`. A backup taken
+after the draw carries the same commitment and secret, so it restores freely and
+reproduces the same winners. See "Data and backups" in the README for the
+operator-facing steps.
+
 ## Auditability
 - A designated audit channel (read-only for members) receives:
   - Raffle created, edited, opened, closed, drawn, cancelled.

@@ -9,7 +9,7 @@
  * so the bot's most sensitive secret never touches the internet-facing surface.
  */
 
-import { ENV, parseGuildIds } from "../config.js";
+import { ENV, parseGuildIds, resolveDatabasePath } from "../config.js";
 
 export interface WebConfig {
   /** Discord OAuth2 client id — the same value as the bot's application id. */
@@ -123,7 +123,7 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     redirectUri: `${baseUrl}/auth/callback`,
     sessionSecret: sessionSecret!,
     port,
-    databasePath: env[ENV.databasePath]?.trim() || "./vernissage.db",
+    databasePath: resolveDatabasePath(env),
     guildIds,
     trustProxy: parseBool(env[WEB_ENV.trustProxy], true),
     secureCookies: baseUrl.startsWith("https://"),

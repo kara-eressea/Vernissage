@@ -144,45 +144,17 @@ not need to clone the repository.
 
 1. Create a `.env` file with the three required values (see Configuration
    above), in an empty directory.
-2. In the same directory, create a `compose.yaml`:
+2. In the same directory, put a `compose.yaml`. A ready-made one lives in this
+   repository at [`deploy/compose.published.yaml`](deploy/compose.published.yaml)
+   — copy it, or fetch it without cloning:
 
-   ```yaml
-   services:
-     bot:
-       image: ghcr.io/kara-eressea/vernissage:latest
-       restart: unless-stopped
-       init: true
-       env_file: .env
-       environment:
-         DATABASE_PATH: /data/vernissage.db
-       volumes:
-         - vernissage-data:/data
-
-     # Optional moderator dashboard (a read-only web UI). Delete this whole
-     # service if you don't want it — the bot runs fine without it. It reuses the
-     # same image, opens the same database read-only, and needs the dashboard
-     # values in .env (DISCORD_CLIENT_SECRET, DASHBOARD_BASE_URL,
-     # DASHBOARD_SESSION_SECRET — see .env.example). It publishes only on the
-     # loopback interface for a reverse proxy (Caddy/nginx) to terminate TLS in
-     # front of it — see "Optional: the moderator dashboard" below.
-     dashboard:
-       image: ghcr.io/kara-eressea/vernissage:latest
-       restart: unless-stopped
-       init: true
-       command: ["node", "dist/src/web/index.js"]
-       env_file: .env
-       environment:
-         DATABASE_PATH: /data/vernissage.db
-       volumes:
-         - vernissage-data:/data
-       ports:
-         - "127.0.0.1:8080:8080"
-       depends_on:
-         - bot
-
-   volumes:
-     vernissage-data:
    ```
+   curl -o compose.yaml https://raw.githubusercontent.com/kara-eressea/vernissage/main/deploy/compose.published.yaml
+   ```
+
+   It defines the `bot` service and an optional `dashboard` service; delete the
+   `dashboard` block if you don't want the web UI. Every backup archive also
+   contains a copy of this file, so a host rebuilt from a backup already has it.
 
 3. Pull the image and start the bot:
 
@@ -410,13 +382,164 @@ The full details are in [docs/design.md](docs/design.md).
 
 ## Data and backups
 
-All state is stored in a single SQLite database file. By default this is
-`vernissage.db` in the working directory, or the path set in `DATABASE_PATH`.
-When running with Docker, the file lives in a named volume.
+All data lives in a single SQLite database file — by default `vernissage.db` in
+the working directory, or the path set in `DATABASE_PATH`. Under Docker it sits
+in the named volume `vernissage-data`.
 
-To back it up, copy that one file while the bot is idle or stopped. To restore,
-put the file back in place before starting the bot. There is nothing else to
-back up.
+Don't copy that file by hand. The bot keeps the database in WAL mode, so a
+running bot may have committed data that is not in `vernissage.db` yet, and a
+plain copy would silently lose it. Use the backup command instead:
+
+```
+docker compose run --rm -v "$PWD:/backup" bot node dist/src/backup.js /backup
+```
+
+That writes `vernissage-backup-<timestamp>.tar.gz` into the current directory.
+It is safe to run while the bot is running: the snapshot is taken through a
+read-only connection and captures every committed transaction and no
+half-finished one. From a source clone, `npm run backup` does the same.
+
+The container runs as a non-root user (uid 1000), so the directory you mount at
+`/backup` must be writable by it. If you keep the stack somewhere root-owned
+such as `/root/tombola`, the command fails with a permission error; either back
+up into a directory you own, or add `--user root` to the `docker compose run`.
+
+The archive contains:
+
+| Entry | What it is |
+| --- | --- |
+| `vernissage.db` | The database snapshot, verified and checksummed |
+| `manifest.json` | When it was taken, the schema version, row counts, and the snapshot's SHA-256 |
+| `env.template` | Your configuration, **with every secret left blank** |
+| `compose.yaml` | A ready-to-run compose file for a new host |
+
+**Your credentials are deliberately not included** — no bot token, OAuth client
+secret, session secret or handoff secret. Keep a copy of your `.env` somewhere
+secure as well, since without it you would have to reissue those.
+`env.template` records which of them were set and carries the non-secret values
+across, so on a new host you only need to fill in the blanks.
+
+The database itself is still sensitive, so treat the archive as private rather
+than as something to drop in a shared folder. It holds per-member message
+counts, blacklist entries and the moderator notes attached to them, and — for
+any raffle that has closed but not yet been drawn — that raffle's
+`draw_secret`. That secret is what the published commitment commits to, and it
+is meant to stay unknown until the draw is announced; anyone holding it can work
+out the winners in advance. Raffles set to draw manually can sit in that state
+for as long as the moderator leaves them. Once a raffle is drawn its secret is
+published anyway, so only the not-yet-drawn ones matter.
+
+For the same reason, restore replaces the database rather than merging into it,
+and verifies a checksum first: the entrant hashes, commitments and revealed
+secrets of past raffles have to come back exactly as they were, or the
+verification page and anyone checking a past draw by hand would no longer agree.
+
+To restore, stop the bot first — two processes must never share one database —
+then:
+
+```
+docker compose stop bot dashboard
+docker compose run --rm -v "$PWD:/backup" bot \
+  node dist/src/restore.js /backup/vernissage-backup-20260909T101500Z.tar.gz --yes --force
+docker compose up -d
+```
+
+(Drop `dashboard` from the `stop` if you don't run that service. `--force` is
+what allows an existing database to be replaced — leave it off when restoring
+onto a host that has none, and restore will refuse if it finds one. See
+[Restoring while a raffle is running](#restoring-while-a-raffle-is-running) if a
+raffle is mid-flight.)
+
+Restore refuses to do anything questionable: it verifies the archive's checksum,
+runs an integrity check, and rejects an archive made by a *newer* version of the
+bot than the image you are restoring onto. The database it replaces is kept
+alongside as `vernissage.db.pre-restore-<timestamp>` rather than deleted. An
+older database is migrated forward automatically when it is opened.
+
+### Restoring while a raffle is running
+
+Backing up is always safe, whatever is going on — the snapshot is read-only and
+the bot never pauses. Restoring is the one to think about, and what matters is
+not the age of the backup but the state of the raffles it would overwrite.
+
+**The case to avoid:** restoring a backup that was taken *before* a raffle
+closed, onto a database where that raffle has since closed and drawn. The bot
+publishes a commitment when a raffle closes and reveals the matching secret when
+it draws. A backup from before the close does not carry that commitment, so on
+restart the bot sees an uncommitted raffle, generates a **new** secret, posts a
+second commitment, and draws again from a different seed — quite possibly
+picking different winners than the ones it already announced. The published
+proof and the announced result would no longer agree, and that is not something
+a later restore can put right.
+
+Restore detects this and refuses, naming the raffle, so you do not have to
+remember the rule:
+
+```
+Restore failed: This restore would rewrite a draw that has already been announced:
+  - raffle 1 ("Summer vinyl giveaway") has a published draw commitment that this
+    backup does not carry. ...
+```
+
+Pass `--rewrite-published-draws` only if you genuinely mean to redo that draw.
+
+**Restoring a backup taken after the raffle drew is fine.** It carries the same
+commitment and secret, so the bot reuses them and reaches the same winners.
+
+Everything else is ordinary data loss rather than a broken promise, and restore
+lists it after the fact rather than blocking:
+
+- Entries made after the backup are gone. Those members were told they were in,
+  and now are not.
+- Wins recorded after the backup are gone, so win cooldowns and claim deadlines
+  revert with them.
+- Raffles created after the backup disappear.
+
+Separately, the bot cannot count messages while it is stopped, and that feeds
+activity eligibility — so keep any restore window short if a raffle is open.
+
+**The short version:** back up whenever you like; restore from the newest backup
+you have, ideally when nothing is between closing and being drawn.
+
+## Moving to a new host
+
+1. On the old host, take a backup, then stop the bot:
+
+   ```
+   docker compose run --rm -v "$PWD:/backup" bot node dist/src/backup.js /backup
+   docker compose down
+   ```
+
+   Messages sent while the bot is down are not counted, so keep the gap short.
+
+2. Copy the archive and your `.env` to the new host.
+
+3. On the new host, in an empty directory holding your `.env`:
+
+   ```
+   tar -xzf vernissage-backup-20260909T101500Z.tar.gz compose.yaml
+   docker compose pull
+   docker compose run --rm -v "$PWD:/backup" bot \
+     node dist/src/restore.js /backup/vernissage-backup-20260909T101500Z.tar.gz --yes
+   docker compose up -d
+   ```
+
+   Use your archive's real filename — `docker compose run` does not expand
+   wildcards. Slash commands re-register themselves on startup, so there is no
+   separate registration step.
+
+4. Check the things a backup cannot carry:
+
+   - If you run the dashboard, its OAuth redirect URI in the Discord Developer
+     Portal must match the new `DASHBOARD_BASE_URL` (that URL plus
+     `/auth/callback`).
+   - Move the reverse-proxy configuration and its TLS certificates, and point
+     DNS at the new host.
+
+5. Confirm it worked: `docker compose logs -f bot` should show it connecting,
+   `/raffle list` in Discord should show your raffles, and — the sharpest check
+   that nothing was lost — the dashboard's verification page should still
+   reproduce the proof for a past draw.
 
 ## Development
 
