@@ -1,0 +1,55 @@
+# Tombola, running from the published image.
+#
+# Put this file and a filled-in .env in an empty directory on the host, then:
+#
+#     docker compose pull
+#     docker compose up -d
+#
+# No clone of the repository is needed. A copy of this file is included in every
+# backup archive, so a new host can be brought up from the archive alone.
+
+services:
+  bot:
+    image: ghcr.io/kara-eressea/vernissage:latest
+    # Restart automatically after a crash or a host reboot. The bot must run
+    # continuously to count messages; on startup it reconciles anything it
+    # missed while it was down.
+    restart: unless-stopped
+    # Run an init process so the container forwards SIGTERM to the bot on stop,
+    # letting it flush counts, stop its timers, and close the database cleanly.
+    init: true
+    env_file: .env
+    environment:
+      # Store the database in the mounted volume so it survives restarts.
+      DATABASE_PATH: /data/vernissage.db
+    volumes:
+      - vernissage-data:/data
+    # No ports are published on purpose: the bot only makes outbound connections
+    # to Discord and does not accept any incoming traffic.
+
+  # Optional moderator dashboard (a read-only web UI). Delete this whole service
+  # if you don't want it — the bot runs fine without it. It reuses the same
+  # image, opens the same database read-only, and needs the dashboard values in
+  # .env (DISCORD_CLIENT_SECRET, DASHBOARD_BASE_URL, DASHBOARD_SESSION_SECRET —
+  # see .env.example).
+  dashboard:
+    image: ghcr.io/kara-eressea/vernissage:latest
+    restart: unless-stopped
+    init: true
+    command: ["node", "dist/src/web/index.js"]
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/vernissage.db
+    volumes:
+      - vernissage-data:/data
+    # Publish only on the loopback interface: a reverse proxy (Caddy/nginx) on
+    # the host terminates TLS and forwards to this port. Change 8080 on the LEFT
+    # to match your proxy's upstream; the RIGHT must match DASHBOARD_PORT
+    # (default 8080). Do NOT bind 0.0.0.0.
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - bot
+
+volumes:
+  vernissage-data:

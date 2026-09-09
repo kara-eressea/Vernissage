@@ -32,6 +32,9 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
+# The backup tool copies this into every archive, so a new host can be stood up
+# from the archive alone.
+COPY --from=build /app/deploy ./deploy
 
 # The database lives here and is mounted as a volume at runtime. Make it owned
 # by the non-root user the container runs as.
