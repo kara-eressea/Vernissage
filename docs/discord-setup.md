@@ -121,22 +121,24 @@ For several servers, separate the IDs with commas, for example
 
 Do not commit `.env` to version control. It contains your secret token.
 
-## 8. Start the bot and register its commands
+## 8. Start the bot
 
 Follow the run instructions in the [README](../README.md). In short:
 
 1. Start the bot (with Docker, or from source).
-2. Register the slash commands. This is a separate one-time step; starting the
-   bot does not register commands on its own:
-   - From source: `npm run deploy-commands`
-   - In Docker: `docker compose run --rm bot node dist/src/deploy-commands.js`
-3. Wait a moment, then type `/raffle` in your server to confirm the commands
+2. Wait a moment, then type `/raffle` in your server to confirm the commands
    appear.
+
+The bot registers its slash commands itself when it starts, in every server on
+its allowlist that it has joined — and again the moment it joins one — so there
+is no separate registration step. If you ever need to re-register without
+restarting the bot, `npm run deploy-commands` (or `docker compose run --rm bot
+node dist/src/deploy-commands.js`) does that; see
+[Registering commands](../README.md#registering-commands).
 
 ## 9. Configure the server
 
-Once the bot is running and commands are registered, a moderator sets things up
-from inside Discord:
+Once the bot is running, a moderator sets things up from inside Discord:
 
 1. Run `/raffle config set` to choose an announce channel (where raffles are
    posted), an audit channel (where a log of actions is mirrored), and a
@@ -155,10 +157,12 @@ full list of commands.
 
 ## Troubleshooting
 
-- The commands do not appear when I type `/raffle`. Make sure you ran the
-  command registration step (`deploy-commands`). Newly registered commands can
-  take a short while to show up; try again after a minute, or restart your
-  Discord client.
+- The commands do not appear when I type `/raffle`. Check the bot's log for a
+  registration error — it registers them at startup, so a failure there is the
+  usual cause. Newly registered commands can also take a short while to show up;
+  try again after a minute, or restart your Discord client. If the server was
+  added to `GUILD_IDS` after the bot started, restart it (or run
+  `deploy-commands`) so it registers there.
 - The bot appears offline. Check that it is actually running and that
   `DISCORD_TOKEN` is correct. A wrong or reset token will prevent it from
   connecting. The bot logs an error on startup if the token is invalid.
