@@ -45,6 +45,9 @@ export const NON_SECRET_ENV_KEYS: ReadonlySet<string> = new Set<string>([
   WEB_ENV.port,
   WEB_ENV.trustProxy,
   WEB_ENV.revalidateAccess,
+  // A list of Discord user ids: public identifiers, and part of how the host is
+  // configured, so it belongs in the archive in full.
+  WEB_ENV.supportUserIds,
   WEB_ENV.handoffUrl,
 ]);
 
