@@ -193,6 +193,8 @@ export interface PickerCard {
   icon: string | null;
   /** e.g. "~48 of 213 eligible" or "activity bar not set". */
   statLabel: string;
+  /** Carried from the session: a server this visitor supports but doesn't moderate. */
+  viewOnly?: boolean;
 }
 
 /**
@@ -210,7 +212,7 @@ export function buildPickerCards(
     const statLabel = pool.hasDefaults
       ? `~${pool.eligibleUserIds.length} of ${pool.considered} eligible`
       : "activity bar not set";
-    return { id: g.id, name: g.name, icon: g.icon, statLabel };
+    return { id: g.id, name: g.name, icon: g.icon, statLabel, viewOnly: g.viewOnly };
   });
 }
 

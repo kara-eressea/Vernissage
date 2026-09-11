@@ -7,6 +7,13 @@
  * qualifies when it is on the allowlist AND the visitor owns it or holds the
  * Manage Server permission there.
  *
+ * On top of that sits one deliberate widening: a small configured list of
+ * **support viewers** (DASHBOARD_SUPPORT_USER_IDS) who may *read* every
+ * allowlisted guild without moderating it. The operator runs the bot for servers
+ * they were invited to but do not moderate, and had no way to see what a
+ * moderator was reporting; see `selectViewableGuilds` for why that stays
+ * read-only.
+ *
  * This under-grants on purpose: without the bot token the dashboard cannot see
  * the guild's configured mod-role or the visitor's roles, so a moderator whose
  * only authority is that mod-role (no Manage Server) cannot log in yet. That is
@@ -43,6 +50,49 @@ export function selectManageableGuilds(
   return guilds
     .filter((g) => allowed.has(g.id) && (g.owner || hasManageGuild(g.permissions)))
     .map((g) => ({ id: g.id, name: g.name, icon: g.icon }));
+}
+
+/**
+ * The allowlisted guilds a visitor may *open*, moderator or support viewer.
+ *
+ * A support viewer (their id in `supportUserIds`) gets every allowlisted guild,
+ * each flagged `viewOnly` unless they genuinely moderate it. The flag is what
+ * the rest of the dashboard keys off: every page is a read, so they all serve
+ * unchanged, and the single route that reaches back into Discord — the designer
+ * handoff — refuses a `viewOnly` guild. The grant is therefore "see everything,
+ * change nothing", which is what debugging someone else's server needs and no
+ * more.
+ *
+ * Naming a guild the viewer is not a member of is the one rough edge: Discord's
+ * `guilds` scope only describes the servers they are in, and the web tier holds
+ * no bot token to look up the rest. Those fall back to `Server <id>` with no
+ * icon — legible enough to pick from the switcher, and honest about being
+ * second-hand.
+ */
+export function selectViewableGuilds(
+  guilds: DiscordPartialGuild[],
+  allowlist: readonly string[],
+  viewer: { userId: string; supportUserIds: readonly string[] },
+): SessionGuild[] {
+  const manageable = selectManageableGuilds(guilds, allowlist);
+  if (!viewer.supportUserIds.includes(viewer.userId)) {
+    return manageable;
+  }
+
+  const managed = new Set(manageable.map((g) => g.id));
+  // Their own guild list still supplies the name and icon for any allowlisted
+  // server they are merely a member of — nicer than the id fallback.
+  const known = new Map(guilds.map((g) => [g.id, g]));
+  const supported = allowlist
+    .filter((id) => !managed.has(id))
+    .map((id) => {
+      const g = known.get(id);
+      return { id, name: g?.name ?? `Server ${id}`, icon: g?.icon ?? null, viewOnly: true };
+    });
+
+  // Guilds they moderate come first: a support viewer who is also a moderator
+  // somewhere lands in their own server, not in someone else's.
+  return [...manageable, ...supported];
 }
 
 export { hasManageGuild, MANAGE_GUILD };

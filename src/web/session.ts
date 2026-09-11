@@ -32,6 +32,14 @@ export interface SessionGuild {
   name: string;
   /** Discord icon hash, or null — used to render the guild avatar. */
   icon: string | null;
+  /**
+   * True when the visitor reaches this guild as a **support viewer** rather than
+   * as one of its moderators (auth.ts `selectViewableGuilds`): they may read
+   * every page but not act, so the one route that reaches back into Discord —
+   * the designer handoff — refuses. Absent means the ordinary case, a guild they
+   * actually moderate.
+   */
+  viewOnly?: boolean;
 }
 
 /** What we persist about a logged-in moderator, all client-side in the cookie. */
@@ -40,7 +48,11 @@ export interface Session {
   uid: string;
   /** Display name for the account menu (global name or username). */
   username: string;
-  /** The allowlisted guilds this user manages (owner or Manage Server). */
+  /**
+   * The allowlisted guilds this user may open: the ones they manage (owner or
+   * Manage Server), plus — for a support viewer — every other allowlisted guild,
+   * marked `viewOnly`.
+   */
   guilds: SessionGuild[];
   /** The guild currently selected, if any (must be one of `guilds`). */
   selectedGuildId?: string;

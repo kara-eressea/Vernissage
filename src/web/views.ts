@@ -163,6 +163,17 @@ function modBlock(name: string, subtitle: string): RawHtml {
   `;
 }
 
+/**
+ * The badge a support viewer carries through the whole dashboard.
+ *
+ * They are looking at a server they do not moderate (auth.ts "support viewers"),
+ * so every page says so — otherwise the surface is indistinguishable from the
+ * moderator's and it is easy to forget whose data is on screen.
+ */
+function readOnlyPill(): RawHtml {
+  return html`<span title="You can see this server but not act in it." style="display:inline-flex; align-items:center; gap:6px; flex:none; font-size:11px; font-weight:600; color:#a7adb7; background:#16181d; border:1px solid #2a2f37; border-radius:20px; padding:5px 11px 5px 9px;"><span style="color:#6b717c; font-size:11px;">👁</span>Read-only</span>`;
+}
+
 /** The small ticket brand mark used in the chrome. */
 function headerMark(): RawHtml {
   return html`<div style="position:relative; width:30px; height:30px; border-radius:9px; background:linear-gradient(155deg, var(--accent), var(--accent-2)); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 10px var(--accent-soft);">
@@ -247,12 +258,29 @@ function guildlessHeader(session: Session): RawHtml {
 
 /** The guild picker, shown when a moderator manages more than one guild. */
 export function pickerPage(session: Session, cards: PickerCard[]): string {
+  // A support viewer's list mixes servers they moderate with servers they can
+  // only read, so neither the count line nor the footnote can claim they
+  // moderate all of them.
+  const moderated = session.guilds.filter((g) => !g.viewOnly).length;
+  const supported = session.guilds.length - moderated;
+  const lede =
+    supported === 0
+      ? html`You moderate ${session.guilds.length} servers. Pick one to open its dashboard.`
+      : moderated === 0
+        ? html`You can view ${supported} server${supported === 1 ? "" : "s"} for support. Pick one to open its dashboard.`
+        : html`You moderate ${moderated} server${moderated === 1 ? "" : "s"} and can view
+            ${supported} more for support. Pick one to open its dashboard.`;
+  const footnote =
+    supported === 0
+      ? html`Only servers where you have Manage Server appear here.`
+      : html`Servers marked read-only are ones you support but don't moderate — you can see
+          everything there and change nothing.`;
   const body = html`
     ${guildlessHeader(session)}
     <div style="max-width:620px; margin:0 auto; padding:52px 22px 80px; animation:fadeup .4s ease;">
       <h1 class="serif" style="font-weight:600; font-size:26px; letter-spacing:-.015em; margin:0 0 6px;">Choose a server</h1>
       <p style="margin:0 0 26px; font-size:14px; color:#8b93a0;">
-        You moderate ${session.guilds.length} servers. Pick one to open its dashboard.
+        ${lede}
       </p>
       <div style="display:flex; flex-direction:column; gap:10px;">
         ${session.guilds.map((g, i) => {
@@ -264,13 +292,14 @@ export function pickerPage(session: Session, cards: PickerCard[]): string {
                 <span style="display:block; font-size:15px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${g.name}</span>
                 <span style="display:block; font-size:12.5px; color:#8b93a0; margin-top:2px;">${card?.statLabel ?? ""}</span>
               </span>
+              ${g.viewOnly ? readOnlyPill() : ""}
               <span style="flex:none; color:#585e68; font-size:18px;">→</span>
             </a>
           `;
         })}
       </div>
       <p style="margin:24px 0 0; font-size:12px; color:#585e68; display:flex; align-items:center; gap:7px;">
-        <span style="color:#6b717c;">🔒</span>Only servers where you have Manage Server appear here.
+        <span style="color:#6b717c;">🔒</span>${footnote}
       </p>
     </div>
   `;
@@ -301,7 +330,9 @@ function switcher(guild: SessionGuild, cards: PickerCard[]): RawHtml {
               ${guildAvatar({ id: c.id, name: c.name, icon: c.icon }, 26, 8, 11)}
               <span style="flex:1; min-width:0;">
                 <span style="display:block; font-size:13px; font-weight:600; color:#e6e8ec; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name}</span>
-                <span style="display:block; font-size:11px; color:#6b717c;">${c.statLabel}</span>
+                <span style="display:block; font-size:11px; color:#6b717c;">${c.viewOnly
+                  ? html`Read-only · ${c.statLabel}`
+                  : c.statLabel}</span>
               </span>
               ${isCurrent
                 ? html`<span style="flex:none; color:var(--accent); font-size:13px; font-weight:700;">✓</span>`
@@ -344,6 +375,7 @@ function homeHeader(
         </div>
         <div style="width:1px; height:24px; background:#242830;"></div>
         ${switcher(guild, cards)}
+        ${guild.viewOnly ? readOnlyPill() : ""}
       </div>
       <nav style="display:flex; align-items:center; gap:6px;">
         ${navItem("Overview", "/app", active === "overview")}
@@ -355,7 +387,7 @@ function homeHeader(
           ? html`<span style="font-size:13px; font-weight:600; color:#e6e8ec; padding:7px 11px; border-radius:8px; background:#191c22; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</span>`
           : html`<a href="/app/verify" class="hovnav" style="font-size:13px; color:#8b93a0; padding:7px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>Verify</a>`}
         <div style="width:1px; height:24px; background:#242830; margin:0 6px;"></div>
-        ${modBlock(session.username, "Moderator")}
+        ${modBlock(session.username, guild.viewOnly ? "Support viewer" : "Moderator")}
       </nav>
     </header>
   `;
@@ -1637,6 +1669,10 @@ export function designerPage(
   handoffEnabled: boolean,
 ): string {
   const brand = resolveDisplayName({});
+  // The handoff is already off for a support viewer (the server passes false),
+  // but the inert bar must say *why* — "arrives in the next update" would be a
+  // lie to someone who is simply not this server's moderator.
+  const viewOnly = Boolean(guild.viewOnly);
   const d = view.defaults;
   const minAgeNote =
     d.minAccountAgeDays > 0
@@ -1716,7 +1752,9 @@ export function designerPage(
     <div style="min-width:0;">
       <div id="ds-status-ok" style="display:none; font-size:12.5px; color:#8b93a0; align-items:center; gap:7px;"><span style="width:6px; height:6px; border-radius:50%; background:var(--ok);"></span>${handoffEnabled
         ? "Ready — you'll get a code to run in Discord."
-        : "Ready — the Discord hand-off arrives in the next update."}</div>
+        : viewOnly
+          ? "Ready — but creating raffles here is for this server's moderators."
+          : "Ready — the Discord hand-off arrives in the next update."}</div>
       <div id="ds-status-bad" style="display:flex; font-size:12.5px; color:var(--danger); align-items:center; gap:7px;"><span style="width:15px; height:15px; border-radius:50%; border:1.5px solid var(--danger); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">!</span><span id="ds-status-reason">Add a raffle name to continue.</span></div>
       ${handoffEnabled
         ? html`<div id="ds-create-error" style="display:none; font-size:12.5px; color:var(--danger); align-items:center; gap:7px; margin-top:4px;"></div>`
@@ -1734,9 +1772,18 @@ export function designerPage(
     : html`
         <div style="margin-top:6px; background:#14171d; border:1px solid #262a31; border-radius:14px; padding:13px 15px; display:flex; align-items:center; justify-content:space-between; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
           ${statusBlock}
-          <button type="button" disabled title="Publishing to Discord arrives in the next update" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; opacity:.5; cursor:not-allowed;"><span style="font-size:14px;">↗</span>Create in Discord</button>
+          <button type="button" disabled title="${viewOnly
+            ? "You're viewing this server for support — only its moderators can create raffles."
+            : "Publishing to Discord arrives in the next update"}" style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; opacity:.5; cursor:not-allowed;"><span style="font-size:14px;">↗</span>Create in Discord</button>
         </div>
-        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">This is a live preview sandbox. Handing off to Discord — staging the raffle as a pending spec you confirm in-server with <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code> — lands in the next update. Your work is kept in this browser.</p>
+        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">${viewOnly
+          ? html`You're viewing ${guild.name} for support, so this designer is a sandbox: compose and
+              preview anything you like, but handing a raffle off to Discord is for the server's own
+              moderators. Your work is kept in this browser.`
+          : html`This is a live preview sandbox. Handing off to Discord — staging the raffle as a
+              pending spec you confirm in-server with
+              <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code>
+              — lands in the next update. Your work is kept in this browser.`}</p>
       `;
 
   const handoffModal = handoffEnabled
