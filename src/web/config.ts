@@ -9,7 +9,7 @@
  * so the bot's most sensitive secret never touches the internet-facing surface.
  */
 
-import { ENV, parseGuildIds, resolveDatabasePath } from "../config.js";
+import { ENV, parseGuildIds, parseIdList, resolveDatabasePath } from "../config.js";
 
 export interface WebConfig {
   /** Discord OAuth2 client id — the same value as the bot's application id. */
@@ -28,6 +28,13 @@ export interface WebConfig {
   databasePath: string;
   /** The guild allowlist, shared with the bot: only these guilds are servable. */
   guildIds: string[];
+  /**
+   * Discord user ids granted **read-only** sight of every allowlisted guild,
+   * whether or not they moderate it (docs/dashboard.md "Support viewers").
+   * Empty by default; the operator's own id is the expected entry, so they can
+   * debug a server they were invited to but do not moderate.
+   */
+  supportUserIds: string[];
   /** Whether to trust X-Forwarded-* from the reverse proxy (client IP for rate limiting). */
   trustProxy: boolean;
   /** Whether to mark cookies Secure — true when the public base URL is https. */
@@ -64,6 +71,8 @@ export const WEB_ENV = {
   handoffSecret: "DESIGNER_HANDOFF_SECRET",
   /** Set to "off"/"false" to stop re-checking access per request (escape hatch). */
   revalidateAccess: "DASHBOARD_REVALIDATE",
+  /** Comma-separated Discord user ids with read-only sight of every guild. */
+  supportUserIds: "DASHBOARD_SUPPORT_USER_IDS",
 } as const;
 
 /** Thrown when required dashboard configuration is missing, listing every problem. */
@@ -132,5 +141,6 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
     handoffUrl: env[WEB_ENV.handoffUrl]?.trim().replace(/\/+$/, "") || undefined,
     handoffSecret: env[WEB_ENV.handoffSecret]?.trim() || undefined,
     revalidateAccess: parseBool(env[WEB_ENV.revalidateAccess], true),
+    supportUserIds: parseIdList(env[WEB_ENV.supportUserIds]),
   };
 }

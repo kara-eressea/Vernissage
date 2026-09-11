@@ -8,8 +8,12 @@
  * names and activity figures until their session expired (issue #40).
  *
  * So every `/app` request re-derives the answer from Discord, through the same
- * `selectManageableGuilds` the callback uses, and the request is authorised
- * against *that* rather than against the cookie's stale copy.
+ * `selectViewableGuilds` the callback uses, and the request is authorised
+ * against *that* rather than against the cookie's stale copy. Deriving it here
+ * rather than trusting the cookie is also what keeps a support viewer's grant
+ * (and the `viewOnly` flag that holds them to reading) tied to the current
+ * configuration: drop an id from DASHBOARD_SUPPORT_USER_IDS and their next
+ * re-check, once the cache lapses, stops returning the guilds it bought them.
  *
  * Three deliberate choices:
  *
@@ -28,7 +32,7 @@
  *     exactly the gap being closed.
  */
 
-import { selectManageableGuilds } from "./auth.js";
+import { selectViewableGuilds } from "./auth.js";
 import { fetchUserGuilds, TokenRejectedError } from "./oauth.js";
 import type { Session, SessionGuild } from "./session.js";
 
@@ -61,6 +65,8 @@ export class AccessChecker {
     /** Injected for tests; defaults to the real Discord call. */
     private readonly fetchGuilds = fetchUserGuilds,
     private readonly ttlMs = ACCESS_CACHE_MS,
+    /** Read-only viewers of every allowlisted guild (auth.ts, config.ts). */
+    private readonly supportUserIds: readonly string[] = [],
   ) {}
 
   /**
@@ -83,7 +89,10 @@ export class AccessChecker {
 
     let guilds: SessionGuild[];
     try {
-      guilds = selectManageableGuilds(await this.fetchGuilds(session.at), this.allowlist);
+      guilds = selectViewableGuilds(await this.fetchGuilds(session.at), this.allowlist, {
+        userId: session.uid,
+        supportUserIds: this.supportUserIds,
+      });
     } catch (err) {
       if (err instanceof TokenRejectedError) {
         // Discord says the token is no longer good: revoked, deauthorised, or
@@ -142,7 +151,15 @@ export function applyAccess(
     guilds.length !== session.guilds.length ||
     guilds.some((g, i) => {
       const was = session.guilds[i];
-      return !was || was.id !== g.id || was.name !== g.name || was.icon !== g.icon;
+      return (
+        !was ||
+        was.id !== g.id ||
+        was.name !== g.name ||
+        was.icon !== g.icon ||
+        // A moderator promoted out of (or demoted into) support-only sight must
+        // see the cookie follow, or the read-only gate would lag a session.
+        Boolean(was.viewOnly) !== Boolean(g.viewOnly)
+      );
     });
 
   return { session: { ...session, guilds, selectedGuildId: selected }, changed };

@@ -155,6 +155,38 @@ describe("AccessChecker", () => {
     const checker = new AccessChecker(ALLOWLIST, vi.fn().mockResolvedValue([guild("elsewhere")]));
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "revoked" });
   });
+
+  it("admits a support viewer to every allowlisted guild, read-only", async () => {
+    const checker = new AccessChecker(
+      ALLOWLIST,
+      vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
+      ACCESS_CACHE_MS,
+      ["support-1"],
+    );
+    const result = await checker.check(session({ uid: "support-1" }), NOW);
+    expect(result).toEqual({
+      ok: true,
+      guilds: [
+        { id: "g1", name: "Musicorum", icon: null, viewOnly: true },
+        { id: "g2", name: "Server g2", icon: null, viewOnly: true },
+      ],
+    });
+  });
+
+  it("revokes a support viewer as soon as their id leaves the configured list", async () => {
+    // The re-check derives the grant from configuration, not from the cookie, so
+    // removing an id closes the door on the next uncached request.
+    const checker = new AccessChecker(
+      ALLOWLIST,
+      vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
+      ACCESS_CACHE_MS,
+      [],
+    );
+    expect(await checker.check(session({ uid: "support-1" }), NOW)).toEqual({
+      ok: false,
+      reason: "revoked",
+    });
+  });
 });
 
 describe("applyAccess", () => {
@@ -192,6 +224,14 @@ describe("applyAccess", () => {
     expect(applied.changed).toBe(true);
     expect(applied.session.guilds).toHaveLength(2);
     expect(applied.session.selectedGuildId).toBe("g1");
+  });
+
+  it("notices a guild that became read-only, so the gate cannot lag a session", () => {
+    const applied = applyAccess(session({ guilds: [g1], selectedGuildId: "g1" }), [
+      { ...g1, viewOnly: true },
+    ]);
+    expect(applied.changed).toBe(true);
+    expect(applied.session.guilds[0]!.viewOnly).toBe(true);
   });
 
   it("keeps the access token on the refreshed session", () => {
