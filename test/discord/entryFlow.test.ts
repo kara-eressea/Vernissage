@@ -161,7 +161,7 @@ describe("attemptEntry", () => {
   });
 
   it("lets an imported win gate the cooldown and the prior-winner bar", () => {
-    // A prize won before the bot existed, recorded with /raffle record-win. It
+    // A prize won before the bot existed, recorded with /raffle-mod record-win. It
     // has no raffle at all, so nothing about it can be reached by joining
     // through raffles — and yet it must gate exactly like a drawn win
     // (design.md "Imported wins").

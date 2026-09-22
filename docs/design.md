@@ -43,7 +43,7 @@ messages itself via the gateway, starting from the moment it is installed.
 - **Messages in threads count, under the parent channel's rule.** A thread has
   its own channel id, but activity in it is activity in the channel it hangs
   from, so both sides resolve a thread to its parent: the gateway path when a
-  message arrives, and `/raffle config channels` when a moderator stores a rule
+  message arrives, and `/raffle-mod config channels` when a moderator stores a rule
   (picking a thread stores the rule on its parent and says so). A rule keyed on a
   thread's own id would match nothing. Forum posts follow the same rule — the
   forum channel is the parent. Private threads are the exception the bot cannot
@@ -56,7 +56,7 @@ messages itself via the gateway, starting from the moment it is installed.
   connects, and the library evicts archived ones on a timer. A watchdog on the
   raw gateway stream (`src/discord/droppedMessages.ts`) therefore counts and logs
   every countable message that arrives for an uncached channel, and fetches that
-  channel so later messages in it are delivered normally; `/raffle config show`
+  channel so later messages in it are delivered normally; `/raffle-mod config show`
   reports the tally when it is non-zero. The message that triggered the recovery
   is still not counted — recovering it would mean a second implementation of the
   counting path, which is deliberately not done.
@@ -68,7 +68,7 @@ messages itself via the gateway, starting from the moment it is installed.
   same window, evaluated at entry time. (A per-raffle "rolling" window ending at
   the entry attempt was removed: it let members qualify by posting after the
   announcement, the opposite of the gate's purpose, and was an easy
-  mis-configuration. The `/raffle eligible` snapshot, which has no raffle start,
+  mis-configuration. The `/raffle-mod eligible` snapshot, which has no raffle start,
   necessarily ends its window at "now" — see "Listing the eligible pool".)
 - With daily buckets the resolution is one UTC calendar day. If hour
   precision is ever needed, switch the activity table to hourly buckets;
@@ -232,7 +232,7 @@ Consequences worth knowing:
   already include post-announcement messages. The reconcile logs this. Accepting
   it is deliberate: the alternative — discarding the whole start day — would
   penalise members who were honestly active earlier that day.
-- `/raffle reset <user> activity` re-measures that member's frozen row for every
+- `/raffle-mod reset <user> activity` re-measures that member's frozen row for every
   open raffle (see "Resetting eligibility"), so the tool still bites mid-raffle.
 
 ### Win cooldown
@@ -256,7 +256,7 @@ Consequences worth knowing:
 ### Imported wins
 A server that ran raffles before installing the bot has a history the bot cannot
 see, and a fresh install would let everyone who just won enter again immediately.
-`/raffle record-win <user> <won-at> [note]` records one of those wins so it counts.
+`/raffle-mod record-win <user> <won-at> [note]` records one of those wins so it counts.
 
 - An imported win is an ordinary win in every way that gates entry: it feeds the
   **time-based cooldown** (measured from the date the moderator gives, so it must
@@ -274,7 +274,7 @@ see, and a fresh install would let everyone who just won enter again immediately
   the dashboard, but never posted — the audit-channel line states who and when,
   never the note, mirroring the blacklist rule.
 - Every import writes an `external_win_recorded` audit row and mirrors a line to
-  the audit channel. The undo is `/raffle reset <user> cooldown`, which waives
+  the audit channel. The undo is `/raffle-mod reset <user> cooldown`, which waives
   imported wins along with drawn ones.
 
 ### Winner claim window
@@ -318,7 +318,7 @@ see, and a fresh install would let everyone who just won enter again immediately
   the audit trail all behave normally, so a test raffle is a faithful dry run.
 
 ### Resetting eligibility
-- Mod-only command: /raffle reset <user> <scope>. A maintenance tool for when a
+- Mod-only command: /raffle-mod reset <user> <scope>. A maintenance tool for when a
   raffle goes wrong (a mis-scheduled test that awarded a real cooldown, a spam
   wave that inflated someone's counts, a win that should not have gated re-entry).
   It is always scoped to one member in one guild and never touches anyone else.
@@ -344,11 +344,11 @@ see, and a fresh install would let everyone who just won enter again immediately
   affected counts) and mirrors a count-free line to the audit channel — the audit
   formatter shows the scope but never the numbers, mirroring the activity-privacy
   rule. A reset that finds nothing to clear still runs and is still logged.
-- Not in scope: it does not lift a blacklist (use /raffle unban) and does not
+- Not in scope: it does not lift a blacklist (use /raffle-mod unban) and does not
   remove active entries.
 
 ### Listing the eligible pool
-- Mod-only command: /raffle eligible. A read-only snapshot of who would be
+- Mod-only command: /raffle-mod eligible. A read-only snapshot of who would be
   eligible *right now* under the guild's default entry settings, with no raffle
   in play — a standing view of the pool a new raffle would draw from, so a mod
   can sanity-check the defaults before opening one. It changes no state and
@@ -376,10 +376,10 @@ see, and a fresh install would let everyone who just won enter again immediately
 - Because the report is mod-only and ephemeral, it may state the applied default
   numbers — the activity-privacy rule (never publish the message bar to members)
   governs member-facing surfaces, not a moderator read-out; the same numbers are
-  already shown by /raffle config show.
+  already shown by /raffle-mod config show.
 
 ### Blacklist
-- Mod-only commands: /raffle ban, /raffle unban, /raffle banlist.
+- Mod-only commands: /raffle-mod ban, /raffle-mod unban, /raffle-mod banlist.
 - Fields: user, banned by, timestamp, optional reason, optional expiry.
 - Banning a user with an active entry in an open raffle removes that entry;
   the removal is logged to the audit channel with a timestamp.
@@ -473,7 +473,7 @@ operator-facing steps.
   inert staged spec isn't a real raffle yet, so it surfaces in the channel only
   when redeemed, via its own `raffle_created` / `raffle_scheduled` rows.
 - All events also stored in the database with timestamps for export.
-- Optional: /raffle audit <raffle_id> command that outputs the full event
+- Optional: /raffle-mod audit <raffle_id> command that outputs the full event
   history and verification instructions for a raffle.
 - Privacy note: publish user ids or mentions, not message contents. Activity
   counts of non-entrants are never published.
@@ -486,11 +486,25 @@ is documented in [commands.md](commands.md). This section records only the
 live in the sections above (entry flow, cooldowns, the draw scheme, test raffles,
 resetting eligibility), and commands.md links back to them.
 
-- All functionality is one `/raffle` command with subcommands, so the bot
-  registers exactly one command.
-- User commands (enter, status, list, claim) are open to everyone; moderator
-  commands are hidden behind Manage Server and additionally gated at run time by
-  the configured mod role.
+- The surface is split by *audience*, not by feature, across two commands:
+  `/raffle` is what members do (enter, withdraw, status, list, claim) and
+  `/raffle-mod` is everything moderators do. Each is one command with
+  subcommands, so the bot registers exactly two.
+- The split is forced by Discord: `default_member_permissions` is a *command*
+  level setting, inherited by every subcommand and overridable by none. A single
+  command holding both audiences must pick one visibility for all of it — and
+  picking the moderator's hid `/raffle withdraw` from the members who needed it.
+- `/raffle` carries no permission default, so it is open to everyone.
+  `/raffle-mod` defaults to Manage Server, so Discord hides it — and with it the
+  list of what moderators can do — from ordinary members.
+- That Discord-side gate is a visibility filter, never the authorisation. Every
+  moderator subcommand independently re-checks the caller against the configured
+  mod role at run time, so the answer does not change if a member reaches one
+  anyway.
+- Visibility and authority are set separately in Discord, so they can disagree:
+  a mod role without Manage Server passes the run-time gate but cannot *see*
+  `/raffle-mod` until a server admin grants it the command in
+  Server Settings → Integrations.
 - Command-surface changes must be reflected in commands.md in the same commit
   (see CLAUDE.md's source-of-truth rule).
 
@@ -503,7 +517,7 @@ walkthrough lives in [commands.md](commands.md#the-creation-wizard); the design
 decisions that shape it:
 
 - The raffle exists in draft status from step 1, so an abandoned wizard loses
-  nothing; /raffle edit reopens the wizard on a draft.
+  nothing; /raffle-mod edit reopens the wizard on a draft.
 - Every raffle-level setting has a guild default, so the eligibility and draw
   steps can each be skipped with a "Use defaults" button.
 - The optional entry gates (bar prior winners, require/exclude a role) live on a
@@ -643,7 +657,7 @@ wins (
   rerolled   INTEGER DEFAULT 0,     -- 1 if later disqualified
   claim_deadline TEXT,              -- claim window: must claim by this instant; null = no claim
   claimed_at     TEXT,              -- when the winner claimed; null until claimed
-  cooldown_waived INTEGER DEFAULT 0 -- 1 if /raffle reset waived this win from gating re-entry
+  cooldown_waived INTEGER DEFAULT 0 -- 1 if /raffle-mod reset waived this win from gating re-entry
 )
 -- guild_id is denormalised from the raffle so a win can stand without one. It is
 -- what scopes the cooldown read; joining through raffles would silently drop
@@ -754,7 +768,7 @@ the dashboard reaches past read-only, kept narrow and bot-mediated:
   `pending_raffle_staged` audit row (not mirrored to the audit channel — the
   staged spec isn't a real raffle yet). The token is returned for the moderator to
   run in Discord.
-- **Redeem (`/raffle from-design <token>`).** The moderator runs the command in
+- **Redeem (`/raffle-mod from-design <token>`).** The moderator runs the command in
   the server. The bot re-authorises them (moderator of *this* guild), checks the
   token is theirs, unredeemed, and unexpired, and shows an ephemeral summary with
   a **Confirm** button. Only on Confirm does it create the raffle — through the
@@ -836,7 +850,7 @@ the dashboard reaches past read-only, kept narrow and bot-mediated:
   throw. So a failed announcement leaves the result recorded and verifiable but
   unpublished. A crash *before* the commit leaves the raffle `closed`, and the
   startup reconcile re-commits and (for auto raffles) re-draws it. A post that
-  fails *after* the commit is recovered with `/raffle announce <raffle>`, which
+  fails *after* the commit is recovered with `/raffle-mod announce <raffle>`, which
   re-publishes the winner announcement and audit result from the stored winners,
   seed, and secret without re-selecting — it draws no new winner and changes no
   state, so it is safe to run repeatedly.

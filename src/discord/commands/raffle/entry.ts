@@ -45,7 +45,7 @@ import {
 } from "../../messages/entryReplies.js";
 import type { CommandContext } from "../index.js";
 
-/** Add the user-facing subcommands to the `/raffle` builder. */
+/** Add the member-facing subcommands to the `/raffle` builder. */
 export function addEntrySubcommands(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder
     .addSubcommand((s) =>

@@ -29,7 +29,7 @@ function auditRows(): Array<{ event_type: string; payload: string | null }> {
   }>;
 }
 
-/** A mod invoking `/raffle record-win`. */
+/** A mod invoking `/raffle-mod record-win`. */
 function record(values: Record<string, unknown>, manageGuild = true) {
   return fakeChatInput({
     subcommand: "record-win",
@@ -129,7 +129,7 @@ describe("handleRecordWin", () => {
     await handleRecordWin(interaction, ctx);
 
     expect(replyText(interaction).toLowerCase()).toContain("cooldown");
-    expect(replyText(interaction)).toContain("/raffle reset");
+    expect(replyText(interaction)).toContain("/raffle-mod reset");
   });
 
   it("stores no note when none is given", async () => {

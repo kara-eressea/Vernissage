@@ -7,7 +7,7 @@
  * Discord layer is responsible for extracting the inputs from an interaction.
  *
  * Bootstrap problem: a freshly-installed bot has no mod_role set yet, so no
- * role could authorize the first `/raffle config` call. Until a mod_role
+ * role could authorize the first `/raffle-mod config` call. Until a mod_role
  * exists, the guild owner or anyone with the Manage Server permission may act;
  * both remain valid escape hatches even after a mod_role is configured. See
  * design.md "Moderator (permission-gated by role)".

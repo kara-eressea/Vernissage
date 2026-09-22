@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const notifier = createNotifier(client, db);
 
   // The in-memory message counter is created up front so command handlers (e.g.
-  // `/raffle reset`) can reach it; attachMessageCounter below starts its flush.
+  // `/raffle-mod reset`) can reach it; attachMessageCounter below starts its flush.
   const counter = new MessageCounter();
 
   // Build the command set with the dependencies handlers close over.
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   const pendingSweep = startPendingRaffleSweep(db);
 
   // The dashboard's Raffle Designer handoff: a small authenticated listener the
-  // dashboard POSTs a composed raffle to, staging it for `/raffle from-design`.
+  // dashboard POSTs a composed raffle to, staging it for `/raffle-mod from-design`.
   // Off unless DESIGNER_HANDOFF_SECRET is set — the bot then opens no inbound
   // socket (docs/dashboard.md "The dashboard never writes the database directly").
   const handoffServer = config.handoff
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
         );
       }
       // On close, freeze entries and publish the commitment; auto-draw if the
-      // raffle draws automatically. Manual raffles wait for `/raffle draw`.
+      // raffle draws automatically. Manual raffles wait for `/raffle-mod draw`.
       if (t.to === "closed") {
         // Retire the entry message's Enter button so it can't be pressed after
         // entries close. Independent of the draw; guarded so it can't crash the tick.

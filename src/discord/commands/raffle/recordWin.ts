@@ -1,5 +1,5 @@
 /**
- * `/raffle record-win <user> <won-at> [note]`.
+ * `/raffle-mod record-win <user> <won-at> [note]`.
  *
  * Record a prize a member won *outside* this bot — before it was installed, or
  * in an event run some other way — so it gates their win cooldown and the
@@ -7,8 +7,8 @@
  * The migration path for a server adopting the bot with a history already behind
  * it, and the reason `wins` no longer requires a raffle (schema v20).
  *
- * One member per invocation, repeatable, mirroring `/raffle ban` and
- * `/raffle reset`. The undo is `/raffle reset <user> cooldown`, which waives
+ * One member per invocation, repeatable, mirroring `/raffle-mod ban` and
+ * `/raffle-mod reset`. The undo is `/raffle-mod reset <user> cooldown`, which waives
  * imported wins along with drawn ones.
  *
  * Handler stays thin: gate, parse the date in the guild's timezone, write the
@@ -37,7 +37,7 @@ import { ensureModerator } from "../moderator.js";
 /** Longest note we store, so an accidental paste can't fill the column. */
 const MAX_NOTE = 200;
 
-/** Add the record-win subcommand to the `/raffle` builder. */
+/** Add the record-win subcommand to the `/raffle-mod` builder. */
 export function addRecordWinSubcommand(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder.addSubcommand((s) =>
     s
@@ -66,7 +66,7 @@ function reply(interaction: ChatInputCommandInteraction, content: string): Promi
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
-/** Handle `/raffle record-win`. */
+/** Handle `/raffle-mod record-win`. */
 export async function handleRecordWin(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -166,6 +166,6 @@ function confirmation(
   const detail = parts.length ? ` ${parts.join(", ")}` : "";
   return (
     `${head} They're now on a win cooldown${detail}, by the server defaults — ` +
-    `a raffle that sets its own cooldown will differ. Undo with \`/raffle reset\` (scope: cooldown).`
+    `a raffle that sets its own cooldown will differ. Undo with \`/raffle-mod reset\` (scope: cooldown).`
   );
 }

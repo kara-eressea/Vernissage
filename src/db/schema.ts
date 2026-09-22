@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS wins (
   -- column rather than joining through raffles (design.md "Win cooldown").
   guild_id   TEXT,
   -- 'raffle' (drawn by this bot) or 'external' (recorded by a moderator with
-  -- /raffle record-win). Only the source differs — an external win gates the win
+  -- /raffle-mod record-win). Only the source differs — an external win gates the win
   -- cooldown and the prior-winner bar exactly like a real one.
   source     TEXT NOT NULL DEFAULT 'raffle',
   -- Free-text note on an imported win: which event or old raffle it was. Shown
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS wins (
   rerolled   INTEGER NOT NULL DEFAULT 0,
   claim_deadline TEXT,               -- claim window: deadline to claim by (null = no claim)
   claimed_at     TEXT,               -- when the winner claimed, null until claimed
-  -- Set by /raffle reset to waive this win from gating re-entry: waived wins
+  -- Set by /raffle-mod reset to waive this win from gating re-entry: waived wins
   -- drop out of getUserWins, lifting both the win cooldown and the prior-winner
   -- bar for that member. The win record itself (winner, claim) is preserved.
   cooldown_waived INTEGER NOT NULL DEFAULT 0
@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS members (
 -- Designer handoff", docs/dashboard.md). The bot stages a composed-but-unpublished
 -- raffle spec here (via its authenticated internal endpoint — the web tier never
 -- writes), keyed by a friendly single-use claim token bound to the staging
--- moderator. A moderator redeems it in-guild with /raffle from-design, which
+-- moderator. A moderator redeems it in-guild with /raffle-mod from-design, which
 -- re-authorises, re-validates, confirms, and only then creates the real raffle.
 -- Nothing here is visible to members, entries, or the draw; unredeemed rows
 -- expire (expires_at) and are swept. spec_json holds the validated raffle fields

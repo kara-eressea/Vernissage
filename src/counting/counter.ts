@@ -75,7 +75,7 @@ export class MessageCounter {
 
   /**
    * Drop a single member's not-yet-flushed counts in a guild, so an activity
-   * reset (`/raffle reset`) isn't partially undone by the next flush re-creating
+   * reset (`/raffle-mod reset`) isn't partially undone by the next flush re-creating
    * rows from buffered messages. Only that member's buckets and hourly tallies
    * are removed; everyone else's pending counts are untouched.
    */

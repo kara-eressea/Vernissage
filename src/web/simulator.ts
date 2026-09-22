@@ -5,7 +5,7 @@
  * `eligibility/service.ts`) into everything the simulator page renders: the
  * slider state, the message-count histogram with the threshold drawn on it, the
  * member table with a plain-language reason per row, a distribution caption, and
- * the ready-to-paste `/raffle config set` command (docs/dashboard.md "The
+ * the ready-to-paste `/raffle-mod config set` command (docs/dashboard.md "The
  * centrepiece: an eligibility simulator"). Pure presentation over data the core
  * already produced — it evaluates no eligibility itself, so the page can never
  * drift from the real gate.
@@ -26,7 +26,7 @@ const MAX_ROWS = 60;
 /** One tunable dial: its range, the settings key it reads, and how to label it. */
 interface SliderDef {
   key: keyof SimulationSettings;
-  /** The `/raffle config set` option name this maps to. */
+  /** The `/raffle-mod config set` option name this maps to. */
   param: string;
   label: string;
   /** Short design-doc symbol (X/Y/K), or "" when it has none. */
@@ -40,7 +40,7 @@ interface SliderDef {
 
 /**
  * The five dials the activity-centric snapshot can evaluate. The param names are
- * the real `/raffle config set` option names, so the generated command pastes
+ * the real `/raffle-mod config set` option names, so the generated command pastes
  * back verbatim (design.md: build commands from the real options, not a copy).
  */
 export const SLIDER_DEFS: readonly SliderDef[] = [
@@ -82,10 +82,10 @@ export function resolveSimSettings(
   return out;
 }
 
-/** The `/raffle config set` command that saves the dialled-in bar as the default. */
+/** The `/raffle-mod config set` command that saves the dialled-in bar as the default. */
 export function buildConfigCommand(settings: SimulationSettings): string {
   return [
-    "/raffle config set",
+    "/raffle-mod config set",
     `req-messages:${settings.reqMessages}`,
     `req-days:${settings.reqDays}`,
     `req-active-days:${settings.reqActiveDays}`,

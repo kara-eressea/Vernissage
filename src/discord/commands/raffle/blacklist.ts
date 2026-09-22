@@ -1,5 +1,5 @@
 /**
- * `/raffle ban`, `/raffle unban`, `/raffle banlist`.
+ * `/raffle-mod ban`, `/raffle-mod unban`, `/raffle-mod banlist`.
  *
  * The moderator blacklist surface (design.md "Blacklist"). Banning a user with
  * an active entry in an open raffle soft-removes that entry and logs it to the
@@ -25,7 +25,7 @@ import { addBan, listBans, removeBan } from "../../../db/repositories/blacklist.
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
-/** Add the ban/unban/banlist subcommands to the `/raffle` builder. */
+/** Add the ban/unban/banlist subcommands to the `/raffle-mod` builder. */
 export function addBanSubcommands(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder
     .addSubcommand((s) =>
@@ -56,7 +56,7 @@ function reply(interaction: ChatInputCommandInteraction, content: string): Promi
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
-/** Handle `/raffle ban`. */
+/** Handle `/raffle-mod ban`. */
 export async function handleBan(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -132,7 +132,7 @@ export async function handleBan(
   await reply(interaction, `Banned ${userMention(user.id)} ${until}.${removed}${reasonNote}`);
 }
 
-/** Handle `/raffle unban`. */
+/** Handle `/raffle-mod unban`. */
 export async function handleUnban(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -165,7 +165,7 @@ export async function handleUnban(
   );
 }
 
-/** Handle `/raffle banlist`. */
+/** Handle `/raffle-mod banlist`. */
 export async function handleBanlist(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,

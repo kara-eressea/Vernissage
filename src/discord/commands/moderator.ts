@@ -1,5 +1,5 @@
 /**
- * Shared moderator gate for `/raffle` subcommands.
+ * Shared moderator gate for `/raffle-mod` subcommands.
  *
  * Extracts the invoking member's standing from an interaction and feeds it to
  * the pure `isModerator` decision (src/core/permissions.ts), with the bootstrap

@@ -6,7 +6,7 @@
  * announce channel and confirming the bot can post there (a live-permission check
  * that can't live in the pure validator), the status flip, the audit row, and
  * wizard-state cleanup. Both the creation wizard's Confirm button and the
- * dashboard's `/raffle from-design` redemption call this, so the two paths
+ * dashboard's `/raffle-mod from-design` redemption call this, so the two paths
  * schedule a raffle identically (design.md "Raffle creation wizard", "Raffle
  * Designer handoff").
  *
@@ -83,7 +83,7 @@ export function confirmAndSchedule(
     return {
       ok: false,
       error:
-        "There is no channel to announce this raffle in. Pick one below, or set a server default with /raffle config set announce-channel.",
+        "There is no channel to announce this raffle in. Pick one below, or set a server default with /raffle-mod config set announce-channel.",
     };
   }
   const accessError = channelAccessError(

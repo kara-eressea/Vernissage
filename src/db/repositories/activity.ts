@@ -56,7 +56,7 @@ export interface UserDailyCounts {
 /**
  * Every user with counted activity in the guild within an inclusive UTC-day
  * range, each with their daily counts (ascending by day). One query, grouped by
- * user in memory, so `/raffle eligible` can enumerate candidates without a
+ * user in memory, so `/raffle-mod eligible` can enumerate candidates without a
  * per-user round trip. Only users who have activity rows appear — the snapshot
  * is a DB-only view and cannot see members who have never sent a counted
  * message (design.md "Listing the eligible pool").
@@ -119,7 +119,7 @@ export function pruneActivityBefore(db: Database, cutoffDay: string): number {
 }
 
 /**
- * Delete a single member's counted-activity rows in a guild (the `/raffle reset`
+ * Delete a single member's counted-activity rows in a guild (the `/raffle-mod reset`
  * activity scope). Returns the number of daily buckets removed. Scoped to the
  * one user and guild, so no one else's counts are touched. Any counts still
  * buffered in memory must be dropped separately via MessageCounter.forgetUser,

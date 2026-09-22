@@ -2,7 +2,7 @@
  * Open-raffle end-time correction.
  *
  * While a raffle is open its end time may be corrected — moved earlier or later,
- * but not before its start (design.md edit constraint). `/raffle edit` on an open
+ * but not before its start (design.md edit constraint). `/raffle-mod edit` on an open
  * raffle shows this modal; the submit is dispatched here via the "editend"
  * custom-id namespace. Parsing (in the guild's timezone) and the after-start rule
  * come from the pure core.

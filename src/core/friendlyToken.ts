@@ -2,7 +2,7 @@
  * Friendly claim-token generator (pure).
  *
  * The Raffle Designer hands a composed raffle back to Discord as a short,
- * single-use claim token the moderator types into `/raffle from-design`
+ * single-use claim token the moderator types into `/raffle-mod from-design`
  * (docs/dashboard.md "The handoff problem, and the claim-token solution"). The
  * token is rendered as a readable phrase — `adjective-noun-NNNN`, e.g.
  * `gentle-harbor-4821` — so it can be read aloud and pasted cleanly.

@@ -90,7 +90,7 @@ These two permissions are all the bot needs: it reads message events to count
 activity, and it sends and edits its own messages (raffle posts, the audit log,
 and announcements). It does not need any moderator or management permissions in
 Discord itself; who may run its moderator commands is controlled separately,
-inside the bot, with `/raffle config`.
+inside the bot, with `/raffle-mod config`.
 
 Make sure the bot can actually see and post in the channels you plan to use for
 raffles, announcements, and the audit log. If those channels restrict access by
@@ -126,8 +126,9 @@ Do not commit `.env` to version control. It contains your secret token.
 Follow the run instructions in the [README](../README.md). In short:
 
 1. Start the bot (with Docker, or from source).
-2. Wait a moment, then type `/raffle` in your server to confirm the commands
-   appear.
+2. Wait a moment, then type `/raffle` in your server to confirm the member
+   commands appear, and `/raffle-mod` to confirm the moderator ones do. If you
+   hold Manage Server you should see both.
 
 The bot registers its slash commands itself when it starts, in every server on
 its allowlist that it has joined — and again the moment it joins one — so there
@@ -140,14 +141,14 @@ node dist/src/deploy-commands.js`) does that; see
 
 Once the bot is running, a moderator sets things up from inside Discord:
 
-1. Run `/raffle config set` to choose an announce channel (where raffles are
+1. Run `/raffle-mod config set` to choose an announce channel (where raffles are
    posted), an audit channel (where a log of actions is mirrored), and a
    moderator role (who may run the moderator commands).
 2. Optionally set default activity requirements, cooldowns, a minimum account
    age, and a timezone, so the raffle creation wizard can prefill them.
-3. Use `/raffle config channel` to include or exclude specific channels from
+3. Use `/raffle-mod config channels` to include or exclude specific channels from
    message counting.
-4. Run `/raffle config show` at any time to review the settings.
+4. Run `/raffle-mod config show` at any time to review the settings.
 
 Until a moderator role is set, the server owner and anyone with the Manage Server
 permission can run the moderator commands.
@@ -163,6 +164,11 @@ full list of commands.
   try again after a minute, or restart your Discord client. If the server was
   added to `GUILD_IDS` after the bot started, restart it (or run
   `deploy-commands`) so it registers there.
+- `/raffle` appears but `/raffle-mod` does not. That is the permission gate
+  doing its job: `/raffle-mod` requires Manage Server, so Discord hides it from
+  everyone else — including a moderator whose only authority is the configured
+  mod role. Either give that role Manage Server, or grant it the command
+  directly in **Server Settings → Integrations → Tombola**.
 - The bot appears offline. Check that it is actually running and that
   `DISCORD_TOKEN` is correct. A wrong or reset token will prevent it from
   connecting. The bot logs an error on startup if the token is invalid.

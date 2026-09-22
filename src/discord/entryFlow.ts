@@ -253,7 +253,7 @@ export async function announceOpenRaffle(
     // so surface them to the mods on the audit channel instead of only a log.
     await notifier.postAudit(
       raffle.guild_id,
-      `⚠️ Raffle #${raffleId} (**${raffle.name ?? "unnamed"}**) opened, but no announce channel is configured — its entry message was not posted. Set one with /raffle config set announce-channel.`,
+      `⚠️ Raffle #${raffleId} (**${raffle.name ?? "unnamed"}**) opened, but no announce channel is configured — its entry message was not posted. Set one with /raffle-mod config set announce-channel.`,
     );
     return;
   }

@@ -51,7 +51,7 @@ function entryCountsByRaffle(db: Database): Map<number, number> {
 
 /**
  * Every win by id and the raffle it belongs to. Keyed on win_id rather than
- * counted per raffle because since v20 an imported win (`/raffle record-win`)
+ * counted per raffle because since v20 an imported win (`/raffle-mod record-win`)
  * has no raffle_id at all, and those gate the win cooldown and the prior-winner
  * bar exactly like a drawn one — losing them silently would quietly re-open
  * eligibility for people who should still be barred.
@@ -140,7 +140,7 @@ function whatHappensNext(restored: RaffleState): string {
     return `the scheduler would move it forward again on startup.`;
   }
   if (restored.draw_mode === "manual") {
-    return `it would stay closed on startup until a moderator runs \`/raffle draw\`.`;
+    return `it would stay closed on startup until a moderator runs \`/raffle-mod draw\`.`;
   }
   return (
     `the startup reconcile would draw it again from the same committed secret, ` +
@@ -195,7 +195,7 @@ function compareWins(
   if (lostImported > 0) {
     advisory.push(
       `${lostImported} manually recorded win${lostImported === 1 ? "" : "s"} ` +
-        `(\`/raffle record-win\`) ${lostImported === 1 ? "is" : "are"} not in the backup; ` +
+        `(\`/raffle-mod record-win\`) ${lostImported === 1 ? "is" : "are"} not in the backup; ` +
         `${lostImported === 1 ? "it gates" : "they gate"} win cooldowns and the prior-winner bar.`,
     );
   }

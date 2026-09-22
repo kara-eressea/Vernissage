@@ -16,7 +16,7 @@ import type { BotConfig } from "../../config.js";
 import type { MessageCounter } from "../../counting/counter.js";
 import type { DropWatchHandle } from "../droppedMessages.js";
 import type { Notifier } from "../notifier.js";
-import { buildRaffleCommand } from "./raffle/index.js";
+import { buildRaffleCommand, buildRaffleModCommand } from "./raffle/index.js";
 import type { Command } from "./types.js";
 
 /** Dependencies handed to every command at construction time. */
@@ -26,22 +26,29 @@ export interface CommandContext {
   /** The Discord-posting seam (audit mirror + announcements). */
   notifier: Notifier;
   /**
-   * The live in-memory message counter, so `/raffle reset` can drop a member's
+   * The live in-memory message counter, so `/raffle-mod reset` can drop a member's
    * not-yet-flushed counts. Optional: commands that don't touch activity (and
    * most tests) run without it.
    */
   counter?: MessageCounter;
   /**
-   * The gateway watchdog, so `/raffle config show` can report messages that were
+   * The gateway watchdog, so `/raffle-mod config show` can report messages that were
    * dropped before counting (issue #28). Optional: absent in tests and in any
    * process that doesn't hold a gateway connection.
    */
   dropWatch?: DropWatchHandle;
 }
 
-/** Build the full command set, wiring each handler to `ctx`. */
+/**
+ * Build the full command set, wiring each handler to `ctx`.
+ *
+ * Two commands, split by audience: `/raffle` for members and `/raffle-mod` for
+ * moderators. The split is forced by Discord — `default_member_permissions` is
+ * per command, so the moderator surface can only be hidden from members by
+ * living in a command of its own (see raffle/index.ts).
+ */
 export function buildCommands(ctx: CommandContext): Command[] {
-  return [buildRaffleCommand(ctx)];
+  return [buildRaffleCommand(ctx), buildRaffleModCommand(ctx)];
 }
 
 /** Index a command list by name for O(1) dispatch. */

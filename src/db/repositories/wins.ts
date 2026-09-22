@@ -5,7 +5,7 @@
  * marked `rerolled` was later disqualified and replaced (design.md reroll).
  *
  * Since v20 a win does not need a raffle. `source` is `'raffle'` for a draw this
- * bot ran and `'external'` for one a moderator imported with `/raffle record-win`
+ * bot ran and `'external'` for one a moderator imported with `/raffle-mod record-win`
  * — a prize won before the bot existed, or outside it. Both gate the win cooldown
  * and the prior-winner bar identically; only the raffle-keyed reads below
  * (claims, rerolls, the verifier) skip an external win, which is correct — it has
@@ -156,7 +156,7 @@ export function activeWinnerIds(db: Database, raffleId: number): string[] {
  * re-entry. Test-raffle wins are excluded too, so a test win never gates a
  * member's future entries or bars them as a prior winner (design.md "Test
  * raffles"; the prior-winner check reads this same list). Wins waived by
- * `/raffle reset` are excluded as well, so a mod can clear a member's cooldown
+ * `/raffle-mod reset` are excluded as well, so a mod can clear a member's cooldown
  * and prior-winner bar (design.md "Resetting eligibility"). Imported wins are
  * included — that is the whole point of recording one. Scoped on `wins.guild_id`
  * (since v20; it used to join through the raffle, which an imported win does not
@@ -183,7 +183,7 @@ export function getUserWins(db: Database, guildId: string, userId: string): WinR
 }
 
 /**
- * Waive a member's still-gating wins in a guild (the `/raffle reset` cooldown
+ * Waive a member's still-gating wins in a guild (the `/raffle-mod reset` cooldown
  * scope): mark every non-rerolled, not-yet-waived win they hold in this guild as
  * `cooldown_waived`, so it drops out of getUserWins and stops gating re-entry.
  * Returns how many wins were waived. Idempotent — a second call waives nothing.
@@ -202,7 +202,7 @@ export function waiveUserWins(db: Database, guildId: string, userId: string): nu
   return info.changes;
 }
 
-/** One imported win, as `/raffle record-win` records it. */
+/** One imported win, as `/raffle-mod record-win` records it. */
 export interface ExternalWinInput {
   guildId: string;
   userId: string;

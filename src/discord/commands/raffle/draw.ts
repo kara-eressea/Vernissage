@@ -1,5 +1,5 @@
 /**
- * `/raffle draw` and `/raffle reroll`.
+ * `/raffle-mod draw` and `/raffle-mod reroll`.
  *
  * The moderator-triggered ends of the draw lifecycle: manually draw a closed
  * raffle (for `draw_mode='manual'`, or to force an auto raffle that has not run
@@ -22,7 +22,7 @@ import { makePresenceResolver } from "../../memberPresence.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
-/** Add the draw/reroll subcommands to the `/raffle` builder. */
+/** Add the draw/reroll subcommands to the `/raffle-mod` builder. */
 export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder
     .addSubcommand((s) =>
@@ -58,7 +58,7 @@ export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBu
   return builder;
 }
 
-/** Handle `/raffle draw`. */
+/** Handle `/raffle-mod draw`. */
 export async function handleDraw(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -105,7 +105,7 @@ export async function handleDraw(
   });
 }
 
-/** Handle `/raffle announce`: re-post a drawn raffle's result from stored data. */
+/** Handle `/raffle-mod announce`: re-post a drawn raffle's result from stored data. */
 export async function handleAnnounce(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -130,7 +130,7 @@ export async function handleAnnounce(
   if (!outcome.ok) {
     const message =
       outcome.reason === "not_drawn"
-        ? "Only a drawn raffle can be re-announced. Use `/raffle draw` for one that hasn't been drawn yet."
+        ? "Only a drawn raffle can be re-announced. Use `/raffle-mod draw` for one that hasn't been drawn yet."
         : outcome.reason === "missing_commitment"
           ? "That raffle has no stored draw data to re-announce."
           : "No raffle with that id in this server.";
@@ -145,7 +145,7 @@ export async function handleAnnounce(
   });
 }
 
-/** Handle `/raffle reroll`. */
+/** Handle `/raffle-mod reroll`. */
 export async function handleReroll(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,

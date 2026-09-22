@@ -1,5 +1,5 @@
 /**
- * `/raffle config` — guild settings.
+ * `/raffle-mod config` — guild settings.
  *
  * Subcommands:
  *   - show    : display the current guild config and counted-channel rules.
@@ -53,7 +53,7 @@ import type { ChannelMode } from "../../../core/types.js";
 import type { CommandContext } from "../index.js";
 import { ensureModerator } from "../moderator.js";
 
-/** Attach the `config` subcommand group to the shared `/raffle` builder. */
+/** Attach the `config` subcommand group to the `/raffle-mod` builder. */
 export function addConfigGroup(group: SlashCommandSubcommandGroupBuilder): SlashCommandSubcommandGroupBuilder {
   return group
     .setName("config")

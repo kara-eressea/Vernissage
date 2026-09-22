@@ -43,7 +43,7 @@ function auditRows(): Array<{ event_type: string; actor_id: string | null; paylo
   }>;
 }
 
-/** A mod invoking `/raffle reset` on `target` with a given scope. */
+/** A mod invoking `/raffle-mod reset` on `target` with a given scope. */
 function reset(scope: string, target = "target") {
   return fakeChatInput({
     subcommand: "reset",

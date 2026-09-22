@@ -1,5 +1,5 @@
 /**
- * `/raffle create`, `/raffle edit`, `/raffle cancel`.
+ * `/raffle-mod create`, `/raffle-mod edit`, `/raffle-mod cancel`.
  *
  * The lifecycle commands that produce and retire raffles. `create` and a
  * draft/scheduled `edit` open the wizard; an open `edit` allows only an
@@ -29,7 +29,7 @@ import { createWizard } from "../../wizard/index.js";
 import { editEndModal } from "./editEnd.js";
 import { ensureModerator } from "../moderator.js";
 
-/** Add create/edit/cancel subcommands to the `/raffle` builder. */
+/** Add create/edit/cancel subcommands to the `/raffle-mod` builder. */
 export function addManageSubcommands(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder
     .addSubcommand((s) =>

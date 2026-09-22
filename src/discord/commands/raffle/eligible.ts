@@ -1,5 +1,5 @@
 /**
- * `/raffle eligible`.
+ * `/raffle-mod eligible`.
  *
  * A moderator read-out of who would be eligible right now under the server's
  * default entry settings, with no raffle in play — a standing view of the pool
@@ -31,7 +31,7 @@ import { ensureModerator } from "../moderator.js";
  * Discord's 2000-char message limit (each mention is ~22 chars). */
 const MAX_LISTED = 80;
 
-/** Add the eligible subcommand to the `/raffle` builder. */
+/** Add the eligible subcommand to the `/raffle-mod` builder. */
 export function addEligibleSubcommand(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder.addSubcommand((s) =>
     s
@@ -41,7 +41,7 @@ export function addEligibleSubcommand(builder: SlashCommandBuilder): SlashComman
   return builder;
 }
 
-/** Handle `/raffle eligible`. */
+/** Handle `/raffle-mod eligible`. */
 export async function handleEligible(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -56,7 +56,7 @@ export async function handleEligible(
   if (!pool.hasDefaults) {
     await interaction.reply({
       content:
-        "Set a default activity requirement first with `/raffle config set req-messages:… req-days:…`. " +
+        "Set a default activity requirement first with `/raffle-mod config set req-messages:… req-days:…`. " +
         "This report finds eligible members from counted activity, so it needs a default message/day bar to apply.",
       flags: MessageFlags.Ephemeral,
     });

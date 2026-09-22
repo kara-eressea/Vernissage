@@ -281,7 +281,7 @@ function drawModeSelect(raffle: RaffleRow): ActionRowBuilder<StringSelectMenuBui
       },
       {
         label: "Draw: manual",
-        description: "The raffle closes, then waits for a mod to run /raffle draw.",
+        description: "The raffle closes, then waits for a mod to run /raffle-mod draw.",
         value: "manual",
         default: raffle.draw_mode === "manual",
       },

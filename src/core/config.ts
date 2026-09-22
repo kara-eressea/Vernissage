@@ -2,7 +2,7 @@
  * Guild-config input validation (pure).
  *
  * Normalizes and validates the scalar settings a moderator can set via
- * `/raffle config set`. Each validator returns either the accepted value or a
+ * `/raffle-mod config set`. Each validator returns either the accepted value or a
  * plain-language error the Discord layer can show verbatim. No discord.js or
  * database import: this is unit-testable in isolation.
  *

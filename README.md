@@ -102,7 +102,7 @@ The old single-server variable `HOME_GUILD_ID` still works as a fallback when
 `GUILD_IDS` is not set, so existing setups need no change.
 
 Everything else, such as the audit channel, the moderator role, and default
-raffle settings, is configured from inside Discord with the `/raffle config`
+raffle settings, is configured from inside Discord with the `/raffle-mod config`
 command after the bot is running.
 
 ## Running on a server with Docker
@@ -278,22 +278,23 @@ guilds the bot has not joined yet are skipped, not errors.
 
 After the bot is running, a moderator should set up the server:
 
-1. Run `/raffle config set` and choose an audit channel, an announce channel,
+1. Run `/raffle-mod config set` and choose an audit channel, an announce channel,
    and a moderator role. The announce channel is where raffles are posted. The
    audit channel receives a log of actions. The moderator role controls who may
    run the moderator commands.
 2. Optionally set default activity requirements, cooldowns, a minimum account
    age, and a timezone, so the raffle creation wizard can fill those in for you.
-3. Use `/raffle config channel` to include or exclude specific channels from
+3. Use `/raffle-mod config channels` to include or exclude specific channels from
    message counting, for example to exclude a bot-commands channel.
-4. Run `/raffle config show` at any time to review the current settings.
+4. Run `/raffle-mod config show` at any time to review the current settings.
 
 Until a moderator role is set, the server owner and anyone with the Manage
 Server permission can run the moderator commands.
 
 ## Command reference
 
-All commands are subcommands of `/raffle`. This is a quick overview; for every
+Commands are split by audience: `/raffle` for members, `/raffle-mod` for
+moderators (hidden from members by Discord). This is a quick overview; for every
 option and worked examples, see [docs/commands.md](docs/commands.md).
 
 ### For everyone
@@ -301,6 +302,7 @@ option and worked examples, see [docs/commands.md](docs/commands.md).
 | Command                  | What it does                                                                 |
 | ------------------------ | --------------------------------------------------------------------------- |
 | `/raffle enter [raffle]` | Enter an open raffle. You can also press the Enter button on the raffle post. |
+| `/raffle withdraw [raffle]` | Take your entry back out of an open raffle. You can re-enter while it stays open. |
 | `/raffle status [raffle]`| See your own eligibility: activity progress, cooldown, and entry status. Only you see the reply. |
 | `/raffle list`           | Show open and upcoming raffles.                                             |
 | `/raffle claim [raffle]` | Claim a prize you won, for raffles that have a claim window. Claim before the deadline shown in the winner announcement or the prize is re-drawn. |
@@ -309,23 +311,23 @@ option and worked examples, see [docs/commands.md](docs/commands.md).
 
 | Command                                     | What it does                                                              |
 | ------------------------------------------- | ------------------------------------------------------------------------ |
-| `/raffle create`                            | Start the guided wizard to create a raffle.                              |
-| `/raffle edit <raffle>`                     | Edit a draft or scheduled raffle. On an open raffle you can correct the end time (earlier or later, but not before it started). |
-| `/raffle cancel <raffle> <reason>`          | Cancel a raffle before it is drawn.                                      |
-| `/raffle draw <raffle>`                     | Draw a closed raffle now, if it is not set to draw automatically.        |
-| `/raffle reroll <raffle> <winner> <reason>` | Replace a disqualified winner. Recorded with the reason.                 |
-| `/raffle ban <user> [duration] [reason]`    | Block a user from entering. Duration examples: `30m`, `24h`, `7d`, `2w`. Leave blank for a permanent block. |
-| `/raffle unban <user>`                      | Remove a user's block. Does not restore entries that were already removed. |
-| `/raffle banlist`                           | List currently blocked users. Only you see the reply.                    |
-| `/raffle reset <user> <scope>`              | Reset a member's standing: `cooldown`, `activity`, or `all`. Scoped to that one member. |
-| `/raffle config show`                       | Show the server settings.                                                |
-| `/raffle config set [options]`              | Change server settings.                                                  |
-| `/raffle config channels <action> [channel]`| Include, exclude, or clear a counted channel, or `list` the rules. Run per channel to build a multi-channel set. |
+| `/raffle-mod create`                            | Start the guided wizard to create a raffle.                              |
+| `/raffle-mod edit <raffle>`                     | Edit a draft or scheduled raffle. On an open raffle you can correct the end time (earlier or later, but not before it started). |
+| `/raffle-mod cancel <raffle> <reason>`          | Cancel a raffle before it is drawn.                                      |
+| `/raffle-mod draw <raffle>`                     | Draw a closed raffle now, if it is not set to draw automatically.        |
+| `/raffle-mod reroll <raffle> <winner> <reason>` | Replace a disqualified winner. Recorded with the reason.                 |
+| `/raffle-mod ban <user> [duration] [reason]`    | Block a user from entering. Duration examples: `30m`, `24h`, `7d`, `2w`. Leave blank for a permanent block. |
+| `/raffle-mod unban <user>`                      | Remove a user's block. Does not restore entries that were already removed. |
+| `/raffle-mod banlist`                           | List currently blocked users. Only you see the reply.                    |
+| `/raffle-mod reset <user> <scope>`              | Reset a member's standing: `cooldown`, `activity`, or `all`. Scoped to that one member. |
+| `/raffle-mod config show`                       | Show the server settings.                                                |
+| `/raffle-mod config set [options]`              | Change server settings.                                                  |
+| `/raffle-mod config channels <action> [channel]`| Include, exclude, or clear a counted channel, or `list` the rules. Run per channel to build a multi-channel set. |
 
 ## Raffle options
 
-When a moderator creates a raffle with `/raffle create`, the wizard offers these
-settings. Most have a server-wide default (set with `/raffle config`) that the
+When a moderator creates a raffle with `/raffle-mod create`, the wizard offers these
+settings. Most have a server-wide default (set with `/raffle-mod config`) that the
 wizard pre-fills, so you only change what you want to differ for that raffle.
 
 - **Activity requirement** — how many messages a member must have sent, over how

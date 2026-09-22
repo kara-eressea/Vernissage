@@ -120,7 +120,7 @@ RIGHT — a stack of live previews:
 BOTTOM of the composer: a primary "Create in Discord" button. Clicking it opens a
 HANDOFF MODAL — a signature moment, design it with care:
   • A short generated command in a big copyable code block:
-        /raffle from-design gentle-harbor-4821
+        /raffle-mod from-design gentle-harbor-4821
   • Copy button.
   • Reassuring explanation: "Run this in your server. The bot will show you a
     summary and ask you to confirm before the raffle is created — nothing is
@@ -175,7 +175,7 @@ RESULTS, three parts:
 
 Below results: an "Apply in Discord" card with the generated command in a copyable
 code block, e.g.
-    /raffle config set req-messages:10 req-days:14 req-active-days:3
+    /raffle-mod config set req-messages:10 req-days:14 req-active-days:3
 and a note: "The dashboard makes no changes — run this in your server to apply."
 
 Exact numbers are fine here (mod-only view). Show empty and loading states. The

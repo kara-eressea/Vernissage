@@ -142,7 +142,7 @@ The feature that motivated this note: let a moderator **play with the knobs and
 immediately see who would be eligible, who would not, and why** — then carry the
 chosen values back to Discord.
 
-This is cheap because it is almost entirely built already. `/raffle eligible` is
+This is cheap because it is almost entirely built already. `/raffle-mod eligible` is
 powered by `snapshotEligibleUsers` / `buildSnapshotInput`
 (`src/core/eligibilitySnapshot.ts`), which enumerates candidates from the
 `activity` table and runs the pure `checkEligibility` against a set of default
@@ -171,7 +171,7 @@ design mock:
   first failing reason. Account age would derive from the id snowflake with no
   fetch (not currently surfaced here).
 - **The generated command uses the real option names.** It is built from the
-  actual `/raffle config set` options (`req-messages`, `req-days`,
+  actual `/raffle-mod config set` options (`req-messages`, `req-days`,
   `req-active-days`, `min-account-age-days`, `cooldown-days`) so it pastes back
   verbatim — the design's shortened `min-age`/`cooldown` labels were mock-only.
   The count-based cooldown isn't a slider; it rides along from config unchanged
@@ -205,7 +205,7 @@ version.
 ### Generate the command, don't run it
 
 The dashboard already knows the values the moderator dialled in, so it can render
-the **exact `/raffle config set …` (or per-raffle wizard override) command** to
+the **exact `/raffle-mod config set …` (or per-raffle wizard override) command** to
 paste back into Discord — even the whole command, ready to copy.
 
 This is the elegant part, not a compromise. The change still flows through the
@@ -247,7 +247,7 @@ Two tiers follow naturally:
 
 Because the simulator is a moderator-only, ephemeral read-out, it may show exact
 numbers — the "never show the activity bar to members" rule governs
-member-facing surfaces, and `/raffle eligible` and `/raffle config show` already
+member-facing surfaces, and `/raffle-mod eligible` and `/raffle-mod config show` already
 print these figures to moderators.
 
 ## Per-raffle eligibility: "why couldn't they enter?"
@@ -378,7 +378,7 @@ listener (`src/handoff/server.ts`) — the web tier still writes nothing. The bo
 re-validates via the shared `buildPendingSpec`/`validateDraft`, stages it in
 `pending_raffles` under a friendly token (`src/core/friendlyToken.ts`), and audits
 `pending_raffle_staged`. The dashboard shows the token in a modal; the moderator
-runs `/raffle from-design <token>`, and the Confirm button redeems it through the
+runs `/raffle-mod from-design <token>`, and the Confirm button redeems it through the
 shared `confirmAndSchedule` seam (`src/discord/raffleScheduling.ts`) that the
 creation wizard's Confirm also uses. Enabled only when `DESIGNER_HANDOFF_SECRET`
 is set on both processes; otherwise the button stays the Phase-A preview sandbox
@@ -426,7 +426,7 @@ they reuse the card formatter, the simulator, and the validation rules verbatim.
 ### The handoff problem, and the claim-token solution
 
 Config was easy to carry back to Discord because it is one flat command. Raffle
-creation is not: it is deliberately a *stateful wizard* (`/raffle create` builds
+creation is not: it is deliberately a *stateful wizard* (`/raffle-mod create` builds
 a draft incrementally, with friendly timezone-aware schedule input and "nothing
 published until you confirm"), and there is **no single command that fully
 specifies a raffle**. Pasting ~18 options into one command would work
@@ -440,7 +440,7 @@ command:
    stage the composed settings as a *pending raffle spec*, keyed by a short,
    unguessable, single-use token.
 3. The dashboard shows a tiny command to run in the server, e.g.
-   `/raffle from-design gentle-harbor-4821`.
+   `/raffle-mod from-design gentle-harbor-4821`.
 4. The bot, on that command, **re-authorizes** (is the caller a moderator in this
    guild?), **re-validates** the spec through the same wizard validation,
    **shows a confirmation summary** ("You're about to create *Summer Vinyl*,
@@ -480,9 +480,9 @@ carefully contained:
 ### The honest cost
 
 This is more moving parts than the simulator: a `pending_raffle` table, an
-authenticated bot endpoint, a new `/raffle from-design` command, token
+authenticated bot endpoint, a new `/raffle-mod from-design` command, token
 lifecycle/pruning, and the redemption confirmation UX. The lighter alternative —
-a Designer that only *previews* and then prefills `/raffle create name: prize:`,
+a Designer that only *previews* and then prefills `/raffle-mod create name: prize:`,
 leaving the rest to the wizard — keeps the dashboard purely read-only but makes
 the moderator re-enter most fields. The trade is **best-in-class UX with a
 contained, bot-mediated write** versus **purest read-only with some double
@@ -527,11 +527,11 @@ flagged by whether they lean on data we already store:
   were left out. Entrant counts are the **committed** list (active entrants plus
   `draw_disqualified`), the same number the verifier hashes, so no raffle shows two
   different entrant counts on two pages. The page also lists **imported wins** —
-  prizes recorded with `/raffle record-win` for raffles this bot never ran
+  prizes recorded with `/raffle-mod record-win` for raffles this bot never ran
   (design.md "Imported wins"). They have no raffle to be a row of, but they gate
   cooldowns exactly like a drawn win, so leaving them off would make the page read
   as the whole record of who has won when it is not; a win since waived by
-  `/raffle reset` is shown struck through rather than dropped.
+  `/raffle-mod reset` is shown struck through rather than dropped.
 - **A fairness lens (cheap; uses the `wins` table).** Distribution of wins across
   members over time — has the same handful of people won repeatedly? This is the
   question a suspicious community actually asks, and the data to answer it is
@@ -683,8 +683,9 @@ Operationally:
 
 Still open: the dashboard admits only guild **owners** and holders of **Manage
 Server**, not the configured `mod_role`, because the web tier has no bot token to
-read roles with. A moderator whose only authority is that role can run `/raffle`
-commands in chat but cannot sign in. Closing it is the Tier-2 member fetch, which
+read roles with. A moderator whose only authority is that role passes the run-time gate on
+`/raffle-mod` in chat (given command visibility, see
+[commands.md](commands.md)) but cannot sign in here. Closing it is the Tier-2 member fetch, which
 would also let the re-check consult the bot instead of Discord.
 
 ### Support viewers
@@ -705,7 +706,7 @@ grants those users **sight of every allowlisted guild, and nothing else**:
   Designer's handoff, and it refuses a guild the visitor doesn't moderate
   (`403 read_only`) as well as hiding the button. The web tier still writes
   nothing, so "read-only" here is one narrow gate, not a new permission model —
-  and `/raffle from-design` runs `ensureModerator` in Discord regardless, so a
+  and `/raffle-mod from-design` runs `ensureModerator` in Discord regardless, so a
   staged spec would be refused there too.
 - **Visibly read-only.** The chrome carries a "Read-only" badge on every page of
   such a guild, the account block says "Support viewer" rather than "Moderator",
@@ -763,7 +764,7 @@ gives the web tier a better source.
    past read-only, built after the read-only surface proved itself. Phase A: the
    visual composer with live entry-card and eligible-pool previews (read-only).
    Phase B: the claim-token handoff (staging table, bot endpoint,
-   `/raffle from-design`, redemption confirmation), enabled by
+   `/raffle-mod from-design`, redemption confirmation), enabled by
    `DESIGNER_HANDOFF_SECRET`.
 6. **Tier-2 member fetch** (role/tenure fidelity, per-draft dry-run) and **audit
    export**, if and when they earn their keep.

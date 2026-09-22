@@ -219,7 +219,7 @@ describe("restore impact", () => {
     const result = await runRestore({ archivePath, databasePath: live, force: true });
 
     const warnings = result.warnings.join("\n");
-    expect(warnings).toContain("/raffle draw");
+    expect(warnings).toContain("/raffle-mod draw");
     expect(warnings).not.toMatch(/startup reconcile would draw/);
   });
 

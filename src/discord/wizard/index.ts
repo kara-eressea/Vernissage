@@ -235,14 +235,14 @@ export function createWizard(deps: WizardDeps): Wizard {
     if (parsed.action === "cancel") {
       clearWizardState(db, parsed.raffleId);
       await respond(interaction, {
-        content: "Cancelled. The draft was left untouched — resume any time with `/raffle edit`.",
+        content: "Cancelled. The draft was left untouched — resume any time with `/raffle-mod edit`.",
         components: [],
       });
       return;
     }
     if (parsed.action === "savedraft") {
       await respond(interaction, {
-        content: "Saved as a draft. Resume with `/raffle edit`; nothing is published until you confirm.",
+        content: "Saved as a draft. Resume with `/raffle-mod edit`; nothing is published until you confirm.",
         components: [],
       });
       return;
@@ -477,7 +477,7 @@ export function createWizard(deps: WizardDeps): Wizard {
     if (action === "confirm" && interaction.isButton()) {
       const now = new Date().toISOString();
       const fresh = getRaffle(db, id)!;
-      // Shared with /raffle from-design: validate, resolve + permission-check the
+      // Shared with /raffle-mod from-design: validate, resolve + permission-check the
       // announce channel, flip to scheduled, audit, and clear wizard state.
       const outcome = confirmAndSchedule(db, deps.notifier, fresh, interaction.guild, interaction.user.id, now);
       if (!outcome.ok) {

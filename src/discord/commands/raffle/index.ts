@@ -1,14 +1,24 @@
 /**
- * The single top-level `/raffle` command.
+ * The two top-level raffle commands.
  *
- * All raffle functionality hangs off one command as subcommand groups, so the
- * bot registers exactly one command. This module owns the shell and dispatches
- * to the right group handler; each feature area (config here; create/enter/
- * draw/ban in later issues) contributes its own subcommand group and handler.
+ * The surface is split by audience, not by feature:
  *
- * A coarse Discord-side gate (`ManageGuild`) hides the command from ordinary
- * members; the authoritative, mod-role-aware check lives in each handler via
- * the pure `isModerator` gate.
+ * - `/raffle` — what members do: enter, withdraw, status, list, claim. No
+ *   Discord-side permission default, so everyone can see and run it.
+ * - `/raffle-mod` — what moderators do: everything else. Gated with
+ *   `ManageGuild` as `default_member_permissions`, so Discord hides the whole
+ *   command (and with it the list of moderator capabilities) from ordinary
+ *   members.
+ *
+ * They are two commands because `default_member_permissions` is a *command*
+ * level setting: subcommands inherit it and cannot override it. One command
+ * carrying both audiences therefore has to pick one visibility for all of them,
+ * and picking `ManageGuild` hid `/raffle withdraw` from the members who needed
+ * it (issue #49).
+ *
+ * The Discord-side gate is a visibility filter, never the authorisation: every
+ * moderator handler independently calls the mod-role-aware `ensureModerator`
+ * gate, so a member who reaches one anyway is still refused.
  */
 
 import {
@@ -36,17 +46,34 @@ import { addManageSubcommands, handleCancel, handleCreate, handleEdit } from "./
 import { addRecordWinSubcommand, handleRecordWin } from "./recordWin.js";
 import { addResetSubcommand, handleReset } from "./reset.js";
 
-/** Build the `/raffle` command, wiring every subcommand (group) to `ctx`. */
+/** The member-facing command name. */
+export const RAFFLE_COMMAND = "raffle";
+/** The moderator command name. */
+export const RAFFLE_MOD_COMMAND = "raffle-mod";
+
+/** Build `/raffle`, the member-facing command, wiring every subcommand to `ctx`. */
 export function buildRaffleCommand(ctx: CommandContext): Command {
   const data = new SlashCommandBuilder()
-    .setName("raffle")
+    .setName(RAFFLE_COMMAND)
+    .setDescription("Enter raffles and check where you stand.");
+  addEntrySubcommands(data);
+
+  return {
+    data,
+    execute: (interaction) => dispatchMember(interaction, ctx),
+  };
+}
+
+/** Build `/raffle-mod`, the moderator command, wiring every subcommand (group) to `ctx`. */
+export function buildRaffleModCommand(ctx: CommandContext): Command {
+  const data = new SlashCommandBuilder()
+    .setName(RAFFLE_MOD_COMMAND)
     .setDescription("Run and manage raffles.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-  // Top-level subcommands (create/edit/cancel) added while `data` is still a
-  // full SlashCommandBuilder, then the config subcommand group.
+  // Top-level subcommands added while `data` is still a full
+  // SlashCommandBuilder, then the config subcommand group.
   addManageSubcommands(data);
   addFromDesignSubcommand(data);
-  addEntrySubcommands(data);
   addDrawSubcommands(data);
   addBanSubcommands(data);
   addRecordWinSubcommand(data);
@@ -56,12 +83,38 @@ export function buildRaffleCommand(ctx: CommandContext): Command {
 
   return {
     data,
-    execute: (interaction) => dispatch(interaction, ctx),
+    execute: (interaction) => dispatchMod(interaction, ctx),
   };
 }
 
-/** Route a `/raffle` invocation to the handler for its subcommand (group). */
-async function dispatch(
+/** Route a `/raffle` invocation to the handler for its subcommand. */
+async function dispatchMember(
+  interaction: ChatInputCommandInteraction,
+  ctx: CommandContext,
+): Promise<void> {
+  switch (interaction.options.getSubcommand(false)) {
+    case "enter":
+      await handleEnter(interaction, ctx);
+      return;
+    case "withdraw":
+      await handleWithdraw(interaction, ctx);
+      return;
+    case "status":
+      await handleStatus(interaction, ctx);
+      return;
+    case "list":
+      await handleList(interaction, ctx);
+      return;
+    case "claim":
+      await handleClaim(interaction, ctx);
+      return;
+    default:
+      await unknownSubcommand(interaction);
+  }
+}
+
+/** Route a `/raffle-mod` invocation to the handler for its subcommand (group). */
+async function dispatchMod(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
 ): Promise<void> {
@@ -82,21 +135,6 @@ async function dispatch(
       return;
     case "from-design":
       await handleFromDesign(interaction, ctx);
-      return;
-    case "enter":
-      await handleEnter(interaction, ctx);
-      return;
-    case "withdraw":
-      await handleWithdraw(interaction, ctx);
-      return;
-    case "status":
-      await handleStatus(interaction, ctx);
-      return;
-    case "list":
-      await handleList(interaction, ctx);
-      return;
-    case "claim":
-      await handleClaim(interaction, ctx);
       return;
     case "draw":
       await handleDraw(interaction, ctx);
@@ -126,9 +164,13 @@ async function dispatch(
       await handleEligible(interaction, ctx);
       return;
     default:
-      await interaction.reply({
-        content: "That subcommand is not available.",
-        flags: MessageFlags.Ephemeral,
-      });
+      await unknownSubcommand(interaction);
   }
+}
+
+function unknownSubcommand(interaction: ChatInputCommandInteraction): Promise<unknown> {
+  return interaction.reply({
+    content: "That subcommand is not available.",
+    flags: MessageFlags.Ephemeral,
+  });
 }

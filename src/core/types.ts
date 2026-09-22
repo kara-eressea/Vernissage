@@ -38,7 +38,7 @@ export interface DayWindow {
 /** A prior win, used for cooldown checks. */
 export interface WinRecord {
   /**
-   * The raffle won, or null for a win imported with `/raffle record-win` — one
+   * The raffle won, or null for a win imported with `/raffle-mod record-win` — one
    * from before the bot, which has no raffle (design.md "Imported wins"). The
    * cooldown reads only `wonAt`; this identifies the win for callers that care.
    */
@@ -133,7 +133,7 @@ export interface EligibilityInput {
    * ends here and the win cooldown is measured against it. For a real entry this
    * is the raffle's start (activity is always anchored to start — post-
    * announcement activity can't create eligibility, and a cooldown that lapses
-   * mid-raffle still bars a raffle that opened during it). The `/raffle eligible`
+   * mid-raffle still bars a raffle that opened during it). The `/raffle-mod eligible`
    * snapshot, which has no raffle, passes `now` so its window ends now.
    */
   raffleStart: string;

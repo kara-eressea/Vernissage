@@ -105,7 +105,7 @@ export function getMemberNames(
  * work list for the startup backfill. A member who has posted a counted message
  * is already named via the message path; this catches those who only ever
  * entered (or won) without a counted message — including someone whose only
- * presence is a win imported with `/raffle record-win`.
+ * presence is a win imported with `/raffle-mod record-win`.
  */
 export function listUnnamedRaffleMemberIds(db: Database, guildId: string): string[] {
   const rows = db

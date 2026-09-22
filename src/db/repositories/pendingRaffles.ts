@@ -5,7 +5,7 @@
  * Designer handoff"). The bot stages a composed-but-unpublished raffle spec here
  * — via its authenticated internal endpoint, so the read-only web tier never
  * writes — keyed by a friendly single-use claim token bound to the staging
- * moderator. A moderator redeems it in-guild with `/raffle from-design <token>`,
+ * moderator. A moderator redeems it in-guild with `/raffle-mod from-design <token>`,
  * which re-authorises, re-validates, confirms, and only then creates the real
  * raffle. Nothing here is visible to members, entries, or the draw; unredeemed
  * rows expire and are swept.

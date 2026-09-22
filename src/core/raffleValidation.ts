@@ -198,7 +198,7 @@ export function isCancellable(status: string): boolean {
   return (CANCELLABLE_STATUSES as readonly string[]).includes(status);
 }
 
-/** How `/raffle edit` should treat a raffle, based on its status. */
+/** How `/raffle-mod edit` should treat a raffle, based on its status. */
 export type EditMode = "wizard" | "edit-end" | "rejected";
 
 /**
