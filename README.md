@@ -116,17 +116,14 @@ This is the recommended way to run the bot around the clock.
    docker compose up -d --build
    ```
 
-3. Register the slash commands with Discord (see Registering commands below):
-
-   ```
-   docker compose run --rm bot node dist/src/deploy-commands.js
-   ```
-
-4. Watch the logs to confirm it started:
+3. Watch the logs to confirm it started:
 
    ```
    docker compose logs -f
    ```
+
+The bot registers its slash commands on startup, so there is no separate
+registration step; see [Registering commands](#registering-commands).
 
 To stop the bot, run `docker compose down`. Your data is kept in a named volume
 and is not deleted.
@@ -163,12 +160,8 @@ not need to clone the repository.
    docker compose up -d
    ```
 
-4. Register the slash commands (a one-time step, and again when commands
-   change):
-
-   ```
-   docker compose run --rm bot node dist/src/deploy-commands.js
-   ```
+The bot registers its slash commands on startup, so there is nothing else to
+run; see [Registering commands](#registering-commands).
 
 To update later, run `docker compose pull` followed by `docker compose up -d`.
 Pin to a specific version instead of `latest` (for example
@@ -246,13 +239,7 @@ database. Two copies would count messages twice and could draw a raffle twice.
    npm ci
    ```
 
-3. Register the slash commands once (and again whenever commands change):
-
-   ```
-   npm run deploy-commands
-   ```
-
-4. Start the bot. Either run directly from the TypeScript source:
+3. Start the bot. Either run directly from the TypeScript source:
 
    ```
    npm run dev
@@ -267,18 +254,24 @@ database. Two copies would count messages twice and could draw a raffle twice.
 
 ## Registering commands
 
-Slash commands must be registered with Discord before they appear in the server.
-This is a separate step from starting the bot. Run it once after first setup,
-and again any time the set of commands changes. Starting the bot does not
-register commands on its own.
+The bot registers its slash commands itself: at startup, in every allowlisted
+guild it is already a member of, and again the moment it joins one. Starting it
+is enough — after a first setup, an upgrade, or a move to a new host, the
+commands are there without a separate step.
+
+`deploy-commands` is a manual escape hatch for registering without restarting
+the bot, which is mostly useful while developing:
 
 - From source: `npm run deploy-commands`
 - In Docker: `docker compose run --rm bot node dist/src/deploy-commands.js`
 
+Either way, commands are registered per guild rather than globally, so they
+appear as soon as they are registered instead of propagating slowly. Allowlisted
+guilds the bot has not joined yet are skipped, not errors.
+
 ## First-time configuration in your server
 
-After the bot is running and the commands are registered, a moderator should set
-up the server:
+After the bot is running, a moderator should set up the server:
 
 1. Run `/raffle config set` and choose an audit channel, an announce channel,
    and a moderator role. The announce channel is where raffles are posted. The
@@ -503,12 +496,18 @@ you have, ideally when nothing is between closing and being drawn.
 
 ## Moving to a new host
 
-1. On the old host, take a backup, then stop the bot:
+1. On the old host, stop the bot, then take the backup:
 
    ```
-   docker compose run --rm -v "$PWD:/backup" bot node dist/src/backup.js /backup
    docker compose down
+   docker compose run --rm -v "$PWD:/backup" bot node dist/src/backup.js /backup
    ```
+
+   Backing up while the bot runs is safe, but for a move it is the wrong order:
+   anything counted between the snapshot and the shutdown would be lost. Stopping
+   first makes the archive the complete final state of the old host. Leave it
+   down afterwards — if it counts a message or draws a raffle once the backup is
+   taken, the archive no longer matches it and the two databases have diverged.
 
    Messages sent while the bot is down are not counted, so keep the gap short.
 
