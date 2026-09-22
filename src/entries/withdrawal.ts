@@ -37,8 +37,12 @@ export interface WithdrawalInput {
 }
 
 export type WithdrawalResult =
-  /** The entry was removed; `event` is the audit row, for the caller to mirror. */
-  | { ok: true; event: AuditEvent; byModerator: boolean }
+  /**
+   * The entry was removed; `event` is the audit row, for the caller to mirror.
+   * Which path it was is readable from `event.eventType`, so it is not repeated
+   * as a flag that could disagree with it.
+   */
+  | { ok: true; event: AuditEvent }
   /** Nothing was written. */
   | { ok: false; reason: "not_open" | "no_entry" };
 
@@ -77,5 +81,5 @@ export function withdrawEntry(db: Database, input: WithdrawalInput): WithdrawalR
     writeAudit(db, event);
   })();
 
-  return { ok: true, event, byModerator };
+  return { ok: true, event };
 }

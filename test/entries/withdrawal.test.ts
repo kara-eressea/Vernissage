@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "better-sqlite3";
 import { openDb } from "../../src/db/index.js";
-import { addEntry, hasEntry } from "../../src/db/repositories/entries.js";
+import { addEntry, hasEntry, listEntryRows } from "../../src/db/repositories/entries.js";
 import {
   createDraft,
   getRaffle,
@@ -47,9 +47,9 @@ describe("withdrawEntry", () => {
 
     const result = withdrawEntry(db, { raffle, userId: "u1", actorId: "u1", now: NOW });
 
-    expect(result).toMatchObject({ ok: true, byModerator: false });
     expect(result.ok && result.event.eventType).toBe("entry_withdrawn");
     expect(hasEntry(db, raffle.raffle_id, "u1")).toBe(false);
+    expect(listEntryRows(db, raffle.raffle_id)[0]?.removed_reason).toBe("withdrawn");
   });
 
   it("records a different actor as a moderator-assisted withdrawal", () => {
@@ -58,10 +58,10 @@ describe("withdrawEntry", () => {
 
     const result = withdrawEntry(db, { raffle, userId: "u1", actorId: "mod1", now: NOW });
 
-    expect(result).toMatchObject({ ok: true, byModerator: true });
     expect(result.ok && result.event.eventType).toBe("entry_withdrawn_by_mod");
     expect(result.ok && result.event.actorId).toBe("mod1");
     expect(result.ok && result.event.payload).toEqual({ userId: "u1" });
+    expect(listEntryRows(db, raffle.raffle_id)[0]?.removed_reason).toBe("withdrawn by mod");
   });
 
   it("treats a moderator withdrawing their own entry as the self-withdrawal it is", () => {
@@ -70,7 +70,7 @@ describe("withdrawEntry", () => {
 
     const result = withdrawEntry(db, { raffle, userId: "mod1", actorId: "mod1", now: NOW });
 
-    expect(result).toMatchObject({ ok: true, byModerator: false });
+    expect(result.ok && result.event.eventType).toBe("entry_withdrawn");
   });
 
   it("writes nothing when the raffle is not open", () => {

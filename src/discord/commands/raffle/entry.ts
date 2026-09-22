@@ -29,6 +29,7 @@ import {
 import { getActiveWinForUser } from "../../../db/repositories/wins.js";
 import { recordClaim } from "../../../draw/service.js";
 import { parseEnterButtonId } from "../../components/enterButton.js";
+import { resolveOpenRaffle } from "./resolveRaffle.js";
 import {
   attemptEntry,
   refreshEntryMessage,
@@ -105,33 +106,6 @@ function roleIdsOf(member: unknown): string[] {
   return Array.isArray(roles) ? [...roles] : [...roles.cache.keys()];
 }
 
-/**
- * Resolve which raffle a user means: an explicit id, else the single open
- * raffle. Returns the row, or a string describing why it could not be resolved.
- */
-function resolveTargetRaffle(
-  db: CommandContext["db"],
-  guildId: string,
-  explicitId: number | null,
-): RaffleRow | string {
-  if (explicitId !== null) {
-    const raffle = getGuildRaffle(db, guildId, explicitId);
-    if (!raffle) {
-      return "No raffle with that id exists in this server.";
-    }
-    return raffle;
-  }
-  const open = listByStatus(db, guildId, ["open"]);
-  if (open.length === 0) {
-    return "There are no open raffles right now.";
-  }
-  if (open.length > 1) {
-    const ids = open.map((r) => `#${r.raffle_id} (${r.name ?? "unnamed"})`).join(", ");
-    return `More than one raffle is open — pick one with the \`raffle\` option: ${ids}.`;
-  }
-  return open[0]!;
-}
-
 export async function handleEnter(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -141,7 +115,7 @@ export async function handleEnter(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;
@@ -241,7 +215,7 @@ export async function handleWithdraw(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;
@@ -284,7 +258,7 @@ export async function handleStatus(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;

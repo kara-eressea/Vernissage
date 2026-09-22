@@ -16,12 +16,10 @@ import {
   MessageFlags,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
-  type User,
 } from "discord.js";
 import { withdrawEntry } from "../../../entries/withdrawal.js";
-import { getGuildRaffle, listByStatus } from "../../../db/repositories/raffles.js";
-import type { RaffleRow } from "../../../db/repositories/raffles.js";
 import { refreshEntryMessage } from "../../entryFlow.js";
+import { resolveOpenRaffle } from "./resolveRaffle.js";
 import { ensureModerator } from "../moderator.js";
 import type { CommandContext } from "../index.js";
 
@@ -44,31 +42,6 @@ export function addRemoveEntrySubcommand(builder: SlashCommandBuilder): SlashCom
   return builder;
 }
 
-/**
- * Resolve which open raffle the moderator means: an explicit id, else the single
- * open one. Returns the row, or a string explaining why it could not be resolved.
- * Mirrors the member-facing resolver, but never silently picks among several.
- */
-function resolveOpenRaffle(
-  db: CommandContext["db"],
-  guildId: string,
-  explicitId: number | null,
-): RaffleRow | string {
-  if (explicitId !== null) {
-    const raffle = getGuildRaffle(db, guildId, explicitId);
-    return raffle ?? "No raffle with that id exists in this server.";
-  }
-  const open = listByStatus(db, guildId, ["open"]);
-  if (open.length === 0) {
-    return "There are no open raffles right now.";
-  }
-  if (open.length > 1) {
-    const ids = open.map((r) => `#${r.raffle_id} (${r.name ?? "unnamed"})`).join(", ");
-    return `More than one raffle is open — pick one with the \`raffle\` option: ${ids}.`;
-  }
-  return open[0]!;
-}
-
 /** Handle `/raffle-mod remove-entry`. */
 export async function handleRemoveEntry(
   interaction: ChatInputCommandInteraction,
@@ -85,7 +58,7 @@ export async function handleRemoveEntry(
     return;
   }
 
-  const user = interaction.options.getUser("user", true) as User;
+  const user = interaction.options.getUser("user", true);
   const result = withdrawEntry(ctx.db, {
     raffle: target,
     userId: user.id,
@@ -98,7 +71,7 @@ export async function handleRemoveEntry(
       interaction,
       result.reason === "not_open"
         ? "Entries can only be withdrawn while the raffle is open."
-        : `${user} hasn't entered **${target.name ?? "that raffle"}**, so there's nothing to withdraw.`,
+        : `${user} hasn't entered **${target.name ?? "the raffle"}**, so there's nothing to withdraw.`,
     );
     return;
   }
