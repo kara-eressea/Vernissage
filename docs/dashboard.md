@@ -112,7 +112,9 @@ whole surface:
   it, otherwise let them pick. The chosen guild lives in the session, and a
   **persistent server switcher** in the chrome lets them change it — this is the
   moment the displayed name resolves to that guild's bot nickname, so the whole
-  UI rebrands to what the community calls the bot.
+  UI rebrands to what the community calls the bot. A configured **support
+  viewer** (see "Support viewers") sees every allowlisted guild in this list,
+  each marked read-only.
 - **The home overview.** The screen a moderator lands on once they are in a
   guild — the hub that orients them and routes to every tool, so no page is an
   orphan. It is pure presentation over data already stored, read-only like the
@@ -684,6 +686,57 @@ Server**, not the configured `mod_role`, because the web tier has no bot token t
 read roles with. A moderator whose only authority is that role can run `/raffle`
 commands in chat but cannot sign in. Closing it is the Tier-2 member fetch, which
 would also let the re-check consult the bot instead of Discord.
+
+### Support viewers
+
+The bot is now run for servers its operator does **not** moderate. When a
+moderator there reports something odd — a member who says they were blocked, a
+pool count that looks wrong — the operator had no way to see the data the report
+is about: the only door into a guild's dashboard is Manage Server *in that
+guild*, which is precisely what they don't have. Asking a moderator to relay
+screenshots is a poor substitute for the eligibility report that would answer the
+question outright.
+
+So `DASHBOARD_SUPPORT_USER_IDS` — a comma-separated list of Discord user ids —
+grants those users **sight of every allowlisted guild, and nothing else**:
+
+- **Read, never act.** Every dashboard page is a read, so they all serve
+  unchanged. The one route that reaches back into Discord is the Raffle
+  Designer's handoff, and it refuses a guild the visitor doesn't moderate
+  (`403 read_only`) as well as hiding the button. The web tier still writes
+  nothing, so "read-only" here is one narrow gate, not a new permission model —
+  and `/raffle from-design` runs `ensureModerator` in Discord regardless, so a
+  staged spec would be refused there too.
+- **Visibly read-only.** The chrome carries a "Read-only" badge on every page of
+  such a guild, the account block says "Support viewer" rather than "Moderator",
+  and both the picker and the server switcher mark those entries. Someone holding
+  two roles at once should never have to guess whose server is on screen.
+- **Derived per request, like every other grant.** The list is applied in
+  `selectViewableGuilds`, which the OAuth callback and the per-request re-check
+  both call, so removing an id closes the door on the next uncached request
+  rather than at the end of a session. The `viewOnly` flag travels in the
+  (encrypted, tamper-proof) cookie but is re-derived from configuration every
+  time the re-check runs.
+
+  That revocation is the re-check's doing, so it is only as prompt as the
+  re-check is. With `DASHBOARD_REVALIDATE=off` nothing re-derives the list, and a
+  session minted while an id was listed keeps its sight of those guilds until the
+  cookie expires — restarting the bot does not cut it short, since sessions
+  survive a restart on the stored secret. The read-only gate itself still holds
+  (the cookie's `viewOnly` flag is what the designer handoff refuses on), so what
+  lingers is sight, not power. If you need a support grant gone *now* and the
+  re-check is off, rotate `DASHBOARD_SESSION_SECRET`, which ends every session.
+- **Moderated guilds stay first-class.** A support viewer who genuinely moderates
+  one of the guilds gets full access there, unflagged, and it sorts to the top of
+  their list — they land in their own server, not someone else's.
+
+Two costs worth naming. It is a **standing** grant on member data across every
+guild: it lives in the operator's own environment file, it should hold one or two
+ids at most, and unsetting it is the whole revocation. And a guild the viewer is
+not even a member of has no name to show — the OAuth `guilds` scope only
+describes servers they are in, and there is no bot token here to look up the rest
+— so those appear as `Server <id>` with no icon until the Tier-2 member fetch
+gives the web tier a better source.
 
 ## Suggested sequencing
 

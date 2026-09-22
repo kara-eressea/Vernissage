@@ -32,3 +32,14 @@ describe("loadWebConfig — access revalidation", () => {
     }
   });
 });
+
+describe("loadWebConfig — support viewers", () => {
+  it("configures none by default", () => {
+    expect(loadWebConfig(env()).supportUserIds).toEqual([]);
+  });
+
+  it("parses a comma-separated list, tolerating spacing and duplicates", () => {
+    const config = loadWebConfig(env({ DASHBOARD_SUPPORT_USER_IDS: " 111, 222 ,111, " }));
+    expect(config.supportUserIds).toEqual(["111", "222"]);
+  });
+});

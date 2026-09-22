@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hasManageGuild, MANAGE_GUILD, selectManageableGuilds } from "../../src/web/auth.js";
+import {
+  hasManageGuild,
+  MANAGE_GUILD,
+  selectManageableGuilds,
+  selectViewableGuilds,
+} from "../../src/web/auth.js";
 import type { DiscordPartialGuild } from "../../src/web/oauth.js";
 
 const ALLOWLIST = ["g1", "g2"];
@@ -65,5 +70,61 @@ describe("selectManageableGuilds", () => {
       ALLOWLIST,
     );
     expect(result.map((g) => g.id)).toEqual(["g1"]);
+  });
+});
+
+describe("selectViewableGuilds", () => {
+  const SUPPORT = ["support-1"];
+
+  it("changes nothing for an ordinary moderator", () => {
+    const result = selectViewableGuilds([guild({ id: "g1", owner: true })], ALLOWLIST, {
+      userId: "mod-1",
+      supportUserIds: SUPPORT,
+    });
+    expect(result).toEqual([{ id: "g1", name: "Guild One", icon: null }]);
+  });
+
+  it("gives a support viewer every allowlisted guild, read-only", () => {
+    // The case this exists for: invited to a server, not a moderator of it.
+    const result = selectViewableGuilds([guild({ id: "g1", permissions: "0" })], ALLOWLIST, {
+      userId: "support-1",
+      supportUserIds: SUPPORT,
+    });
+    expect(result).toEqual([
+      { id: "g1", name: "Guild One", icon: null, viewOnly: true },
+      { id: "g2", name: "Server g2", icon: null, viewOnly: true },
+    ]);
+  });
+
+  it("names a guild from the viewer's own list when they are a member of it", () => {
+    const result = selectViewableGuilds(
+      [guild({ id: "g2", name: "Second", icon: "abc", permissions: "0" })],
+      ALLOWLIST,
+      { userId: "support-1", supportUserIds: SUPPORT },
+    );
+    // g1 they are not in at all, so it falls back to the id.
+    expect(result).toEqual([
+      { id: "g1", name: "Server g1", icon: null, viewOnly: true },
+      { id: "g2", name: "Second", icon: "abc", viewOnly: true },
+    ]);
+  });
+
+  it("keeps full access to a guild the support viewer actually moderates", () => {
+    const result = selectViewableGuilds(
+      [guild({ id: "g1", name: "Mine", permissions: MANAGE_GUILD.toString() })],
+      ALLOWLIST,
+      { userId: "support-1", supportUserIds: SUPPORT },
+    );
+    // Moderated guilds come first and carry no read-only flag.
+    expect(result[0]).toEqual({ id: "g1", name: "Mine", icon: null });
+    expect(result[1]).toMatchObject({ id: "g2", viewOnly: true });
+  });
+
+  it("grants nothing extra once an id is removed from the support list", () => {
+    const result = selectViewableGuilds([guild({ id: "g1", permissions: "0" })], ALLOWLIST, {
+      userId: "support-1",
+      supportUserIds: [],
+    });
+    expect(result).toEqual([]);
   });
 });

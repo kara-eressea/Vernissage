@@ -223,6 +223,11 @@ If you do run it:
 - For now, sign-in requires the **Manage Server** permission (or guild
   ownership) on an allowlisted server; a moderator who only holds the configured
   mod-role can't sign in yet. See [docs/dashboard.md](docs/dashboard.md).
+- One exception, for whoever runs the bot: `DASHBOARD_SUPPORT_USER_IDS` lists
+  Discord user IDs that may **view** every allowlisted server, moderator or not.
+  It is read-only — those servers are marked read-only throughout, and creating
+  a raffle from the designer is refused on any you don't moderate — so you can
+  debug a server you were invited to without being handed control of it.
 
 ### Run only one instance
 

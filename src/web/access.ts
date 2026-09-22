@@ -8,8 +8,12 @@
  * names and activity figures until their session expired (issue #40).
  *
  * So every `/app` request re-derives the answer from Discord, through the same
- * `selectManageableGuilds` the callback uses, and the request is authorised
- * against *that* rather than against the cookie's stale copy.
+ * `selectViewableGuilds` the callback uses, and the request is authorised
+ * against *that* rather than against the cookie's stale copy. Deriving it here
+ * rather than trusting the cookie is also what keeps a support viewer's grant
+ * (and the `viewOnly` flag that holds them to reading) tied to the current
+ * configuration: drop an id from DASHBOARD_SUPPORT_USER_IDS and their next
+ * re-check, once the cache lapses, stops returning the guilds it bought them.
  *
  * Three deliberate choices:
  *
@@ -28,7 +32,7 @@
  *     exactly the gap being closed.
  */
 
-import { selectManageableGuilds } from "./auth.js";
+import { selectViewableGuilds } from "./auth.js";
 import { fetchUserGuilds, TokenRejectedError } from "./oauth.js";
 import type { Session, SessionGuild } from "./session.js";
 
@@ -53,15 +57,40 @@ interface CacheEntry {
  * The re-check, with its cache. An instance per server, so tests get a clean one
  * and nothing leaks between them.
  */
+/**
+ * How an `AccessChecker` is configured.
+ *
+ * An options object rather than a positional list: two of these are real
+ * configuration and two are test seams, and with positional parameters the
+ * caller had to name the seams just to reach the configuration behind them.
+ * Everything here decides who may see what, so a silently mis-ordered argument
+ * is the kind of bug this file exists to prevent.
+ */
+export interface AccessCheckerOptions {
+  /** The guild allowlist: only these guilds are servable at all. */
+  allowlist: readonly string[];
+  /** Read-only viewers of every allowlisted guild (auth.ts, config.ts). */
+  supportUserIds?: readonly string[];
+  /** Injected for tests; defaults to the real Discord call. */
+  fetchGuilds?: typeof fetchUserGuilds;
+  /** How long a resolved answer is reused before Discord is asked again. */
+  ttlMs?: number;
+}
+
 export class AccessChecker {
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor(
-    private readonly allowlist: readonly string[],
-    /** Injected for tests; defaults to the real Discord call. */
-    private readonly fetchGuilds = fetchUserGuilds,
-    private readonly ttlMs = ACCESS_CACHE_MS,
-  ) {}
+  private readonly allowlist: readonly string[];
+  private readonly supportUserIds: readonly string[];
+  private readonly fetchGuilds: typeof fetchUserGuilds;
+  private readonly ttlMs: number;
+
+  constructor(options: AccessCheckerOptions) {
+    this.allowlist = options.allowlist;
+    this.supportUserIds = options.supportUserIds ?? [];
+    this.fetchGuilds = options.fetchGuilds ?? fetchUserGuilds;
+    this.ttlMs = options.ttlMs ?? ACCESS_CACHE_MS;
+  }
 
   /**
    * Re-resolve which allowlisted guilds `session` may view, as of `now`.
@@ -83,7 +112,10 @@ export class AccessChecker {
 
     let guilds: SessionGuild[];
     try {
-      guilds = selectManageableGuilds(await this.fetchGuilds(session.at), this.allowlist);
+      guilds = selectViewableGuilds(await this.fetchGuilds(session.at), this.allowlist, {
+        userId: session.uid,
+        supportUserIds: this.supportUserIds,
+      });
     } catch (err) {
       if (err instanceof TokenRejectedError) {
         // Discord says the token is no longer good: revoked, deauthorised, or
@@ -142,7 +174,15 @@ export function applyAccess(
     guilds.length !== session.guilds.length ||
     guilds.some((g, i) => {
       const was = session.guilds[i];
-      return !was || was.id !== g.id || was.name !== g.name || was.icon !== g.icon;
+      return (
+        !was ||
+        was.id !== g.id ||
+        was.name !== g.name ||
+        was.icon !== g.icon ||
+        // A moderator promoted out of (or demoted into) support-only sight must
+        // see the cookie follow, or the read-only gate would lag a session.
+        Boolean(was.viewOnly) !== Boolean(g.viewOnly)
+      );
     });
 
   return { session: { ...session, guilds, selectedGuildId: selected }, changed };

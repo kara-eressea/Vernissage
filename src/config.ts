@@ -68,12 +68,21 @@ export function resolveDatabasePath(env: NodeJS.ProcessEnv = process.env): strin
   return env[ENV.databasePath]?.trim() || DEFAULT_DATABASE_PATH;
 }
 
-/** Parse a comma-separated guild-id list: trim, drop blanks, de-duplicate. */
-export function parseGuildIds(raw: string | undefined): string[] {
+/**
+ * Parse a comma-separated list of Discord snowflake ids: trim, drop blanks,
+ * de-duplicate. Shared by every id-list variable (guild allowlist, dashboard
+ * support viewers) so they all accept the same spacing and stray commas.
+ */
+export function parseIdList(raw: string | undefined): string[] {
   if (!raw) {
     return [];
   }
   return [...new Set(raw.split(",").map((id) => id.trim()).filter((id) => id.length > 0))];
+}
+
+/** Parse a comma-separated guild-id list: trim, drop blanks, de-duplicate. */
+export function parseGuildIds(raw: string | undefined): string[] {
+  return parseIdList(raw);
 }
 
 /** Thrown when required configuration is missing, listing every problem. */

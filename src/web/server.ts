@@ -26,7 +26,7 @@ import { buildHistoryView } from "./history.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
 import { buildRaffleDetail } from "./raffleDetail.js";
 import { AccessChecker, applyAccess } from "./access.js";
-import { selectManageableGuilds } from "./auth.js";
+import { selectViewableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
 import { getGuild } from "../db/repositories/guilds.js";
@@ -185,7 +185,10 @@ export function createServer(deps: ServerDeps): Server {
   // eligibility scan), so they share the read pages' generous ceiling.
   const historyLimiter = new RateLimiter(120, 60 * 1000);
   // Re-checks each visitor's Discord standing per request, behind a short cache.
-  const access = new AccessChecker(config.guildIds);
+  const access = new AccessChecker({
+    allowlist: config.guildIds,
+    supportUserIds: config.supportUserIds,
+  });
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();
@@ -428,13 +431,16 @@ export function createServer(deps: ServerDeps): Server {
     try {
       const token = await exchangeCode(config, code);
       const [user, guilds] = await Promise.all([fetchUser(token), fetchUserGuilds(token)]);
-      const manageable = selectManageableGuilds(guilds, config.guildIds);
+      const viewable = selectViewableGuilds(guilds, config.guildIds, {
+        userId: user.id,
+        supportUserIds: config.supportUserIds,
+      });
       session = {
         uid: user.id,
         username: user.global_name || user.username,
-        guilds: manageable,
+        guilds: viewable,
         // Drop straight into the only guild when there is exactly one.
-        selectedGuildId: manageable.length === 1 ? manageable[0]!.id : undefined,
+        selectedGuildId: viewable.length === 1 ? viewable[0]!.id : undefined,
         // Kept so each request can re-check this standing (access.ts). The cookie
         // is encrypted precisely because it carries this.
         at: token,
@@ -538,7 +544,10 @@ export function createServer(deps: ServerDeps): Server {
     const now = new Date().toISOString();
     const view = buildDesignerView(db, guild.id, guild.name, session.username, now);
     const cards = buildPickerCards(db, session.guilds, now);
-    const handoffEnabled = Boolean(config.handoffUrl && config.handoffSecret);
+    // A support viewer composes and previews freely, but the handoff would write
+    // to a server they do not moderate, so the button stays inert for them and
+    // the page says why (the POST refuses independently).
+    const handoffEnabled = Boolean(config.handoffUrl && config.handoffSecret) && !guild.viewOnly;
     sendHtml(res, 200, designerPage(session, guild, view, cards, handoffEnabled));
   }
 
@@ -547,6 +556,9 @@ export function createServer(deps: ServerDeps): Server {
    * The web tier authenticates the moderator via the session, wraps the
    * submission with the guild + moderator identity, and forwards it under the
    * shared secret; it stores nothing. Returns the bot's response verbatim.
+   *
+   * This is the only route that reaches back into Discord, so it is also the
+   * only one a support viewer is refused (docs/dashboard.md "Support viewers").
    */
   async function handleDesignerStage(
     req: IncomingMessage,
@@ -560,6 +572,13 @@ export function createServer(deps: ServerDeps): Server {
     const guild = selectedGuild(session);
     if (!guild) {
       sendJson(res, 403, { error: "no_guild" });
+      return;
+    }
+    if (guild.viewOnly) {
+      // A support viewer reaches this guild to read it, not to act in it. The
+      // flag is re-derived from configuration on every request (access.ts), so
+      // this is the current answer, not what the cookie was minted with.
+      sendJson(res, 403, { error: "read_only" });
       return;
     }
     if (!config.handoffUrl || !config.handoffSecret) {
