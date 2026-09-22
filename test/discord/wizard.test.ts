@@ -33,22 +33,24 @@ function wizard() {
  * (issue #53), so every fake interaction has to carry one; `isMod: false` models
  * someone whose authority went away part-way through the wizard.
  */
-function standing(isMod = true) {
+function standing(opts: { isMod?: boolean; roleIds?: string[] } = {}) {
   return {
-    member: { roles: { cache: new Map() } },
-    memberPermissions: { has: () => isMod },
+    guildId: "g1",
+    guild: { ownerId: "owner" },
+    member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
+    memberPermissions: { has: () => opts.isMod ?? true },
   };
 }
 
 function fakeModal(
   customId: string,
   fields: Record<string, string>,
-  opts: { isMod?: boolean } = {},
+  opts: { isMod?: boolean; roleIds?: string[] } = {},
 ): WizardInteraction & { update: ReturnType<typeof vi.fn>; reply: ReturnType<typeof vi.fn> } {
   return {
     customId,
     user: { id: "mod1" },
-    ...standing(opts.isMod),
+    ...standing(opts),
     isChatInputCommand: () => false,
     isModalSubmit: () => true,
     isButton: () => false,
@@ -65,12 +67,12 @@ function fakeModal(
 
 function fakeButton(
   customId: string,
-  opts: { isMod?: boolean } = {},
+  opts: { isMod?: boolean; roleIds?: string[] } = {},
 ): WizardInteraction & { update: ReturnType<typeof vi.fn>; showModal: ReturnType<typeof vi.fn> } {
   return {
     customId,
     user: { id: "mod1" },
-    ...standing(opts.isMod),
+    ...standing(opts),
     isChatInputCommand: () => false,
     isModalSubmit: () => false,
     isButton: () => true,
@@ -311,8 +313,37 @@ describe("wizard confirm", () => {
     await wizard().handle(interaction);
 
     expect(getRaffle(db, id)?.name).toBeNull(); // nothing written
+    expect(getWizardState(db, id)?.step).toBe("basics"); // and not advanced
     const { content } = interaction.update.mock.calls[0]![0] as { content: string };
     expect(content).toContain("do not have permission");
+  });
+
+  it("does not even open a step's modal for someone who is not a moderator", async () => {
+    // A modal-opening button is the one wizard action that does something other
+    // than write, so refusing it has to mean no modal rather than an empty one.
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeButton(`wiz:basics:open:${id}`, { isMod: false });
+    await wizard().handle(interaction);
+
+    expect(interaction.showModal).not.toHaveBeenCalled();
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("do not have permission");
+  });
+
+  it("refuses a draft belonging to another guild", async () => {
+    // Standing is read from the interaction's guild, so the draft must be
+    // scoped to that same guild or the two could answer about different servers.
+    const id = createDraft(db, "other-guild", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeModal(`wiz:basics:submit:${id}`, { name: "Theirs", prize: "P" });
+    await wizard().handle(interaction);
+
+    expect(getRaffle(db, id)?.name).toBeNull();
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("no longer exists");
   });
 
   it("honours the configured mod role, not only Manage Server", async () => {
@@ -320,14 +351,12 @@ describe("wizard confirm", () => {
     upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
     setGuildConfig(db, "g1", { mod_role: "role-mod" }, "2026-07-01T00:00:00.000Z");
 
-    const interaction = fakeModal(`wiz:basics:submit:${id}`, { name: "Fine", prize: "Prize" });
     // Manage Server off, but holding the configured role.
-    (interaction as unknown as { memberPermissions: { has: () => boolean } }).memberPermissions = {
-      has: () => false,
-    };
-    (interaction as unknown as { member: { roles: { cache: Map<string, unknown> } } }).member = {
-      roles: { cache: new Map([["role-mod", {}]]) },
-    };
+    const interaction = fakeModal(
+      `wiz:basics:submit:${id}`,
+      { name: "Fine", prize: "Prize" },
+      { isMod: false, roleIds: ["role-mod"] },
+    );
     await wizard().handle(interaction);
 
     expect(getRaffle(db, id)?.name).toBe("Fine");

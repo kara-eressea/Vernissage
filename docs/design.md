@@ -516,8 +516,15 @@ resetting eligibility), and commands.md links back to them.
   conversations, and a conversation can outlive the authority that started it: a
   moderator demoted, or the mod role reconfigured, part-way through must not
   still be able to confirm a raffle into existence at the end. Being *shown* a
-  button is not permission to press it. The check sits on the flow's dispatch
-  rather than on its final step, so a step added later cannot land outside it.
+  button is not permission to press it. The wizard checks on its dispatch rather
+  than on its Confirm alone, so a step added later cannot land outside the check.
+- The same applies to the *state* being acted on, not only to the actor: a modal
+  left open outlives its raffle's status, so the end-time correction re-checks
+  that the raffle is still open before writing. Both halves of the
+  authorisation — the configured mod role and the member's standing — are read
+  from the guild the interaction arrived in, and the raffle is scoped to that
+  same guild; taking them from different guilds is the only way they could
+  disagree about who may act, or about where.
 - Visibility and authority are set separately in Discord, so they can disagree:
   a mod role without Manage Server passes the run-time gate but cannot *see*
   `/raffle-mod` until a server admin grants it the command in

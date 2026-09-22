@@ -59,6 +59,7 @@ function fakeModal(
   return {
     customId: `${EDIT_END_PREFIX}:${raffleId}`,
     user: { id: "mod1" },
+    guildId: "g1",
     guild: { ownerId: "owner" },
     member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
     memberPermissions: { has: () => opts.isMod ?? true },
@@ -78,7 +79,8 @@ describe("handleEditEnd", () => {
     const interaction = fakeModal(id, "2026-07-25 20:00");
     await handleEditEnd(interaction, deps);
 
-    expect(getRaffle(db, id)?.ends_at).not.toBe("2026-07-20T12:00:00.000Z");
+    // No guild timezone configured here, so the input is read as UTC.
+    expect(getRaffle(db, id)?.ends_at).toBe("2026-07-25T20:00:00.000Z");
     expect(auditCount()).toBe(1);
     expect(notifier.mirrorAudit).toHaveBeenCalledOnce();
     const { content } = interaction.reply.mock.calls[0]![0] as { content: string };
@@ -106,7 +108,7 @@ describe("handleEditEnd", () => {
 
     await handleEditEnd(fakeModal(id, "2026-07-25 20:00", { isMod: false, roleIds: ["role-mod"] }), deps);
 
-    expect(getRaffle(db, id)?.ends_at).not.toBe("2026-07-20T12:00:00.000Z");
+    expect(getRaffle(db, id)?.ends_at).toBe("2026-07-25T20:00:00.000Z");
     expect(auditCount()).toBe(1);
   });
 
@@ -139,6 +141,39 @@ describe("handleEditEnd", () => {
 
     expect(getRaffle(db, id)?.ends_at).toBe("2026-07-20T12:00:00.000Z");
     expect(auditCount()).toBe(0);
+  });
+
+  it("refuses a submit that lands after the raffle stopped being open", async () => {
+    // A modal outlives the state that opened it just as it outlives standing:
+    // rewriting a settled raffle's end time would also audit it as an edit.
+    const id = seedOpenRaffle();
+    setStatus(db, id, "closed");
+
+    const interaction = fakeModal(id, "2026-07-25 20:00");
+    await handleEditEnd(interaction, deps);
+
+    expect(getRaffle(db, id)?.ends_at).toBe("2026-07-20T12:00:00.000Z");
+    expect(auditCount()).toBe(0);
+    const { content } = interaction.reply.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("no longer open");
+  });
+
+  it("refuses a raffle belonging to another guild", async () => {
+    const id = createDraft(db, "other-guild", "mod1", NOW);
+    updateRaffleFields(db, id, {
+      name: "Theirs",
+      starts_at: "2026-07-14T12:00:00.000Z",
+      ends_at: "2026-07-20T12:00:00.000Z",
+    });
+    setStatus(db, id, "open");
+
+    const interaction = fakeModal(id, "2026-07-25 20:00");
+    await handleEditEnd(interaction, deps);
+
+    expect(getRaffle(db, id)?.ends_at).toBe("2026-07-20T12:00:00.000Z");
+    expect(auditCount()).toBe(0);
+    const { content } = interaction.reply.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("no longer exists");
   });
 
   it("reports a raffle that no longer exists", async () => {

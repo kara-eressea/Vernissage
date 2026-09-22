@@ -30,7 +30,12 @@ import { formatWallClockInZone, parseFriendlyTimeInZone } from "../../core/timeP
 import { stricterThanDefaults, strictnessWarning } from "../../core/barStrictness.js";
 import { comparePoolUnderBars } from "../../eligibility/service.js";
 import { getGuild } from "../../db/repositories/guilds.js";
-import { getRaffle, updateRaffleFields, type RaffleRow } from "../../db/repositories/raffles.js";
+import {
+  getGuildRaffle,
+  getRaffle,
+  updateRaffleFields,
+  type RaffleRow,
+} from "../../db/repositories/raffles.js";
 import {
   clearWizardState,
   getWizardState,
@@ -226,12 +231,6 @@ export function createWizard(deps: WizardDeps): Wizard {
     if (!parsed) {
       return;
     }
-    const raffle = getRaffle(db, parsed.raffleId);
-    if (!raffle) {
-      await respond(interaction, { content: "That draft no longer exists.", components: [] });
-      return;
-    }
-
     // Re-authorise on every step, not only when `/raffle-mod create` was
     // accepted (issue #53). The wizard is a conversation that can outlive the
     // standing that opened it: a moderator demoted, or the mod role
@@ -239,14 +238,27 @@ export function createWizard(deps: WizardDeps): Wizard {
     // into existence at the end of it. Gating the dispatch rather than the
     // Confirm alone means no future step can be added outside the check, and
     // every step already writes something (the draft row, the wizard's place in
-    // it). The mod role is read from the draft's own guild, so it cannot
-    // disagree with the raffle being edited.
-    const modRole = getGuild(db, raffle.guild_id)?.mod_role ?? null;
-    if (!isModeratorInteraction(interaction, modRole)) {
+    // it).
+    //
+    // Both halves of the question come from the guild the interaction arrived
+    // in: taking the mod role from one guild and the member's standing from
+    // another is the only way the two could ever disagree. The draft is then
+    // scoped to that same guild, as the command handlers scope theirs.
+    const guildId = interaction.guildId;
+    const modRole = guildId === null ? null : (getGuild(db, guildId)?.mod_role ?? null);
+    if (guildId === null || !isModeratorInteraction(interaction, modRole)) {
       await respond(interaction, {
         content: "You do not have permission to manage raffles.",
         components: [],
       });
+      return;
+    }
+
+    // Looked up after authorising, so a refusal never reveals whether the draft
+    // exists — the ordering the raffle-id picker is careful about too.
+    const raffle = getGuildRaffle(db, guildId, parsed.raffleId);
+    if (!raffle) {
+      await respond(interaction, { content: "That draft no longer exists.", components: [] });
       return;
     }
 
