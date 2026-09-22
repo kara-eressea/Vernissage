@@ -64,6 +64,8 @@ export function fakeChatInput(opts: FakeChatInputOpts = {}): FakeChatInput {
 export interface FakeAutocompleteOpts {
   commandName?: string;
   subcommand?: string | null;
+  /** The enclosing subcommand group, when the subcommand sits in one. */
+  subcommandGroup?: string | null;
   /** The option being typed in, and what has been typed so far. */
   focused?: { name: string; value: string };
   guildId?: string | null;
@@ -94,6 +96,7 @@ export function fakeAutocomplete(opts: FakeAutocompleteOpts = {}): FakeAutocompl
     options: {
       getFocused: () => focused,
       getSubcommand: () => (opts.subcommand === undefined ? "enter" : opts.subcommand),
+      getSubcommandGroup: () => opts.subcommandGroup ?? null,
     },
     respond: vi.fn().mockResolvedValue(undefined),
   } as unknown as FakeAutocomplete;

@@ -56,6 +56,14 @@ function inStatus(...statuses: RaffleStatus[]): CandidateSource {
 const enteredByCaller: CandidateSource = ({ db, guildId, userId }) =>
   listByStatus(db, guildId, ["open"]).filter((r) => hasEntry(db, r.raffle_id, userId));
 
+/**
+ * Offer the open raffles the caller has *not* entered yet. Suggesting one they
+ * already hold an entry in would be suggesting an `already_entered` refusal,
+ * which is the failure this whole table exists to avoid.
+ */
+const notYetEnteredByCaller: CandidateSource = ({ db, guildId, userId }) =>
+  listByStatus(db, guildId, ["open"]).filter((r) => !hasEntry(db, r.raffle_id, userId));
+
 /** Offer the drawn raffles where the caller has a prize still to claim. */
 const claimableByCaller: CandidateSource = ({ db, guildId, userId }) =>
   listByStatus(db, guildId, ["drawn"]).filter((r) => {
@@ -72,7 +80,7 @@ const claimableByCaller: CandidateSource = ({ db, guildId, userId }) =>
  */
 const SOURCES: Record<string, CandidateSource> = {
   // Members: what they can act on, from where they stand.
-  [`${RAFFLE_COMMAND}:enter`]: inStatus("open"),
+  [`${RAFFLE_COMMAND}:enter`]: notYetEnteredByCaller,
   [`${RAFFLE_COMMAND}:withdraw`]: enteredByCaller,
   [`${RAFFLE_COMMAND}:status`]: inStatus("open", "scheduled"),
   [`${RAFFLE_COMMAND}:claim`]: claimableByCaller,
@@ -94,8 +102,16 @@ export function selectSource(
   commandName: string,
   subcommand: string | null,
   isModerator: boolean,
+  subcommandGroup: string | null = null,
 ): CandidateSource | null {
   if (subcommand === null) {
+    return null;
+  }
+  // Keys name top-level subcommands only. A grouped subcommand (`config set`)
+  // reports just its own name, so without this a future `config cancel` would
+  // silently inherit top-level `cancel`'s candidates. No group takes a raffle id
+  // today; when one does, it gets its own key rather than borrowing.
+  if (subcommandGroup !== null) {
     return null;
   }
   // The moderator surface is hidden from members by Discord; don't let the
@@ -130,6 +146,7 @@ export async function routeAutocomplete(
       interaction.commandName,
       interaction.options.getSubcommand(false),
       isModeratorInteraction(interaction, modRole),
+      interaction.options.getSubcommandGroup(false),
     );
     if (!source) {
       await interaction.respond([]);

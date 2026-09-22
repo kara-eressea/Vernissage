@@ -72,6 +72,15 @@ describe("member pickers", () => {
     expect(await suggest({ subcommand: "enter" })).toEqual([open]);
   });
 
+  it("does not offer a raffle the caller has already entered, for enter", async () => {
+    // Suggesting it would be suggesting an `already_entered` refusal.
+    const entered = seed("open", "Already in");
+    const free = seed("open", "Not yet");
+    addEntry(db, entered, "u1", NOW);
+
+    expect(await suggest({ subcommand: "enter", userId: "u1" })).toEqual([free]);
+  });
+
   it("offers only the raffles the caller has actually entered, for withdraw", async () => {
     const entered = seed("open", "Mine");
     seed("open", "Someone else's");
@@ -187,6 +196,19 @@ describe("what the picker will not do", () => {
     expect(await suggest({ subcommand: "enter", focused: { name: "reason", value: "" } })).toEqual(
       [],
     );
+  });
+
+  it("answers empty inside a subcommand group, rather than borrowing a top-level set", async () => {
+    // `/raffle-mod config set` reports its subcommand as "set"; nothing should
+    // let a future grouped name inherit the top-level candidates for that name.
+    seed("open", "Open");
+    expect(
+      await suggest({
+        ...asMod,
+        subcommand: "cancel",
+        subcommandGroup: "config",
+      }),
+    ).toEqual([]);
   });
 
   it("answers empty for a subcommand with no candidate set defined", async () => {

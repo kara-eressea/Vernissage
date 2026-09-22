@@ -36,9 +36,30 @@ export const MAX_CHOICES = 25;
 /** Discord's cap on the length of a choice label. */
 const MAX_LABEL = 100;
 
-/** Shorten to fit Discord's label limit, marking the cut with an ellipsis. */
+/**
+ * Shorten to fit Discord's label limit, marking the cut with an ellipsis.
+ *
+ * Cut by code point, not by UTF-16 unit: a raffle named with an emoji can put a
+ * surrogate pair across the limit, and `slice` would leave half of one behind.
+ * A lone surrogate risks the same silent rejection of the whole response that
+ * the length cap is here to prevent, so the cheaper `slice` is not worth it.
+ */
 function fit(label: string): string {
-  return label.length <= MAX_LABEL ? label : `${label.slice(0, MAX_LABEL - 1).trimEnd()}…`;
+  if (label.length <= MAX_LABEL) {
+    return label;
+  }
+  // Add whole code points while they still fit, so the result satisfies both
+  // constraints at once: never longer than the cap, and never ending in half of
+  // a surrogate pair. Taking a fixed number of code points would satisfy only
+  // the second — an emoji is two units wide, so 99 of them can exceed 99 units.
+  let kept = "";
+  for (const point of label) {
+    if (kept.length + point.length > MAX_LABEL - 1) {
+      break;
+    }
+    kept += point;
+  }
+  return `${kept.trimEnd()}…`;
 }
 
 /**

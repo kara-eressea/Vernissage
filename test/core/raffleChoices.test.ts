@@ -15,6 +15,9 @@ import {
  * never appears.
  */
 
+/** A high surrogate with no low after it, or a low with no high before it. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
 function raffle(over: Partial<ChoosableRaffle> = {}): ChoosableRaffle {
   return { raffle_id: 1, name: "Vinyl giveaway", status: "open", ...over };
 }
@@ -31,6 +34,17 @@ describe("raffleLabel", () => {
   it("falls back to 'unnamed' for a raffle with no name yet", () => {
     expect(raffleLabel(raffle({ name: null, status: "draft" }))).toBe("#1 · unnamed (draft)");
     expect(raffleLabel(raffle({ name: "   " }))).toContain("unnamed");
+  });
+
+  it("never cuts an emoji in half when truncating", () => {
+    // 93 filler characters puts the gift emoji's surrogate pair exactly across
+    // the 100-character cut, so a UTF-16 slice would keep half of it. A lone
+    // surrogate risks the same silent rejection of the whole response that the
+    // cap exists to prevent.
+    const label = raffleLabel(raffle({ name: `${"a".repeat(93)}🎁 giveaway` }));
+    expect(label.length).toBeLessThanOrEqual(100);
+    expect(LONE_SURROGATE.test(label)).toBe(false);
+    expect(label.endsWith("…")).toBe(true);
   });
 
   it("truncates a label that would breach Discord's 100-character limit", () => {

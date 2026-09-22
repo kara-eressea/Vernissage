@@ -120,23 +120,44 @@ describe("the registered command surface", () => {
     // that forgets .setAutocomplete(true) is the regression this catches — it
     // looks fine until a non-technical member meets it.
     const withoutPicker: string[] = [];
+    const seen: string[] = [];
     for (const [name, command] of surface()) {
       for (const option of command.options ?? []) {
         // Subcommand groups nest one level deeper; both shapes are walked.
         const subs = option.options ?? [];
         for (const sub of subs) {
-          if (sub.name === "raffle" && sub.autocomplete !== true) {
-            withoutPicker.push(`/${name} ${option.name}`);
+          if (sub.name === "raffle") {
+            seen.push(`/${name} ${option.name}`);
+            if (sub.autocomplete !== true) {
+              withoutPicker.push(`/${name} ${option.name}`);
+            }
           }
           for (const nested of (sub as { options?: SubOption[] }).options ?? []) {
-            if (nested.name === "raffle" && nested.autocomplete !== true) {
-              withoutPicker.push(`/${name} ${option.name} ${sub.name}`);
+            if (nested.name === "raffle") {
+              seen.push(`/${name} ${option.name} ${sub.name}`);
+              if (nested.autocomplete !== true) {
+                withoutPicker.push(`/${name} ${option.name} ${sub.name}`);
+              }
             }
           }
         }
       }
     }
     expect(withoutPicker).toEqual([]);
+    // Self-check: the assertion above is vacuous if the walk stops finding the
+    // options at all, so pin which ones it visited rather than only how many.
+    expect(seen.sort()).toEqual([
+      "/raffle claim",
+      "/raffle enter",
+      "/raffle status",
+      "/raffle withdraw",
+      "/raffle-mod announce",
+      "/raffle-mod cancel",
+      "/raffle-mod draw",
+      "/raffle-mod edit",
+      "/raffle-mod remove-entry",
+      "/raffle-mod reroll",
+    ]);
   });
 
   it("never exposes the same subcommand on both commands", () => {
