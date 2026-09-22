@@ -717,6 +717,15 @@ grants those users **sight of every allowlisted guild, and nothing else**:
   rather than at the end of a session. The `viewOnly` flag travels in the
   (encrypted, tamper-proof) cookie but is re-derived from configuration every
   time the re-check runs.
+
+  That revocation is the re-check's doing, so it is only as prompt as the
+  re-check is. With `DASHBOARD_REVALIDATE=off` nothing re-derives the list, and a
+  session minted while an id was listed keeps its sight of those guilds until the
+  cookie expires — restarting the bot does not cut it short, since sessions
+  survive a restart on the stored secret. The read-only gate itself still holds
+  (the cookie's `viewOnly` flag is what the designer handoff refuses on), so what
+  lingers is sight, not power. If you need a support grant gone *now* and the
+  re-check is off, rotate `DASHBOARD_SESSION_SECRET`, which ends every session.
 - **Moderated guilds stay first-class.** A support viewer who genuinely moderates
   one of the guilds gets full access there, unflagged, and it sorts to the top of
   their list — they land in their own server, not someone else's.

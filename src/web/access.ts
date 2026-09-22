@@ -57,17 +57,40 @@ interface CacheEntry {
  * The re-check, with its cache. An instance per server, so tests get a clean one
  * and nothing leaks between them.
  */
+/**
+ * How an `AccessChecker` is configured.
+ *
+ * An options object rather than a positional list: two of these are real
+ * configuration and two are test seams, and with positional parameters the
+ * caller had to name the seams just to reach the configuration behind them.
+ * Everything here decides who may see what, so a silently mis-ordered argument
+ * is the kind of bug this file exists to prevent.
+ */
+export interface AccessCheckerOptions {
+  /** The guild allowlist: only these guilds are servable at all. */
+  allowlist: readonly string[];
+  /** Read-only viewers of every allowlisted guild (auth.ts, config.ts). */
+  supportUserIds?: readonly string[];
+  /** Injected for tests; defaults to the real Discord call. */
+  fetchGuilds?: typeof fetchUserGuilds;
+  /** How long a resolved answer is reused before Discord is asked again. */
+  ttlMs?: number;
+}
+
 export class AccessChecker {
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor(
-    private readonly allowlist: readonly string[],
-    /** Injected for tests; defaults to the real Discord call. */
-    private readonly fetchGuilds = fetchUserGuilds,
-    private readonly ttlMs = ACCESS_CACHE_MS,
-    /** Read-only viewers of every allowlisted guild (auth.ts, config.ts). */
-    private readonly supportUserIds: readonly string[] = [],
-  ) {}
+  private readonly allowlist: readonly string[];
+  private readonly supportUserIds: readonly string[];
+  private readonly fetchGuilds: typeof fetchUserGuilds;
+  private readonly ttlMs: number;
+
+  constructor(options: AccessCheckerOptions) {
+    this.allowlist = options.allowlist;
+    this.supportUserIds = options.supportUserIds ?? [];
+    this.fetchGuilds = options.fetchGuilds ?? fetchUserGuilds;
+    this.ttlMs = options.ttlMs ?? ACCESS_CACHE_MS;
+  }
 
   /**
    * Re-resolve which allowlisted guilds `session` may view, as of `now`.

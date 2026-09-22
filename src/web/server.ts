@@ -25,7 +25,7 @@ import {
 import { buildHistoryView } from "./history.js";
 import { buildHomeView, buildPickerCards } from "./home.js";
 import { buildRaffleDetail } from "./raffleDetail.js";
-import { ACCESS_CACHE_MS, AccessChecker, applyAccess } from "./access.js";
+import { AccessChecker, applyAccess } from "./access.js";
 import { selectViewableGuilds } from "./auth.js";
 import { buildAuthorizeUrl, exchangeCode, fetchUser, fetchUserGuilds } from "./oauth.js";
 import { RateLimiter } from "./rateLimit.js";
@@ -185,12 +185,10 @@ export function createServer(deps: ServerDeps): Server {
   // eligibility scan), so they share the read pages' generous ceiling.
   const historyLimiter = new RateLimiter(120, 60 * 1000);
   // Re-checks each visitor's Discord standing per request, behind a short cache.
-  const access = new AccessChecker(
-    config.guildIds,
-    fetchUserGuilds,
-    ACCESS_CACHE_MS,
-    config.supportUserIds,
-  );
+  const access = new AccessChecker({
+    allowlist: config.guildIds,
+    supportUserIds: config.supportUserIds,
+  });
   // Periodically discard expired rate-limit windows so the maps can't grow.
   const sweepTimer = setInterval(() => {
     const t = Date.now();

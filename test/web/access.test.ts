@@ -42,7 +42,7 @@ describe("AccessChecker", () => {
 
   it("passes a moderator through with a freshly resolved guild list", async () => {
     const fetchGuilds = vi.fn().mockResolvedValue([guild("g1"), guild("nope")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     const result = await checker.check(session(), NOW);
 
@@ -52,26 +52,26 @@ describe("AccessChecker", () => {
 
   it("revokes a moderator who has lost Manage Server", async () => {
     // The whole point of the issue: this used to keep working for days.
-    const checker = new AccessChecker(ALLOWLIST, vi.fn().mockResolvedValue([guild("g1", { manage: false })]));
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds: vi.fn().mockResolvedValue([guild("g1", { manage: false })]) });
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("revokes a moderator removed from the server entirely", async () => {
-    const checker = new AccessChecker(ALLOWLIST, vi.fn().mockResolvedValue([]));
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds: vi.fn().mockResolvedValue([]) });
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("revokes when Discord rejects the token", async () => {
-    const checker = new AccessChecker(
-      ALLOWLIST,
-      vi.fn().mockRejectedValue(new TokenRejectedError(401)),
-    );
+    const checker = new AccessChecker({
+      allowlist: ALLOWLIST,
+      fetchGuilds: vi.fn().mockRejectedValue(new TokenRejectedError(401)),
+    });
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("revokes a session with no token, which cannot be checked at all", async () => {
     const fetchGuilds = vi.fn();
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
     expect(await checker.check(session({ at: undefined }), NOW)).toEqual({
       ok: false,
       reason: "revoked",
@@ -81,7 +81,7 @@ describe("AccessChecker", () => {
 
   it("reports a transient failure as unavailable, not as a revocation", async () => {
     // A Discord blip or rate limit must not log every moderator out.
-    const checker = new AccessChecker(ALLOWLIST, vi.fn().mockRejectedValue(new Error("503")));
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds: vi.fn().mockRejectedValue(new Error("503")) });
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "unavailable" });
   });
 
@@ -90,7 +90,7 @@ describe("AccessChecker", () => {
       .fn()
       .mockRejectedValueOnce(new Error("503"))
       .mockResolvedValueOnce([guild("g1")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     expect(await checker.check(session(), NOW)).toMatchObject({ reason: "unavailable" });
     // The next request tries again rather than serving a cached failure.
@@ -100,7 +100,7 @@ describe("AccessChecker", () => {
 
   it("caches a success so a page load is not a Discord round trip", async () => {
     const fetchGuilds = vi.fn().mockResolvedValue([guild("g1")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     await checker.check(session(), NOW);
     await checker.check(session(), NOW + 1000);
@@ -110,7 +110,7 @@ describe("AccessChecker", () => {
 
   it("re-asks Discord once the cache window passes", async () => {
     const fetchGuilds = vi.fn().mockResolvedValue([guild("g1")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     await checker.check(session(), NOW);
     await checker.check(session(), NOW + ACCESS_CACHE_MS);
@@ -120,7 +120,7 @@ describe("AccessChecker", () => {
 
   it("caches a revocation too, so a rejected visitor cannot hammer Discord", async () => {
     const fetchGuilds = vi.fn().mockResolvedValue([]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     await checker.check(session(), NOW);
     expect(await checker.check(session(), NOW + 1000)).toEqual({ ok: false, reason: "revoked" });
@@ -132,7 +132,7 @@ describe("AccessChecker", () => {
       .fn()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([guild("g1")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     expect(await checker.check(session(), NOW)).toMatchObject({ reason: "revoked" });
     checker.forget("mod-1");
@@ -142,7 +142,7 @@ describe("AccessChecker", () => {
 
   it("sweeps stale entries so the cache cannot grow forever", async () => {
     const fetchGuilds = vi.fn().mockResolvedValue([guild("g1")]);
-    const checker = new AccessChecker(ALLOWLIST, fetchGuilds);
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds });
 
     await checker.check(session(), NOW);
     checker.sweep(NOW + ACCESS_CACHE_MS);
@@ -152,17 +152,16 @@ describe("AccessChecker", () => {
   });
 
   it("only ever admits allowlisted guilds", async () => {
-    const checker = new AccessChecker(ALLOWLIST, vi.fn().mockResolvedValue([guild("elsewhere")]));
+    const checker = new AccessChecker({ allowlist: ALLOWLIST, fetchGuilds: vi.fn().mockResolvedValue([guild("elsewhere")]) });
     expect(await checker.check(session(), NOW)).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("admits a support viewer to every allowlisted guild, read-only", async () => {
-    const checker = new AccessChecker(
-      ALLOWLIST,
-      vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
-      ACCESS_CACHE_MS,
-      ["support-1"],
-    );
+    const checker = new AccessChecker({
+      allowlist: ALLOWLIST,
+      fetchGuilds: vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
+      supportUserIds: ["support-1"],
+    });
     const result = await checker.check(session({ uid: "support-1" }), NOW);
     expect(result).toEqual({
       ok: true,
@@ -176,12 +175,11 @@ describe("AccessChecker", () => {
   it("revokes a support viewer as soon as their id leaves the configured list", async () => {
     // The re-check derives the grant from configuration, not from the cookie, so
     // removing an id closes the door on the next uncached request.
-    const checker = new AccessChecker(
-      ALLOWLIST,
-      vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
-      ACCESS_CACHE_MS,
-      [],
-    );
+    const checker = new AccessChecker({
+      allowlist: ALLOWLIST,
+      fetchGuilds: vi.fn().mockResolvedValue([guild("g1", { manage: false })]),
+      supportUserIds: [],
+    });
     expect(await checker.check(session({ uid: "support-1" }), NOW)).toEqual({
       ok: false,
       reason: "revoked",
