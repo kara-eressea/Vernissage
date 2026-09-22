@@ -30,7 +30,12 @@ export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBu
         .setName("draw")
         .setDescription("Draw a closed raffle now (if not drawn automatically).")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setRequired(true)
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) =>
@@ -38,7 +43,12 @@ export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBu
         .setName("announce")
         .setDescription("Re-post a drawn raffle's result if a post failed. No re-draw.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setRequired(true)
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) =>
@@ -46,7 +56,12 @@ export function addDrawSubcommands(builder: SlashCommandBuilder): SlashCommandBu
         .setName("reroll")
         .setDescription("Replace a disqualified winner; logged with a reason.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setRequired(true)
+            .setMinValue(1)
+            .setAutocomplete(true),
         )
         .addUserOption((o) =>
           o.setName("winner").setDescription("The winner to disqualify.").setRequired(true),

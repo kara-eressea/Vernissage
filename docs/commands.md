@@ -18,6 +18,14 @@ list of what moderators can do — from ordinary members; it is additionally gat
 at run time by the configured mod role, see
 [`/raffle-mod config set`](#raffle-mod-config-set).
 
+**Picking a raffle.** Every option that takes a raffle id offers a list as you
+type it — `#42 · Vinyl giveaway (open)` — so nobody needs to know the number.
+Type part of the name or the id and it narrows. Each command offers only the
+raffles it can act on: `/raffle withdraw` lists the ones you have entered,
+`/raffle claim` the prizes you have not claimed, `/raffle-mod draw` the closed
+ones. The id is still typeable by hand, and the list is a convenience only —
+every command re-checks the raffle when you submit.
+
 The two gates are set in different places and can disagree. A mod role *without*
 Manage Server passes the run-time gate but will not see `/raffle-mod` in the
 picker. Either give that role Manage Server, or grant it the command directly in
@@ -30,8 +38,8 @@ visible only to the member who ran the command.
 
 ### `/raffle enter [raffle]`
 Enter an open raffle. The same thing the **Enter** button on the raffle
-announcement does. `raffle` is the raffle id, needed only when more than one
-raffle is open at once. Eligibility is checked at entry time and, on failure, the
+announcement does. `raffle` picks which raffle, needed only when more than one
+is open at once. Eligibility is checked at entry time and, on failure, the
 reply tells you exactly which gate you missed (see
 [Entry flow](design.md#entry-flow)). Ephemeral.
 

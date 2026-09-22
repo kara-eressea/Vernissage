@@ -38,6 +38,7 @@ import { attachMessageCounter } from "./discord/messageCounter.js";
 import { backfillMemberNames } from "./discord/memberNames.js";
 import { createNotifier } from "./discord/notifier.js";
 import { registerCommandsInGuild } from "./discord/register.js";
+import { routeAutocomplete } from "./discord/autocomplete.js";
 import { routeInteraction } from "./discord/router.js";
 import { createWizard, type WizardInteraction } from "./discord/wizard/index.js";
 import { WIZARD_PREFIX } from "./discord/wizard/customId.js";
@@ -171,6 +172,10 @@ async function main(): Promise<void> {
     // that here so a single bad interaction never becomes an unhandled rejection.
     if (interaction.isChatInputCommand()) {
       void routeInteraction(interaction, commands).catch((err) =>
+        console.error("Unhandled interaction error:", err),
+      );
+    } else if (interaction.isAutocomplete()) {
+      void routeAutocomplete(interaction, commandCtx).catch((err) =>
         console.error("Unhandled interaction error:", err),
       );
     } else if (isRoutableComponent(interaction)) {
