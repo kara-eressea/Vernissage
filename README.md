@@ -284,7 +284,7 @@ After the bot is running, a moderator should set up the server:
    run the moderator commands.
 2. Optionally set default activity requirements, cooldowns, a minimum account
    age, and a timezone, so the raffle creation wizard can fill those in for you.
-3. Use `/raffle-mod config channel` to include or exclude specific channels from
+3. Use `/raffle-mod config channels` to include or exclude specific channels from
    message counting, for example to exclude a bot-commands channel.
 4. Run `/raffle-mod config show` at any time to review the current settings.
 
@@ -302,6 +302,7 @@ option and worked examples, see [docs/commands.md](docs/commands.md).
 | Command                  | What it does                                                                 |
 | ------------------------ | --------------------------------------------------------------------------- |
 | `/raffle enter [raffle]` | Enter an open raffle. You can also press the Enter button on the raffle post. |
+| `/raffle withdraw [raffle]` | Take your entry back out of an open raffle. You can re-enter while it stays open. |
 | `/raffle status [raffle]`| See your own eligibility: activity progress, cooldown, and entry status. Only you see the reply. |
 | `/raffle list`           | Show open and upcoming raffles.                                             |
 | `/raffle claim [raffle]` | Claim a prize you won, for raffles that have a claim window. Claim before the deadline shown in the winner announcement or the prize is re-drawn. |

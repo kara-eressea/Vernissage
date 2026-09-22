@@ -146,7 +146,7 @@ Once the bot is running, a moderator sets things up from inside Discord:
    moderator role (who may run the moderator commands).
 2. Optionally set default activity requirements, cooldowns, a minimum account
    age, and a timezone, so the raffle creation wizard can prefill them.
-3. Use `/raffle-mod config channel` to include or exclude specific channels from
+3. Use `/raffle-mod config channels` to include or exclude specific channels from
    message counting.
 4. Run `/raffle-mod config show` at any time to review the settings.
 

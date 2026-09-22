@@ -265,7 +265,7 @@ resulting precedence. If audit-channel posts have been failing (e.g.
 the bot's access was revoked after the channel was set), the audit-channel line
 carries a warning with the time the failures started.
 
-### `/raffle-mod config set …`
+### `/raffle-mod config set`
 Set one or more server defaults in a single call. All options are optional; pass
 only what you want to change.
 
