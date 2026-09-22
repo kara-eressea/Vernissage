@@ -61,7 +61,7 @@ describe("ruleChannelId", () => {
     // A rule stored on the parent governs the thread...
     expect(isChannelCounted(ruleChannelId({ id: "t9", isThread: true, parentId: "c1" }), rules)).toBe(true);
     // ...whereas one stored against the thread's own id would match nothing,
-    // which is why /raffle config channels resolves a picked thread to its parent.
+    // which is why /raffle-mod config channels resolves a picked thread to its parent.
     const threadRule = [{ channelId: "t9", mode: "include" as const }];
     expect(isChannelCounted(ruleChannelId({ id: "t9", isThread: true, parentId: "c1" }), threadRule)).toBe(false);
   });

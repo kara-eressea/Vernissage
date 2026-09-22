@@ -80,7 +80,7 @@ export interface Notifier {
    * When this guild's audit-channel posts have been failing, the UTC ISO time
    * of the first failure since the last success; null while healthy. Failures
    * are swallowed by design (a broken audit channel must never break a raffle),
-   * so this is how they surface to mods — `/raffle config show` reads it.
+   * so this is how they surface to mods — `/raffle-mod config show` reads it.
    * In-memory only: it resets on restart and re-arms on the next failure.
    */
   auditFailingSince(guildId: string): string | null;

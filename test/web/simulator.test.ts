@@ -83,9 +83,9 @@ describe("resolveSimSettings", () => {
 });
 
 describe("buildConfigCommand", () => {
-  it("uses the real /raffle config set option names", () => {
+  it("uses the real /raffle-mod config set option names", () => {
     expect(buildConfigCommand(settings())).toBe(
-      "/raffle config set req-messages:10 req-days:14 req-active-days:3 min-account-age-days:30 cooldown-days:60",
+      "/raffle-mod config set req-messages:10 req-days:14 req-active-days:3 min-account-age-days:30 cooldown-days:60",
     );
   });
 
@@ -114,7 +114,7 @@ describe("buildSimulatorView", () => {
     expect(view.sliders).toHaveLength(5);
     expect(view.sliders[0]!.param).toBe("req-messages");
     expect(view.sliders[0]!.value).toBe(10);
-    expect(view.command).toContain("/raffle config set");
+    expect(view.command).toContain("/raffle-mod config set");
   });
 
   it("counts the filter tabs and shows blocked members first", () => {

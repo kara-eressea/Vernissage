@@ -103,7 +103,7 @@ export function openSnapshotRaffleIds(db: Database, guildId: string): number[] {
 
 /**
  * Re-freeze one member's row in a raffle from a freshly measured value, leaving
- * everyone else's untouched. This is what `/raffle reset <user> activity` needs:
+ * everyone else's untouched. This is what `/raffle-mod reset <user> activity` needs:
  * deleting a member's counted history must still take effect on a raffle that is
  * already open, or the moderator tool would silently do nothing there.
  */

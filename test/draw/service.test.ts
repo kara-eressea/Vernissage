@@ -513,7 +513,7 @@ describe("reconcilePendingDraws", () => {
 
     await reconcilePendingDraws(db, announcer, NOW, gen);
 
-    // Auto raffle drew; manual raffle only committed and awaits /raffle draw.
+    // Auto raffle drew; manual raffle only committed and awaits /raffle-mod draw.
     expect(getRaffle(db, auto)!.status).toBe("drawn");
     expect(getRaffle(db, manual)!.status).toBe("closed");
     expect(getRaffle(db, manual)!.draw_commitment).not.toBeNull();

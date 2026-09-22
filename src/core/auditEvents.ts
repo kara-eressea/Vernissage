@@ -35,7 +35,7 @@ export const AUDIT_EVENTS = {
   // A raffle composed in the dashboard's Raffle Designer was staged as an inert
   // pending spec (design.md "Raffle Designer handoff"). Not mirrored to the audit
   // channel — it becomes real, with its own raffle_created/scheduled rows, only
-  // when a moderator redeems it with /raffle from-design.
+  // when a moderator redeems it with /raffle-mod from-design.
   pendingRaffleStaged: "pending_raffle_staged",
 } as const;
 

@@ -76,7 +76,7 @@ export const SETTABLE_COLUMNS: ReadonlySet<string> = new Set<keyof GuildConfigPa
  *
  * This distinguishes "leave as-is" from "clear": a key absent from `patch` is
  * untouched, while a key present with a `null` value is written as NULL. That is
- * exactly what `/raffle config` needs. `created_at` is set once on the initial
+ * exactly what `/raffle-mod config` needs. `created_at` is set once on the initial
  * insert and never overwritten.
  */
 export function setGuildConfig(

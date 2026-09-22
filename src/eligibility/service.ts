@@ -3,7 +3,7 @@
  *
  * "Who is eligible right now, under this guild's default entry settings?" —
  * assembles snapshot candidates from the repositories and runs the pure
- * `snapshotEligibleUsers` over them. Extracted from the `/raffle eligible`
+ * `snapshotEligibleUsers` over them. Extracted from the `/raffle-mod eligible`
  * handler so every surface that needs the standing pool (the command and the
  * moderator dashboard) computes it the same way and can never drift from the
  * real gate. Combines repos and pure core, like draw/service.ts — not pure
@@ -133,7 +133,7 @@ export function computeEligiblePool(
 
 /**
  * The tunable entry-bar values the simulator feeds in place of the guild's
- * stored defaults. These are exactly the dials `/raffle config set` exposes that
+ * stored defaults. These are exactly the dials `/raffle-mod config set` exposes that
  * the activity-centric snapshot can evaluate (docs/dashboard.md "The
  * centrepiece: an eligibility simulator").
  */
@@ -483,7 +483,7 @@ export function measureActivityForSnapshot(
 
 /**
  * One member's activity over a window, for re-freezing a single row after their
- * counted history changes (`/raffle reset <user> activity`).
+ * counted history changes (`/raffle-mod reset <user> activity`).
  */
 export function measureMemberActivity(
   db: Database,

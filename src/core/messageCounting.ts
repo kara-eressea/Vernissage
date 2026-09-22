@@ -60,7 +60,7 @@ export interface RuleTargetChannel {
  * Rules always live on the *parent* channel: a thread's messages count under the
  * channel it hangs from, so one rule on #general governs every thread in it.
  * Both sides go through this — the gateway path (deciding where an arriving
- * message counts) and `/raffle config channels` (deciding where a moderator's
+ * message counts) and `/raffle-mod config channels` (deciding where a moderator's
  * chosen rule is stored) — so the two can never key on different ids. A rule
  * stored against a thread's own id would match nothing and silently do nothing.
  */

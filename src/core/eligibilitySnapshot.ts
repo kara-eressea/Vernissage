@@ -2,7 +2,7 @@
  * Default-settings eligibility snapshot (pure).
  *
  * Answers "who would be eligible right now, under this guild's default entry
- * settings?" with no raffle in play — the data behind `/raffle eligible`. It
+ * settings?" with no raffle in play — the data behind `/raffle-mod eligible`. It
  * reuses the same pure `checkEligibility` the entry flow uses, so the report can
  * never drift from the real gate.
  *

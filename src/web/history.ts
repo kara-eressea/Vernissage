@@ -20,7 +20,7 @@
  * shows two different entrant counts on two pages.
  *
  * The page also carries **imported wins** — prizes recorded with
- * `/raffle record-win` for raffles this bot never ran (design.md "Imported
+ * `/raffle-mod record-win` for raffles this bot never ran (design.md "Imported
  * wins"). They have no raffle to be a row of, but they gate cooldowns exactly
  * like a drawn win, so leaving them off would make the history look like the
  * whole picture of who has won when it is not.
@@ -100,14 +100,14 @@ export interface ImportedWin {
   name: string | null;
   wonAt: string | null;
   note: string | null;
-  /** Waived by `/raffle reset`, so it no longer gates anything. */
+  /** Waived by `/raffle-mod reset`, so it no longer gates anything. */
   waived: boolean;
 }
 
 export interface HistoryView {
   rows: HistoryRow[];
   totals: HistoryTotals;
-  /** Wins imported with `/raffle record-win`, newest first. */
+  /** Wins imported with `/raffle-mod record-win`, newest first. */
   imported: ImportedWin[];
   /** Test raffles omitted from the listing, stated rather than hidden. */
   hiddenTests: number;

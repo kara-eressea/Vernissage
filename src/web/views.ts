@@ -1592,7 +1592,7 @@ const DESIGNER_SCRIPT = raw(`<script>
   function showModal(token){ var t=$('ds-modal-token'); if(t) t.textContent=token; var m=$('ds-modal'); if(m) m.style.display='flex'; }
   function closeModal(){ var m=$('ds-modal'); if(m) m.style.display='none'; }
   function copyCmd(){
-    var token=($('ds-modal-token')||{}).textContent||''; var cmd='/raffle from-design '+token; var b=$('ds-modal-copy');
+    var token=($('ds-modal-token')||{}).textContent||''; var cmd='/raffle-mod from-design '+token; var b=$('ds-modal-copy');
     if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(cmd).then(function(){ var o=b.textContent; b.textContent='Copied \\u2713'; setTimeout(function(){ b.textContent=o; },1600); },function(){}); }
   }
   function onCreate(){
@@ -1678,8 +1678,8 @@ export function designerPage(
     d.minAccountAgeDays > 0
       ? html`Minimum account age is a server-wide setting (${d.minAccountAgeDays} day${d.minAccountAgeDays === 1
           ? ""
-          : "s"}). Change it with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle config set min-account-age-days</code>.`
-      : html`No minimum account age is set server-wide. Set one with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle config set min-account-age-days</code> if you want an anti-alt floor.`;
+          : "s"}). Change it with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle-mod config set min-account-age-days</code>.`
+      : html`No minimum account age is set server-wide. Set one with <code style="font-family:'JetBrains Mono',monospace; color:#a7adb7;">/raffle-mod config set min-account-age-days</code> if you want an anti-alt floor.`;
 
   const eligibilityBody = html`
     <div style="display:flex; flex-direction:column; gap:2px; margin-bottom:15px;">
@@ -1742,7 +1742,7 @@ export function designerPage(
     : html`
         <div style="display:flex; align-items:center; gap:13px; background:rgba(212,162,76,.07); border:1px solid rgba(212,162,76,.26); border-radius:13px; padding:13px 15px; margin-bottom:14px;">
           <span style="flex:none; width:30px; height:30px; border-radius:9px; background:rgba(212,162,76,.14); color:var(--warn); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700;">!</span>
-          <div style="flex:1; min-width:0;"><div style="font-size:13.5px; font-weight:600; color:#e8dcc4;">No announce channel is set</div><div style="font-size:12.5px; color:#a99a7d; margin-top:1px;">A raffle has nowhere to post until you set one in Discord with <code style="font-family:'JetBrains Mono',monospace;">/raffle config set announce-channel</code>.</div></div>
+          <div style="flex:1; min-width:0;"><div style="font-size:13.5px; font-weight:600; color:#e8dcc4;">No announce channel is set</div><div style="font-size:12.5px; color:#a99a7d; margin-top:1px;">A raffle has nowhere to post until you set one in Discord with <code style="font-family:'JetBrains Mono',monospace;">/raffle-mod config set announce-channel</code>.</div></div>
         </div>
       `;
 
@@ -1767,7 +1767,7 @@ export function designerPage(
           ${statusBlock}
           <button type="button" id="ds-create" class="hovbtn" disabled style="flex:none; display:flex; align-items:center; gap:8px; background:var(--accent); color:#0e1013; border:none; border-radius:10px; padding:10px 18px; font-size:13.5px; font-weight:700; cursor:pointer;"><span style="font-size:14px;">↗</span>Create in Discord</button>
         </div>
-        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">When you're happy, this stages the raffle and hands you a one-time code to run in ${guild.name} with <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code>. Nothing is published until you confirm there. Your work is kept in this browser.</p>
+        <p style="margin:2px 2px 0; font-size:11.5px; color:#585e68; line-height:1.5;">When you're happy, this stages the raffle and hands you a one-time code to run in ${guild.name} with <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle-mod from-design</code>. Nothing is published until you confirm there. Your work is kept in this browser.</p>
       `
     : html`
         <div style="margin-top:6px; background:#14171d; border:1px solid #262a31; border-radius:14px; padding:13px 15px; display:flex; align-items:center; justify-content:space-between; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
@@ -1782,7 +1782,7 @@ export function designerPage(
               moderators. Your work is kept in this browser.`
           : html`This is a live preview sandbox. Handing off to Discord — staging the raffle as a
               pending spec you confirm in-server with
-              <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle from-design</code>
+              <code style="font-family:'JetBrains Mono',monospace; color:#8b93a0;">/raffle-mod from-design</code>
               — lands in the next update. Your work is kept in this browser.`}</p>
       `;
 
@@ -1800,7 +1800,7 @@ export function designerPage(
               <div style="background:#0c0e11; border:1px solid #262a31; border-radius:12px; padding:16px 18px; margin-bottom:12px;">
                 <div style="font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#585e68; margin-bottom:9px;">Your command</div>
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                  <code style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:#e6e8ec; overflow-x:auto; white-space:nowrap;"><span style="color:var(--accent);">/raffle from-design</span> <span id="ds-modal-token">…</span></code>
+                  <code style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600; color:#e6e8ec; overflow-x:auto; white-space:nowrap;"><span style="color:var(--accent);">/raffle-mod from-design</span> <span id="ds-modal-token">…</span></code>
                   <button type="button" id="ds-modal-copy" style="flex:none; background:var(--accent); color:#0e1013; border:none; border-radius:9px; padding:8px 13px; font-size:12.5px; font-weight:700; cursor:pointer;">Copy</button>
                 </div>
               </div>
@@ -2194,7 +2194,7 @@ function importedWins(view: HistoryView): RawHtml {
     <section style="margin-top:18px; background:#16181d; border:1px solid #23272e; border-radius:16px; overflow:hidden;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 19px 13px; flex-wrap:wrap;">
         <span class="serif" style="font-weight:600; font-size:16px;">Imported wins</span>
-        <span style="font-size:11.5px; color:#6b717c;">recorded with <code style="font-family:'JetBrains Mono',monospace;">/raffle record-win</code> · counts toward cooldowns</span>
+        <span style="font-size:11.5px; color:#6b717c;">recorded with <code style="font-family:'JetBrains Mono',monospace;">/raffle-mod record-win</code> · counts toward cooldowns</span>
       </div>
       <div style="border-top:1px solid #23272e;">
         ${view.imported.map(

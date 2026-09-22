@@ -7,7 +7,7 @@
  * Designer handoff"). The bot re-validates the submission, stages it as an inert
  * pending spec keyed by a friendly single-use token bound to that moderator, and
  * returns the token for the moderator to redeem in Discord with
- * `/raffle from-design`. Nothing is published here; the raffle becomes real only
+ * `/raffle-mod from-design`. Nothing is published here; the raffle becomes real only
  * on redemption.
  *
  * The listener binds to localhost by default and authenticates the dashboard

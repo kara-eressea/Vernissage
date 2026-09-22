@@ -4,7 +4,7 @@
  * A channel the bot cannot view or send to is accepted by Discord's pickers
  * (they show every channel the *mod* can see), and the failure then happens
  * later and silently — the audit mirror or the raffle's entry message just
- * never appears (issue #3). Both `/raffle config set` and the wizard's
+ * never appears (issue #3). Both `/raffle-mod config set` and the wizard's
  * announce-channel select gate their choices through this one helper.
  */
 

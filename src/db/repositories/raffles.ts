@@ -220,7 +220,7 @@ export function earliestActivityWindowStart(db: Database): string | null {
   return row.d;
 }
 
-/** All draft raffles for a guild, newest first — used by /raffle edit. */
+/** All draft raffles for a guild, newest first — used by /raffle-mod edit. */
 export function listDrafts(db: Database, guildId: string): RaffleRow[] {
   return db
     .prepare(

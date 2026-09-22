@@ -52,7 +52,7 @@ export function migrate(db: Database): void {
       db.exec(`ALTER TABLE raffles ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0`);
     }
     if (current < 13) {
-      // `/raffle reset` waiver flag on wins (default off).
+      // `/raffle-mod reset` waiver flag on wins (default off).
       db.exec(`ALTER TABLE wins ADD COLUMN cooldown_waived INTEGER NOT NULL DEFAULT 0`);
     }
     if (current < 14) {

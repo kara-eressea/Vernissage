@@ -1,5 +1,5 @@
 /**
- * `/raffle from-design <token>` — redeem a dashboard Raffle Designer handoff.
+ * `/raffle-mod from-design <token>` — redeem a dashboard Raffle Designer handoff.
  *
  * The dashboard stages a composed raffle as an inert pending spec (via the bot's
  * authenticated handoff endpoint) and hands the moderator a friendly token. This
@@ -57,7 +57,7 @@ export function parseFromDesignId(customId: string): { action: string; token: st
   return { action: parts[1]!, token: parts.slice(2).join(":") };
 }
 
-/** Add the `from-design` subcommand to the `/raffle` builder. */
+/** Add the `from-design` subcommand to the `/raffle-mod` builder. */
 export function addFromDesignSubcommand(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder.addSubcommand((s) =>
     s
@@ -156,7 +156,7 @@ function specToPatch(spec: PendingRaffleSpec): RaffleFieldPatch {
   };
 }
 
-/** `/raffle from-design <token>`: validate the token and show a confirm summary. */
+/** `/raffle-mod from-design <token>`: validate the token and show a confirm summary. */
 export async function handleFromDesign(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -246,7 +246,7 @@ export async function handleFromDesignComponent(
   if (!outcome.ok) {
     // The draft is kept so the work isn't lost — fixable in Discord like any draft.
     await interaction.update({
-      content: `Couldn't schedule it: ${outcome.error}\nSaved as draft #${raffleId} — fix it with \`/raffle edit ${raffleId}\`.`,
+      content: `Couldn't schedule it: ${outcome.error}\nSaved as draft #${raffleId} — fix it with \`/raffle-mod edit ${raffleId}\`.`,
       components: [],
     });
     return;

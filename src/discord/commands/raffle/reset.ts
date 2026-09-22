@@ -1,5 +1,5 @@
 /**
- * `/raffle reset <user> <scope>`.
+ * `/raffle-mod reset <user> <scope>`.
  *
  * A moderator maintenance command for when something goes awry: reset one
  * member's raffle standing in this guild, scoped to what needs undoing
@@ -48,7 +48,7 @@ const SCOPES = {
 
 type ResetScope = keyof typeof SCOPES;
 
-/** Add the reset subcommand to the `/raffle` builder. */
+/** Add the reset subcommand to the `/raffle-mod` builder. */
 export function addResetSubcommand(builder: SlashCommandBuilder): SlashCommandBuilder {
   builder.addSubcommand((s) =>
     s
@@ -76,7 +76,7 @@ function reply(interaction: ChatInputCommandInteraction, content: string): Promi
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
-/** Handle `/raffle reset`. */
+/** Handle `/raffle-mod reset`. */
 export async function handleReset(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,

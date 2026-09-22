@@ -7,7 +7,7 @@
  * Phase A (this file) is read-only — it seeds the composer from the guild's
  * defaults and computes the pool preview through the shared eligibility core, so
  * the "who would be eligible" number can never drift from the real gate. The
- * Discord hand-off (staging an inert spec redeemed with `/raffle from-design`)
+ * Discord hand-off (staging an inert spec redeemed with `/raffle-mod from-design`)
  * lands in a later change; nothing here writes.
  *
  * `buildDesignerPool` is the one non-trivial piece: it turns a `SimulationResult`

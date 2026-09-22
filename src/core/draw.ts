@@ -63,7 +63,7 @@ function seedIndex(seed: string, count: number): number {
  * entrants returns everyone (in selection order).
  *
  * `excludedIds` are disqualified entrants that can never be selected — the
- * reroll mechanism (design.md "/raffle reroll"). Rerolling re-runs the *same*
+ * reroll mechanism (design.md "/raffle-mod reroll"). Rerolling re-runs the *same*
  * selection from the *same* base seed with the disqualified ids excluded, so a
  * reroll is fully recomputable from public data (base seed + entrant list +
  * disqualified list) with no per-win seed to persist. Excluded ids are skipped

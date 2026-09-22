@@ -5,17 +5,23 @@ the "how to use it" companion to [design.md](design.md); the "why it behaves thi
 way" rules — the eligibility order, the draw scheme, cooldown and test/reset
 semantics — live there, and each command below links to the relevant section.
 
-All functionality hangs off a single `/raffle` command as subcommands, so the bot
-registers exactly one command. Options are shown as `<required>` and
-`[optional]`. After changing the command surface, run `npm run deploy-commands`
-to re-register (guild commands update instantly). Moving the bot between
-allowlisted servers needs no re-run: it registers its commands itself when it
-joins an allowlisted guild and reconciles at startup.
+Functionality hangs off two commands, split by audience: **`/raffle`** is what
+members do, **`/raffle-mod`** is what moderators do. Options are shown as
+`<required>` and `[optional]`. After changing the command surface, run
+`npm run deploy-commands` to re-register (guild commands update instantly).
+Moving the bot between allowlisted servers needs no re-run: it registers its
+commands itself when it joins an allowlisted guild and reconciles at startup.
 
-**Permissions.** User commands are open to everyone. Moderator commands are
-hidden from ordinary members (they require the Manage Server permission) and are
-additionally gated at run time by the configured mod role — see
-[`/raffle config set`](#raffle-config-set). Replies noted as *ephemeral* are
+**Permissions.** `/raffle` is open to everyone. `/raffle-mod` requires the
+Manage Server permission, so Discord hides the whole command — and with it the
+list of what moderators can do — from ordinary members; it is additionally gated
+at run time by the configured mod role, see
+[`/raffle-mod config set`](#raffle-mod-config-set).
+
+The two gates are set in different places and can disagree. A mod role *without*
+Manage Server passes the run-time gate but will not see `/raffle-mod` in the
+picker. Either give that role Manage Server, or grant it the command directly in
+**Server Settings → Integrations → Tombola**. Replies noted as *ephemeral* are
 visible only to the member who ran the command.
 
 ---
@@ -71,35 +77,35 @@ you have an unclaimed win in more than one. Ephemeral.
 
 ## Moderator commands
 
-### `/raffle create [name] [prize]`
+### `/raffle-mod create [name] [prize]`
 Open the guided creation wizard (walkthrough [below](#the-creation-wizard)).
 `name` and `prize` optionally prefill the first step for power users; everything
 else is set in the wizard.
 
 ```
-/raffle create
-/raffle create name:"Summer Vinyl Giveaway" prize:"A record of your choice"
+/raffle-mod create
+/raffle-mod create name:"Summer Vinyl Giveaway" prize:"A record of your choice"
 ```
 
-### `/raffle edit <raffle>`
+### `/raffle-mod edit <raffle>`
 Reopen the wizard on a draft or scheduled raffle to change any setting. On an
 **open** raffle only the end time may change — moved earlier or later to fix a
 mis-scheduled close, but never before the raffle's start — and the change is
 audit-logged. Drawn or later raffles cannot be edited.
 
 ```
-/raffle edit raffle:42
+/raffle-mod edit raffle:42
 ```
 
-### `/raffle cancel <raffle> <reason>`
+### `/raffle-mod cancel <raffle> <reason>`
 Cancel a raffle before it is drawn (any of draft, scheduled, open, or closed).
 The reason is logged.
 
 ```
-/raffle cancel raffle:42 reason:"Prize fell through"
+/raffle-mod cancel raffle:42 reason:"Prize fell through"
 ```
 
-### `/raffle from-design <token>`
+### `/raffle-mod from-design <token>`
 Create a raffle from a code produced by the moderator **dashboard's Raffle
 Designer**. Compose the raffle visually on the web, click "Create in Discord", and
 the dashboard hands you a short code (e.g. `gentle-harbor-4821`). Running the
@@ -112,64 +118,64 @@ composed it can redeem it (see design.md "Raffle Designer handoff"). This comman
 appears only when the handoff is enabled on the deployment.
 
 ```
-/raffle from-design token:gentle-harbor-4821
+/raffle-mod from-design token:gentle-harbor-4821
 ```
 
-### `/raffle draw <raffle>`
+### `/raffle-mod draw <raffle>`
 Draw a closed raffle now. Needed for raffles set to manual draw, or to force one
 that has not auto-drawn yet. Idempotent — an already-drawn raffle reports so. The
 selection and its verification data are published per the
 [provably-fair scheme](design.md#provably-fair-draw).
 
 ```
-/raffle draw raffle:42
+/raffle-mod draw raffle:42
 ```
 
-### `/raffle announce <raffle>`
+### `/raffle-mod announce <raffle>`
 Re-post an already-drawn raffle's public winner announcement and audit result
 from stored data. Use it if the draw itself succeeded but a Discord post failed
 to go out (posts are best-effort, so a failure is silent). It re-selects nothing
 — the same winners, seed, and secret are re-published and the entry card's winner
 line is refreshed. Idempotent and state-free, so it is safe to run more than once;
 it never re-draws, extends a claim window, or changes who won. Only valid on a
-`drawn` raffle (for one not yet drawn, use `/raffle draw`).
+`drawn` raffle (for one not yet drawn, use `/raffle-mod draw`).
 
 ```
-/raffle announce raffle:42
+/raffle-mod announce raffle:42
 ```
 
-### `/raffle reroll <raffle> <winner> <reason>`
+### `/raffle-mod reroll <raffle> <winner> <reason>`
 Replace a disqualified winner. The replacement is re-selected from the *same*
 base seed with the disqualified winner excluded, so it stays verifiable from
 public data (see [Reroll semantics](design.md#provably-fair-draw)). The reason is
 kept in the audit log (mod-only), not published.
 
 ```
-/raffle reroll raffle:42 winner:@alice reason:"Duplicate account"
+/raffle-mod reroll raffle:42 winner:@alice reason:"Duplicate account"
 ```
 
-### `/raffle ban <user> [duration] [reason]`
+### `/raffle-mod ban <user> [duration] [reason]`
 Blacklist a user from raffles. `duration` accepts values like `30m`, `24h`,
 `7d`, `2w`; leave it blank for a permanent ban. Banning a user who has an active
 entry in an open raffle removes that entry (logged). The reason is mod-only.
 
 ```
-/raffle ban user:@spammer duration:7d reason:"Raffle spam"
-/raffle ban user:@spammer
+/raffle-mod ban user:@spammer duration:7d reason:"Raffle spam"
+/raffle-mod ban user:@spammer
 ```
 
-### `/raffle unban <user>`
+### `/raffle-mod unban <user>`
 Lift a user's blacklist. Does **not** restore entries removed by the ban.
 
 ```
-/raffle unban user:@spammer
+/raffle-mod unban user:@spammer
 ```
 
-### `/raffle banlist`
+### `/raffle-mod banlist`
 List the server's current blacklist, with each ban's expiry and mod-only reason.
 Ephemeral.
 
-### `/raffle record-win <user> <won-at> [note]`
+### `/raffle-mod record-win <user> <won-at> [note]`
 Record a prize a member won **outside this bot** — before it was installed, or in
 an event run some other way — so it counts toward their win cooldown. The
 migration path when a server adopts the bot with a raffle history already behind
@@ -191,14 +197,14 @@ appears in the verifier or the raffle history, and it never advances anyone
 else's count-based cooldown.
 
 One member per command; run it again for the next. Undo with
-`/raffle reset <user> cooldown`.
+`/raffle-mod reset <user> cooldown`.
 
 ```
-/raffle record-win user:@alice won-at:2026-06-15
-/raffle record-win user:@alice won-at:"3 weeks ago" note:"Summer art contest"
+/raffle-mod record-win user:@alice won-at:2026-06-15
+/raffle-mod record-win user:@alice won-at:"3 weeks ago" note:"Summer art contest"
 ```
 
-### `/raffle reset <user> <scope>`
+### `/raffle-mod reset <user> <scope>`
 Reset one member's raffle standing in this server when something goes wrong — a
 mis-run test that awarded a real cooldown, a spam wave that inflated someone's
 counts, a win that should not have gated re-entry. Always scoped to one member in
@@ -208,19 +214,19 @@ one server; it never touches anyone else. Full semantics:
 `scope` is one of:
 - **cooldown** — waive the member's still-gating wins, lifting both their win
   cooldown and the prior-winner bar. Win/claim records are preserved. Wins added
-  with `/raffle record-win` are waived too.
+  with `/raffle-mod record-win` are waived too.
 - **activity** — delete the member's counted-message history (and drop any counts
   still buffered in memory, so a flush can't bring them back).
 - **all** — both.
 
-It does not lift a blacklist (use `/raffle unban`) or remove active entries.
+It does not lift a blacklist (use `/raffle-mod unban`) or remove active entries.
 
 ```
-/raffle reset user:@alice scope:cooldown
-/raffle reset user:@alice scope:all
+/raffle-mod reset user:@alice scope:cooldown
+/raffle-mod reset user:@alice scope:all
 ```
 
-### `/raffle eligible`
+### `/raffle-mod eligible`
 Show how many members — and which ones — would be eligible right now under the
 server's **default** entry settings, with no raffle running. A standing view of
 the pool a new raffle would draw from, useful for sanity-checking the defaults
@@ -240,17 +246,17 @@ hit — with these limits, because there is no raffle to read from:
   specific raffle may narrow — or widen — the pool further.
 
 ```
-/raffle eligible
+/raffle-mod eligible
 ```
 
 ---
 
 ## Server configuration
 
-`/raffle config` holds the per-server defaults and message-counting rules. All
+`/raffle-mod config` holds the per-server defaults and message-counting rules. All
 replies are ephemeral.
 
-### `/raffle config show`
+### `/raffle-mod config show`
 Show the current configuration: audit and announce channels, mod role, hourly
 cap, default cooldown, default minimum account age, default minimum time in the
 server, default activity requirement (messages, active days, and window),
@@ -259,7 +265,7 @@ resulting precedence. If audit-channel posts have been failing (e.g.
 the bot's access was revoked after the channel was set), the audit-channel line
 carries a warning with the time the failures started.
 
-### `/raffle config set …`
+### `/raffle-mod config set …`
 Set one or more server defaults in a single call. All options are optional; pass
 only what you want to change.
 
@@ -286,13 +292,13 @@ if the bot lacks **View Channel** or **Send Messages** in the chosen channel
 an explanation instead of failing silently at post time.
 
 ```
-/raffle config set audit-channel:#raffle-log mod-role:@Mods
-/raffle config set req-messages:20 req-days:14 req-active-days:3 timezone:Europe/Copenhagen
-/raffle config set min-server-age-days:14
-/raffle config set clear:"hourly cap"
+/raffle-mod config set audit-channel:#raffle-log mod-role:@Mods
+/raffle-mod config set req-messages:20 req-days:14 req-active-days:3 timezone:Europe/Copenhagen
+/raffle-mod config set min-server-age-days:14
+/raffle-mod config set clear:"hourly cap"
 ```
 
-### `/raffle config channels <action> [channel]`
+### `/raffle-mod config channels <action> [channel]`
 Manage which channels' messages count toward activity. `action` is one of
 `include`, `exclude`, `clear`, or `list`. The include/exclude/clear actions each
 act on one channel and are run repeatedly to build up a multi-channel set; `list`
@@ -314,18 +320,18 @@ says so. See [design.md](design.md#key-constraint-message-counting).
 > level.
 
 ```
-/raffle config channels action:exclude channel:#bot-commands
-/raffle config channels action:include channel:#general
-/raffle config channels action:include channel:#music
-/raffle config channels action:list
-/raffle config channels action:clear channel:#general
+/raffle-mod config channels action:exclude channel:#bot-commands
+/raffle-mod config channels action:include channel:#general
+/raffle-mod config channels action:include channel:#music
+/raffle-mod config channels action:list
+/raffle-mod config channels action:clear channel:#general
 ```
 
 ---
 
 ## The creation wizard
 
-`/raffle create` opens a guided, mostly button-and-menu-driven wizard — the
+`/raffle-mod create` opens a guided, mostly button-and-menu-driven wizard — the
 primary way mods build raffles. It is designed for non-technical users: no
 options to memorize, sensible defaults from the server config, plain-language
 labels, and **nothing is published until the final confirmation**. The design
@@ -345,7 +351,7 @@ The flow (all on one ephemeral message that updates in place):
    to everyone" waives every requirement (see
    [Entry flow](design.md#entry-flow)) and can't be combined with a role gate.
    Minimum account age and server tenure are **server-wide** settings (in
-   `/raffle config set`), not per-raffle. A **More restrictions…** sub-screen
+   `/raffle-mod config set`), not per-raffle. A **More restrictions…** sub-screen
    holds the optional per-raffle gates: bar prior winners, and require or exclude
    a role.
 
@@ -366,7 +372,7 @@ The flow (all on one ephemeral message that updates in place):
 
 Useful behaviors:
 - The raffle exists as a **draft** from step 1, so an abandoned wizard loses
-  nothing — resume it any time with `/raffle edit`.
+  nothing — resume it any time with `/raffle-mod edit`.
 - Each of steps 3 and 4 has a **Use defaults** button that fills the still-unset
   fields from the server config.
 - A bot restart mid-wizard does not lose progress; the wizard resumes at the
@@ -384,9 +390,9 @@ raffles, where the goal is keeping out lurkers and members who only join for
 raffles:
 
 ```
-/raffle config set audit-channel:#raffle-log announce-channel:#raffles mod-role:@Mods
-/raffle config set req-messages:10 req-days:14 req-active-days:3 min-account-age-days:30 min-server-age-days:14 hourly-cap:10 cooldown-count:1
-/raffle config channels action:exclude channel:#bot-spam
+/raffle-mod config set audit-channel:#raffle-log announce-channel:#raffles mod-role:@Mods
+/raffle-mod config set req-messages:10 req-days:14 req-active-days:3 min-account-age-days:30 min-server-age-days:14 hourly-cap:10 cooldown-count:1
+/raffle-mod config channels action:exclude channel:#bot-spam
 ```
 
 - **Activity 10 messages across 3 days / 14-day window**: a low bar on purpose —
@@ -422,7 +428,7 @@ out, override the cooldown on that one raffle in the wizard's **Draw** step
 value replaces the server default for that raffle only — it does not stack —
 and your regular raffles are unaffected. Notes:
 
-- Test-raffle wins and wins waived via `/raffle reset` don't count against the
+- Test-raffle wins and wins waived via `/raffle-mod reset` don't count against the
   cooldown.
 - The entry message states the cooldown plainly (it is not gameable, unlike
   the activity numbers, which are never published — see
