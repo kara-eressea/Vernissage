@@ -165,7 +165,9 @@ run; see [Registering commands](#registering-commands).
 
 To update later, run `docker compose pull` followed by `docker compose up -d`.
 Pin to a specific version instead of `latest` (for example
-`ghcr.io/kara-eressea/vernissage:0.1.0`) if you prefer to control upgrades.
+`ghcr.io/kara-eressea/vernissage:0.13.0`) if you prefer to control upgrades; the
+[releases page](https://github.com/kara-eressea/Vernissage/releases) lists the
+versions that exist.
 
 The image is tied to this repository. If the package is private, either make it
 public in the repository's package settings, or log in to the registry first
@@ -564,13 +566,13 @@ container image for amd64 and arm64 and publishes it to
 `ghcr.io/kara-eressea/vernissage`.
 
 ```
-git tag v0.1.0
-git push origin v0.1.0
+git tag -a v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
 ```
 
 The workflow tags the image with the full version and the major and minor
-versions (for example `0.1.0`, `0.1`, and `0`), and moves the `latest` tag for
-stable releases. Pre-release tags such as `v0.1.0-rc.1` are published but do not
+versions (for that tag: `1.2.3`, `1.2`, and `1`), and moves the `latest` tag for
+stable releases. Pre-release tags such as `v1.2.3-rc.1` are published but do not
 move `latest`. Use annotated, semantic version tags so the tags come out as
 expected.
 
