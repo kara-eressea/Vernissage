@@ -14,19 +14,25 @@ import {
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type MessageComponentInteraction,
+  type ModalSubmitInteraction,
 } from "discord.js";
 import type { Database } from "better-sqlite3";
 import { isModerator } from "../../core/permissions.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 
 /**
- * An interaction we can read a member's moderator standing from. Autocomplete is
- * included because the raffle-id picker withholds moderator suggestions from
- * non-moderators, and asks the same question to decide.
+ * An interaction we can read a member's moderator standing from.
+ *
+ * Every shape a moderator action can arrive in, because the question "may this
+ * person do this" gets asked again at the write, not only when the command that
+ * opened the flow was accepted (issue #53). Autocomplete is here for a different
+ * reason: the raffle-id picker withholds moderator suggestions from
+ * non-moderators, and decides that with the same question.
  */
 type ModeratableInteraction =
   | ChatInputCommandInteraction
   | MessageComponentInteraction
+  | ModalSubmitInteraction
   | AutocompleteInteraction;
 
 /** Role ids the invoking member holds, across both member shapes discord.js hands us. */

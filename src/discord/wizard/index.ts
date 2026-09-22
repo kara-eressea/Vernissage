@@ -38,6 +38,7 @@ import {
   type WizardStep,
 } from "../../db/repositories/wizardState.js";
 import { channelAccessError } from "../channelAccess.js";
+import { isModeratorInteraction } from "../commands/moderator.js";
 import { type Notifier } from "../notifier.js";
 import { confirmAndSchedule, toDraftFields } from "../raffleScheduling.js";
 import { parseWizardId } from "./customId.js";
@@ -228,6 +229,24 @@ export function createWizard(deps: WizardDeps): Wizard {
     const raffle = getRaffle(db, parsed.raffleId);
     if (!raffle) {
       await respond(interaction, { content: "That draft no longer exists.", components: [] });
+      return;
+    }
+
+    // Re-authorise on every step, not only when `/raffle-mod create` was
+    // accepted (issue #53). The wizard is a conversation that can outlive the
+    // standing that opened it: a moderator demoted, or the mod role
+    // reconfigured, part-way through must not still be able to confirm a raffle
+    // into existence at the end of it. Gating the dispatch rather than the
+    // Confirm alone means no future step can be added outside the check, and
+    // every step already writes something (the draft row, the wizard's place in
+    // it). The mod role is read from the draft's own guild, so it cannot
+    // disagree with the raffle being edited.
+    const modRole = getGuild(db, raffle.guild_id)?.mod_role ?? null;
+    if (!isModeratorInteraction(interaction, modRole)) {
+      await respond(interaction, {
+        content: "You do not have permission to manage raffles.",
+        components: [],
+      });
       return;
     }
 

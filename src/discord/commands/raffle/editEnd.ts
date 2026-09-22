@@ -23,6 +23,7 @@ import { parseFriendlyTimeInZone } from "../../../core/timeParse.js";
 import { getGuild } from "../../../db/repositories/guilds.js";
 import { getRaffle, updateRaffleFields } from "../../../db/repositories/raffles.js";
 import { auditAndMirror, type Notifier } from "../../notifier.js";
+import { isModeratorInteraction } from "../moderator.js";
 
 /** Custom-id namespace for the end-correction modal submit. */
 export const EDIT_END_PREFIX = "editend";
@@ -61,10 +62,23 @@ export async function handleEditEnd(
     return;
   }
 
+  const guild = getGuild(deps.db, raffle.guild_id);
+
+  // Re-authorise at the write, not only when `/raffle-mod edit` showed the modal
+  // (issue #53). A modal can sit open indefinitely, and this submit moves a live
+  // raffle's end time, so the standing that matters is the one held now.
+  if (!isModeratorInteraction(interaction, guild?.mod_role ?? null)) {
+    await interaction.reply({
+      content: "You do not have permission to manage raffles.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const now = new Date().toISOString();
   // Interpret the input in the guild's configured timezone, matching the
   // creation wizard, so "tomorrow 20:00" means the mods' local time, not UTC.
-  const timeZone = getGuild(deps.db, raffle.guild_id)?.timezone ?? null;
+  const timeZone = guild?.timezone ?? null;
   const parsed = parseFriendlyTimeInZone(interaction.fields.getTextInputValue("end"), now, timeZone);
   if (!parsed.ok) {
     await interaction.reply({ content: `⚠️ ${parsed.error}`, flags: MessageFlags.Ephemeral });

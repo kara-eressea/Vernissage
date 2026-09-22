@@ -509,6 +509,15 @@ resetting eligibility), and commands.md links back to them.
   moderator subcommand independently re-checks the caller against the configured
   mod role at run time, so the answer does not change if a member reaches one
   anyway.
+- **Authorisation is checked at the write, not only at the door.** A moderator
+  action that spans several interactions — the creation wizard, the end-time
+  correction modal, the Raffle Designer confirm — re-checks standing on every
+  interaction, not just on the command that opened it. These flows are
+  conversations, and a conversation can outlive the authority that started it: a
+  moderator demoted, or the mod role reconfigured, part-way through must not
+  still be able to confirm a raffle into existence at the end. Being *shown* a
+  button is not permission to press it. The check sits on the flow's dispatch
+  rather than on its final step, so a step added later cannot land outside it.
 - Visibility and authority are set separately in Discord, so they can disagree:
   a mod role without Manage Server passes the run-time gate but cannot *see*
   `/raffle-mod` until a server admin grants it the command in
