@@ -11,6 +11,7 @@
 import {
   MessageFlags,
   PermissionFlagsBits,
+  type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type MessageComponentInteraction,
 } from "discord.js";
@@ -18,8 +19,15 @@ import type { Database } from "better-sqlite3";
 import { isModerator } from "../../core/permissions.js";
 import { getGuild } from "../../db/repositories/guilds.js";
 
-/** An interaction we can read a member's moderator standing from. */
-type ModeratableInteraction = ChatInputCommandInteraction | MessageComponentInteraction;
+/**
+ * An interaction we can read a member's moderator standing from. Autocomplete is
+ * included because the raffle-id picker withholds moderator suggestions from
+ * non-moderators, and asks the same question to decide.
+ */
+type ModeratableInteraction =
+  | ChatInputCommandInteraction
+  | MessageComponentInteraction
+  | AutocompleteInteraction;
 
 /** Role ids the invoking member holds, across both member shapes discord.js hands us. */
 export function memberRoleIds(interaction: ModeratableInteraction): string[] {

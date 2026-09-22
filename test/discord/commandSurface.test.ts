@@ -38,9 +38,10 @@ afterEach(() => {
 });
 
 /** One command as the JSON actually sent to Discord on registration. */
+type SubOption = { name: string; type: number; autocomplete?: boolean };
 type CommandJson = {
   default_member_permissions?: string | null;
-  options?: Array<{ name: string; type: number; options?: Array<{ name: string; type: number }> }>;
+  options?: Array<{ name: string; type: number; options?: SubOption[] }>;
 };
 
 /** The built command set, keyed by command name. */
@@ -112,6 +113,30 @@ describe("the registered command surface", () => {
       "reset",
       "unban",
     ]);
+  });
+
+  it("gives every raffle-id option a picker", () => {
+    // Issue #48: nobody should have to know a raffle's number. A new id option
+    // that forgets .setAutocomplete(true) is the regression this catches — it
+    // looks fine until a non-technical member meets it.
+    const withoutPicker: string[] = [];
+    for (const [name, command] of surface()) {
+      for (const option of command.options ?? []) {
+        // Subcommand groups nest one level deeper; both shapes are walked.
+        const subs = option.options ?? [];
+        for (const sub of subs) {
+          if (sub.name === "raffle" && sub.autocomplete !== true) {
+            withoutPicker.push(`/${name} ${option.name}`);
+          }
+          for (const nested of (sub as { options?: SubOption[] }).options ?? []) {
+            if (nested.name === "raffle" && nested.autocomplete !== true) {
+              withoutPicker.push(`/${name} ${option.name} ${sub.name}`);
+            }
+          }
+        }
+      }
+    }
+    expect(withoutPicker).toEqual([]);
   });
 
   it("never exposes the same subcommand on both commands", () => {

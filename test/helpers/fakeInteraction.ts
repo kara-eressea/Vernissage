@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction } from "discord.js";
+import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
 import { vi } from "vitest";
 
 /** What a fake slash-command interaction needs to stand in for the real thing. */
@@ -58,4 +58,43 @@ export function fakeChatInput(opts: FakeChatInputOpts = {}): FakeChatInput {
     reply: vi.fn().mockResolvedValue(undefined),
     showModal: vi.fn().mockResolvedValue(undefined),
   } as unknown as FakeChatInput;
+}
+
+/** What a fake autocomplete interaction needs to stand in for the real thing. */
+export interface FakeAutocompleteOpts {
+  commandName?: string;
+  subcommand?: string | null;
+  /** The option being typed in, and what has been typed so far. */
+  focused?: { name: string; value: string };
+  guildId?: string | null;
+  userId?: string;
+  ownerId?: string;
+  roleIds?: string[];
+  manageGuild?: boolean;
+}
+
+/** A fake AutocompleteInteraction with a spyable `respond`. */
+export type FakeAutocomplete = AutocompleteInteraction & { respond: ReturnType<typeof vi.fn> };
+
+/**
+ * Build a fake autocomplete interaction covering what the picker reads: which
+ * command and subcommand is being typed, which option has focus and its current
+ * text, and the caller's moderator standing (the moderator surface withholds
+ * suggestions from members).
+ */
+export function fakeAutocomplete(opts: FakeAutocompleteOpts = {}): FakeAutocomplete {
+  const focused = opts.focused ?? { name: "raffle", value: "" };
+  return {
+    commandName: opts.commandName ?? "raffle",
+    guildId: opts.guildId === undefined ? "g1" : opts.guildId,
+    user: { id: opts.userId ?? "u1" },
+    guild: { ownerId: opts.ownerId ?? "owner" },
+    member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
+    memberPermissions: { has: () => opts.manageGuild ?? false },
+    options: {
+      getFocused: () => focused,
+      getSubcommand: () => (opts.subcommand === undefined ? "enter" : opts.subcommand),
+    },
+    respond: vi.fn().mockResolvedValue(undefined),
+  } as unknown as FakeAutocomplete;
 }

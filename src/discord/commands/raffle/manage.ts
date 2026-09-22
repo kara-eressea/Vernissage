@@ -44,7 +44,12 @@ export function addManageSubcommands(builder: SlashCommandBuilder): SlashCommand
         .setName("edit")
         .setDescription("Edit a draft/scheduled raffle, or extend an open raffle's end time.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setRequired(true)
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) =>
@@ -52,7 +57,12 @@ export function addManageSubcommands(builder: SlashCommandBuilder): SlashCommand
         .setName("cancel")
         .setDescription("Cancel a raffle before it is drawn.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("The raffle id.").setRequired(true).setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setRequired(true)
+            .setMinValue(1)
+            .setAutocomplete(true),
         )
         .addStringOption((o) =>
           o.setName("reason").setDescription("Why it is being cancelled.").setRequired(true),

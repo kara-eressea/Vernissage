@@ -513,6 +513,18 @@ resetting eligibility), and commands.md links back to them.
   a mod role without Manage Server passes the run-time gate but cannot *see*
   `/raffle-mod` until a server admin grants it the command in
   Server Settings → Integrations.
+- Every option that takes a raffle id is an autocomplete picker, because the id
+  is an implementation detail members were being asked to memorise. Each
+  subcommand offers only the raffles it could act on — the ones the caller
+  entered, the prizes they have not claimed, the closed raffles awaiting a draw.
+  Offering a raffle the command will then refuse is worse than offering nothing,
+  since presenting a choice reads as a promise it will work.
+- Suggestions are never authorisation. The picker is a read; the handler
+  re-checks everything on submit, so a raffle that changed state in between is
+  refused exactly as a hand-typed id would be. It withholds two things only:
+  other guilds' raffles, and — from non-moderators — the moderator surface's,
+  so it cannot report a raffle's existence to someone the command would turn
+  away.
 - Command-surface changes must be reflected in commands.md in the same commit
   (see CLAUDE.md's source-of-truth rule).
 

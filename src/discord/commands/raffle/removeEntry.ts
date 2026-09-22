@@ -35,8 +35,9 @@ export function addRemoveEntrySubcommand(builder: SlashCommandBuilder): SlashCom
       .addIntegerOption((o) =>
         o
           .setName("raffle")
-          .setDescription("Which raffle (id), if more than one is open.")
-          .setMinValue(1),
+          .setDescription("Which raffle — pick from the list.")
+          .setMinValue(1)
+          .setAutocomplete(true),
       ),
   );
   return builder;

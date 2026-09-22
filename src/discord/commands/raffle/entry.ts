@@ -52,7 +52,11 @@ export function addEntrySubcommands(builder: SlashCommandBuilder): SlashCommandB
         .setName("enter")
         .setDescription("Enter an open raffle.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("Which raffle (id), if more than one is open.").setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) =>
@@ -60,7 +64,11 @@ export function addEntrySubcommands(builder: SlashCommandBuilder): SlashCommandB
         .setName("withdraw")
         .setDescription("Withdraw your entry from an open raffle (you can re-enter while it's open).")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("Which raffle (id), if more than one is open.").setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) =>
@@ -68,7 +76,11 @@ export function addEntrySubcommands(builder: SlashCommandBuilder): SlashCommandB
         .setName("status")
         .setDescription("Check your eligibility for a raffle.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("Which raffle (id).").setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which raffle — pick from the list.")
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((s) => s.setName("list").setDescription("List open and upcoming raffles."))
@@ -77,7 +89,11 @@ export function addEntrySubcommands(builder: SlashCommandBuilder): SlashCommandB
         .setName("claim")
         .setDescription("Claim a prize you won within its claim window.")
         .addIntegerOption((o) =>
-          o.setName("raffle").setDescription("Which raffle (id), if you won more than one.").setMinValue(1),
+          o
+            .setName("raffle")
+            .setDescription("Which prize to claim — pick from the list.")
+            .setMinValue(1)
+            .setAutocomplete(true),
         ),
     );
   return builder;
