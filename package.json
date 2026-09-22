@@ -1,6 +1,6 @@
 {
   "name": "vernissage",
-  "version": "0.1.0",
+  "version": "0.13.0",
   "description": "Discord bot for auditable, activity-gated free raffles in the Musicorum server.",
   "type": "module",
   "license": "MIT",
