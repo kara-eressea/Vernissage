@@ -107,7 +107,13 @@ draft -> scheduled -> open -> closed -> drawn -> completed
   their own entry (`/raffle withdraw`) while the raffle is open: the entry is
   soft-removed with reason "withdrawn" and an `entry_withdrawn` audit row, and
   the member may re-enter freely while it stays open — re-entry reinstates the
-  removed row and runs the full eligibility checks again. The entry message is
+  removed row and runs the full eligibility checks again. A moderator may do the
+  same *for* a member who cannot manage it themselves
+  (`/raffle-mod remove-entry`): same rules, same freedom to re-enter, recorded as
+  reason "withdrawn by mod" with an `entry_withdrawn_by_mod` audit row that names
+  both the moderator and the member. Assisting is deliberately not sanctioning —
+  barring someone is the blacklist's job, and that path writes `entry_removed`
+  instead. The entry message is
   one blockquote card — heading, description, then Prize / Starts / Ends /
   Hosted by / Entries — re-edited in place as entries arrive so the count stays
   live. The eligibility line is rendered as subtext and deliberately vague
@@ -464,7 +470,9 @@ operator-facing steps.
 - A designated audit channel (read-only for members) receives:
   - Raffle created, edited, opened, closed, drawn, cancelled.
   - Entry accepted (user, raffle, timestamp).
-  - Entry removed (blacklist or withdrawal).
+  - Entry removed (blacklist or withdrawal). A withdrawal a moderator made on
+    a member's behalf names both of them, so the line cannot be read as the
+    member having left or as the member having been sanctioned.
   - Blacklist additions and removals (without private reasons).
   - Eligibility resets (the scope, without the activity counts involved).
   - Draw commitment data and draw results with verification data.

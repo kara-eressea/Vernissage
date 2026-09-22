@@ -19,6 +19,10 @@ export const AUDIT_EVENTS = {
   entryAccepted: "entry_accepted",
   entryRemoved: "entry_removed",
   entryWithdrawn: "entry_withdrawn",
+  // A moderator withdrew a member's entry for them (issue #47). Distinct from
+  // entryWithdrawn so the audit line names the hand that did it, and from
+  // entryRemoved so an assisted withdrawal never reads as a ban.
+  entryWithdrawnByMod: "entry_withdrawn_by_mod",
   blacklistAdded: "blacklist_added",
   blacklistRemoved: "blacklist_removed",
   drawCommitted: "draw_committed",

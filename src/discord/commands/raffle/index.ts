@@ -44,6 +44,7 @@ import {
 } from "./entry.js";
 import { addManageSubcommands, handleCancel, handleCreate, handleEdit } from "./manage.js";
 import { addRecordWinSubcommand, handleRecordWin } from "./recordWin.js";
+import { addRemoveEntrySubcommand, handleRemoveEntry } from "./removeEntry.js";
 import { addResetSubcommand, handleReset } from "./reset.js";
 
 /** The member-facing command name. */
@@ -76,6 +77,7 @@ export function buildRaffleModCommand(ctx: CommandContext): Command {
   addFromDesignSubcommand(data);
   addDrawSubcommands(data);
   addBanSubcommands(data);
+  addRemoveEntrySubcommand(data);
   addRecordWinSubcommand(data);
   addResetSubcommand(data);
   addEligibleSubcommand(data);
@@ -153,6 +155,9 @@ async function dispatchMod(
       return;
     case "banlist":
       await handleBanlist(interaction, ctx);
+      return;
+    case "remove-entry":
+      await handleRemoveEntry(interaction, ctx);
       return;
     case "record-win":
       await handleRecordWin(interaction, ctx);

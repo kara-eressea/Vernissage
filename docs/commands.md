@@ -175,6 +175,22 @@ Lift a user's blacklist. Does **not** restore entries removed by the ban.
 List the server's current blacklist, with each ban's expiry and mod-only reason.
 Ephemeral.
 
+### `/raffle-mod remove-entry <user> [raffle]`
+Withdraw a member's entry from an open raffle **for** them — the help path for
+someone who wants out but cannot work out how. Identical in effect to that member
+running [`/raffle withdraw`](#raffle-withdraw-raffle): the entry is soft-removed,
+the count updates, and **they may re-enter** while the raffle stays open. To keep
+someone out, use [`/raffle-mod ban`](#raffle-mod-ban-user-duration-reason)
+instead. `raffle` is only needed when more than one raffle is open; the command
+never guesses between several. The member is not notified, so tell them it is
+done. Logged as an assisted withdrawal naming both the moderator and the member,
+never as a removal. Ephemeral.
+
+```
+/raffle-mod remove-entry user:@member
+/raffle-mod remove-entry user:@member raffle:42
+```
+
 ### `/raffle-mod record-win <user> <won-at> [note]`
 Record a prize a member won **outside this bot** — before it was installed, or in
 an event run some other way — so it counts toward their win cooldown. The

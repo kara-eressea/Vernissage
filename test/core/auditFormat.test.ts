@@ -24,6 +24,18 @@ describe("formatAuditLine", () => {
     expect(line({})).toContain(`<t:${EPOCH}:f>`);
   });
 
+  it("names both hands on a moderator-assisted withdrawal", () => {
+    // The member did not withdraw and was not sanctioned — a line saying either
+    // would misreport what happened (issue #47).
+    const assisted = line({
+      eventType: AUDIT_EVENTS.entryWithdrawnByMod,
+      actorId: "mod1",
+      payload: { userId: "u1" },
+    });
+    expect(assisted).toContain("<@mod1> withdrew <@u1>");
+    expect(assisted).not.toContain("was removed");
+  });
+
   it("renders actor and subject ids as mentions", () => {
     const created = line({ eventType: AUDIT_EVENTS.raffleCreated, actorId: "mod1" });
     expect(created).toContain("<@mod1>");

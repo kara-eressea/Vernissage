@@ -16,10 +16,8 @@ import {
   type GuildMember,
   type RepliableInteraction,
 } from "discord.js";
-import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
-import { writeAudit } from "../../../db/repositories/audit.js";
-import { hasEntry, removeEntry } from "../../../db/repositories/entries.js";
 import { upsertMemberName } from "../../../db/repositories/members.js";
+import { withdrawEntry } from "../../../entries/withdrawal.js";
 import { nameFromMember } from "../../memberNames.js";
 import { getGuild } from "../../../db/repositories/guilds.js";
 import {
@@ -248,29 +246,24 @@ export async function handleWithdraw(
     await ephemeral(interaction, target);
     return;
   }
-  if (target.status !== "open") {
-    await ephemeral(interaction, "You can only withdraw while the raffle is open.");
-    return;
-  }
-  if (!hasEntry(ctx.db, target.raffle_id, interaction.user.id)) {
-    await ephemeral(interaction, "You haven't entered this raffle, so there's nothing to withdraw.");
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const event = {
-    guildId,
-    raffleId: target.raffle_id,
-    eventType: AUDIT_EVENTS.entryWithdrawn,
+  // Shared with `/raffle-mod remove-entry`, so a moderator withdrawing an entry
+  // for a member follows exactly the rules the member would have met.
+  const result = withdrawEntry(ctx.db, {
+    raffle: target,
+    userId: interaction.user.id,
     actorId: interaction.user.id,
-    payload: { userId: interaction.user.id },
-    createdAt: now,
-  };
-  ctx.db.transaction(() => {
-    removeEntry(ctx.db, target.raffle_id, interaction.user.id, now, "withdrawn");
-    writeAudit(ctx.db, event);
-  })();
-  void ctx.notifier.mirrorAudit(event);
+    now: new Date().toISOString(),
+  });
+  if (!result.ok) {
+    await ephemeral(
+      interaction,
+      result.reason === "not_open"
+        ? "You can only withdraw while the raffle is open."
+        : "You haven't entered this raffle, so there's nothing to withdraw.",
+    );
+    return;
+  }
+  void ctx.notifier.mirrorAudit(result.event);
   // Keep the public card's Entries count current, as on entry and ban removal.
   void refreshEntryMessage(ctx.db, ctx.notifier, target.raffle_id).catch((err) =>
     console.error(`Failed to refresh entry message for raffle ${target.raffle_id}:`, err),
