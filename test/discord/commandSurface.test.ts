@@ -107,6 +107,7 @@ describe("the registered command surface", () => {
       "eligible",
       "from-design",
       "record-win",
+      "remove-entry",
       "reroll",
       "reset",
       "unban",

@@ -16,10 +16,8 @@ import {
   type GuildMember,
   type RepliableInteraction,
 } from "discord.js";
-import { AUDIT_EVENTS } from "../../../core/auditEvents.js";
-import { writeAudit } from "../../../db/repositories/audit.js";
-import { hasEntry, removeEntry } from "../../../db/repositories/entries.js";
 import { upsertMemberName } from "../../../db/repositories/members.js";
+import { withdrawEntry } from "../../../entries/withdrawal.js";
 import { nameFromMember } from "../../memberNames.js";
 import { getGuild } from "../../../db/repositories/guilds.js";
 import {
@@ -31,6 +29,7 @@ import {
 import { getActiveWinForUser } from "../../../db/repositories/wins.js";
 import { recordClaim } from "../../../draw/service.js";
 import { parseEnterButtonId } from "../../components/enterButton.js";
+import { resolveOpenRaffle } from "./resolveRaffle.js";
 import {
   attemptEntry,
   refreshEntryMessage,
@@ -107,33 +106,6 @@ function roleIdsOf(member: unknown): string[] {
   return Array.isArray(roles) ? [...roles] : [...roles.cache.keys()];
 }
 
-/**
- * Resolve which raffle a user means: an explicit id, else the single open
- * raffle. Returns the row, or a string describing why it could not be resolved.
- */
-function resolveTargetRaffle(
-  db: CommandContext["db"],
-  guildId: string,
-  explicitId: number | null,
-): RaffleRow | string {
-  if (explicitId !== null) {
-    const raffle = getGuildRaffle(db, guildId, explicitId);
-    if (!raffle) {
-      return "No raffle with that id exists in this server.";
-    }
-    return raffle;
-  }
-  const open = listByStatus(db, guildId, ["open"]);
-  if (open.length === 0) {
-    return "There are no open raffles right now.";
-  }
-  if (open.length > 1) {
-    const ids = open.map((r) => `#${r.raffle_id} (${r.name ?? "unnamed"})`).join(", ");
-    return `More than one raffle is open — pick one with the \`raffle\` option: ${ids}.`;
-  }
-  return open[0]!;
-}
-
 export async function handleEnter(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext,
@@ -143,7 +115,7 @@ export async function handleEnter(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;
@@ -243,34 +215,29 @@ export async function handleWithdraw(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;
   }
-  if (target.status !== "open") {
-    await ephemeral(interaction, "You can only withdraw while the raffle is open.");
-    return;
-  }
-  if (!hasEntry(ctx.db, target.raffle_id, interaction.user.id)) {
-    await ephemeral(interaction, "You haven't entered this raffle, so there's nothing to withdraw.");
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const event = {
-    guildId,
-    raffleId: target.raffle_id,
-    eventType: AUDIT_EVENTS.entryWithdrawn,
+  // Shared with `/raffle-mod remove-entry`, so a moderator withdrawing an entry
+  // for a member follows exactly the rules the member would have met.
+  const result = withdrawEntry(ctx.db, {
+    raffle: target,
+    userId: interaction.user.id,
     actorId: interaction.user.id,
-    payload: { userId: interaction.user.id },
-    createdAt: now,
-  };
-  ctx.db.transaction(() => {
-    removeEntry(ctx.db, target.raffle_id, interaction.user.id, now, "withdrawn");
-    writeAudit(ctx.db, event);
-  })();
-  void ctx.notifier.mirrorAudit(event);
+    now: new Date().toISOString(),
+  });
+  if (!result.ok) {
+    await ephemeral(
+      interaction,
+      result.reason === "not_open"
+        ? "You can only withdraw while the raffle is open."
+        : "You haven't entered this raffle, so there's nothing to withdraw.",
+    );
+    return;
+  }
+  void ctx.notifier.mirrorAudit(result.event);
   // Keep the public card's Entries count current, as on entry and ban removal.
   void refreshEntryMessage(ctx.db, ctx.notifier, target.raffle_id).catch((err) =>
     console.error(`Failed to refresh entry message for raffle ${target.raffle_id}:`, err),
@@ -291,7 +258,7 @@ export async function handleStatus(
     await ephemeral(interaction, "This command can only be used in a server.");
     return;
   }
-  const target = resolveTargetRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
+  const target = resolveOpenRaffle(ctx.db, guildId, interaction.options.getInteger("raffle"));
   if (typeof target === "string") {
     await ephemeral(interaction, target);
     return;

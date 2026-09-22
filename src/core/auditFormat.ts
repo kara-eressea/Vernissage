@@ -96,6 +96,10 @@ export function describeAuditEvent(
       return `✅ ${subject} entered ${raffle}`;
     case AUDIT_EVENTS.entryWithdrawn:
       return `↩️ ${subject} withdrew from ${raffle}`;
+    case AUDIT_EVENTS.entryWithdrawnByMod:
+      // Both hands named: this is help, not a sanction, and the log should not
+      // be readable as either the member leaving or the member being punished.
+      return `↩️ ${actor} withdrew ${subject} from ${raffle}`;
     case AUDIT_EVENTS.entryRemoved:
       // Deliberately no reason: the audit channel shows that a removal happened,
       // not why (design.md "Blacklist").
