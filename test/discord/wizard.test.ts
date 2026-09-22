@@ -28,13 +28,29 @@ function wizard() {
   return createWizard({ db, notifier });
 }
 
+/**
+ * The standing fields the moderator gate reads. Every wizard step re-checks it
+ * (issue #53), so every fake interaction has to carry one; `isMod: false` models
+ * someone whose authority went away part-way through the wizard.
+ */
+function standing(opts: { isMod?: boolean; roleIds?: string[] } = {}) {
+  return {
+    guildId: "g1",
+    guild: { ownerId: "owner" },
+    member: { roles: { cache: new Map((opts.roleIds ?? []).map((r) => [r, {}])) } },
+    memberPermissions: { has: () => opts.isMod ?? true },
+  };
+}
+
 function fakeModal(
   customId: string,
   fields: Record<string, string>,
+  opts: { isMod?: boolean; roleIds?: string[] } = {},
 ): WizardInteraction & { update: ReturnType<typeof vi.fn>; reply: ReturnType<typeof vi.fn> } {
   return {
     customId,
     user: { id: "mod1" },
+    ...standing(opts),
     isChatInputCommand: () => false,
     isModalSubmit: () => true,
     isButton: () => false,
@@ -51,10 +67,12 @@ function fakeModal(
 
 function fakeButton(
   customId: string,
+  opts: { isMod?: boolean; roleIds?: string[] } = {},
 ): WizardInteraction & { update: ReturnType<typeof vi.fn>; showModal: ReturnType<typeof vi.fn> } {
   return {
     customId,
     user: { id: "mod1" },
+    ...standing(opts),
     isChatInputCommand: () => false,
     isModalSubmit: () => false,
     isButton: () => true,
@@ -141,6 +159,7 @@ function fakeChannelSelect(
   return {
     customId,
     user: { id: "mod1" },
+    ...standing(),
     values,
     channels: { first: () => (values.length ? channel : undefined) },
     guild: withPerms ? { members: { me: { id: "bot" } } } : undefined,
@@ -250,6 +269,97 @@ describe("wizard confirm", () => {
     ).map((r) => r.event_type);
     expect(events).toContain("raffle_scheduled");
     expect(notifier.mirrorAudit).toHaveBeenCalled();
+  });
+
+  it("refuses the confirm of a moderator who lost their standing mid-wizard", async () => {
+    // Issue #53: the wizard is a conversation that can outlive the authority
+    // that opened it. Being shown the Confirm button is not permission to use it.
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    updateRaffleFields(db, id, {
+      name: "Valid",
+      prize: "Prize",
+      starts_at: "2099-01-01T00:00:00.000Z",
+      ends_at: "2099-01-08T00:00:00.000Z",
+      req_messages: 20,
+      req_days: 14,
+      winner_count: 1,
+      draw_mode: "auto",
+    });
+    upsertWizardStep(db, id, "summary", "2026-07-01T00:00:00.000Z");
+    setGuildConfig(db, "g1", { announce_channel: "chan-1" }, "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeButton(`wiz:summary:confirm:${id}`, { isMod: false });
+    await wizard().handle(interaction);
+
+    // The draft is untouched: no raffle went live, and nothing was audited.
+    expect(getRaffle(db, id)?.status).toBe("draft");
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM audit_log`).get()).toEqual({ n: 0 });
+    expect(notifier.mirrorAudit).not.toHaveBeenCalled();
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("do not have permission");
+  });
+
+  it("refuses a step submission from someone who is not a moderator", async () => {
+    // The gate sits on the dispatch, not on Confirm alone, so no step can be
+    // added outside it — and every step writes to the draft.
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeModal(
+      `wiz:basics:submit:${id}`,
+      { name: "Sneaky", prize: "Prize" },
+      { isMod: false },
+    );
+    await wizard().handle(interaction);
+
+    expect(getRaffle(db, id)?.name).toBeNull(); // nothing written
+    expect(getWizardState(db, id)?.step).toBe("basics"); // and not advanced
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("do not have permission");
+  });
+
+  it("does not even open a step's modal for someone who is not a moderator", async () => {
+    // A modal-opening button is the one wizard action that does something other
+    // than write, so refusing it has to mean no modal rather than an empty one.
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeButton(`wiz:basics:open:${id}`, { isMod: false });
+    await wizard().handle(interaction);
+
+    expect(interaction.showModal).not.toHaveBeenCalled();
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("do not have permission");
+  });
+
+  it("refuses a draft belonging to another guild", async () => {
+    // Standing is read from the interaction's guild, so the draft must be
+    // scoped to that same guild or the two could answer about different servers.
+    const id = createDraft(db, "other-guild", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+
+    const interaction = fakeModal(`wiz:basics:submit:${id}`, { name: "Theirs", prize: "P" });
+    await wizard().handle(interaction);
+
+    expect(getRaffle(db, id)?.name).toBeNull();
+    const { content } = interaction.update.mock.calls[0]![0] as { content: string };
+    expect(content).toContain("no longer exists");
+  });
+
+  it("honours the configured mod role, not only Manage Server", async () => {
+    const id = createDraft(db, "g1", "mod1", "2026-07-01T00:00:00.000Z");
+    upsertWizardStep(db, id, "basics", "2026-07-01T00:00:00.000Z");
+    setGuildConfig(db, "g1", { mod_role: "role-mod" }, "2026-07-01T00:00:00.000Z");
+
+    // Manage Server off, but holding the configured role.
+    const interaction = fakeModal(
+      `wiz:basics:submit:${id}`,
+      { name: "Fine", prize: "Prize" },
+      { isMod: false, roleIds: ["role-mod"] },
+    );
+    await wizard().handle(interaction);
+
+    expect(getRaffle(db, id)?.name).toBe("Fine");
   });
 
   it("blocks confirm on an incomplete draft", async () => {
